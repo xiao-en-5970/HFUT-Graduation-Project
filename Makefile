@@ -115,3 +115,48 @@ dev: run ## 开发模式运行（run 的别名）
 
 .PHONY: check
 check: fmt vet test ## 运行所有检查（格式化、vet、测试）
+
+# Docker 相关变量
+DOCKER_IMAGE := hfut-project
+DOCKERFILE := package/docker/apiserver/Dockerfile
+GOMOD_CACHE_DIR := $(shell pwd)/.docker-gomod-cache
+
+.PHONY: docker-build
+docker-build: ## 构建 Docker 镜像（使用 BuildKit 缓存）
+	@echo "正在构建 Docker 镜像（使用 BuildKit 缓存）..."
+	@echo "提示: 确保启用了 Docker BuildKit (DOCKER_BUILDKIT=1)"
+	DOCKER_BUILDKIT=1 docker build \
+		-f $(DOCKERFILE) \
+		-t $(DOCKER_IMAGE) .
+	@echo "构建完成: $(DOCKER_IMAGE)"
+
+.PHONY: docker-run
+docker-run: ## 运行 Docker 容器（挂载 Go module 缓存到本地目录）
+	@echo "正在运行 Docker 容器..."
+	@mkdir -p $(GOMOD_CACHE_DIR)
+	docker run --rm \
+		-v $(GOMOD_CACHE_DIR):/go/pkg/mod \
+		$(DOCKER_IMAGE)
+
+.PHONY: docker-build-with-mount
+docker-build-with-mount: ## 构建并运行 Docker 容器（挂载本地 Go module 缓存目录）
+	@echo "正在构建 Docker 镜像..."
+	@mkdir -p $(GOMOD_CACHE_DIR)
+	DOCKER_BUILDKIT=1 docker build \
+		-f $(DOCKERFILE) \
+		-t $(DOCKER_IMAGE) .
+	@echo "构建完成: $(DOCKER_IMAGE)"
+	@echo "Go module 缓存目录: $(GOMOD_CACHE_DIR)"
+	@echo "提示: 运行 'make docker-run' 时会自动挂载缓存目录"
+
+.PHONY: docker-build-no-cache
+docker-build-no-cache: ## 构建 Docker 镜像（不使用缓存）
+	@echo "正在构建 Docker 镜像（不使用缓存）..."
+	docker build --no-cache -f $(DOCKERFILE) -t $(DOCKER_IMAGE) .
+	@echo "构建完成: $(DOCKER_IMAGE)"
+
+.PHONY: docker-clean
+docker-clean: ## 清理 Docker 缓存目录
+	@echo "正在清理 Docker Go module 缓存..."
+	@rm -rf $(GOMOD_CACHE_DIR)
+	@echo "清理完成"
