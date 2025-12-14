@@ -39,8 +39,8 @@ build: clean ## 构建项目二进制文件
 build-linux: clean ## 构建 Linux 版本
 	@echo "正在构建 Linux 版本..."
 	@mkdir -p $(BUILD_DIR)
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-linux $(MAIN_PATH)
-	@echo "构建完成: $(BUILD_DIR)/$(BINARY_NAME)-linux"
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	@echo "构建完成: $(BUILD_DIR)/$(BINARY_NAME)"
 
 .PHONY: build-darwin
 build-darwin: clean ## 构建 macOS 版本
@@ -131,23 +131,31 @@ docker-build: ## 构建 Docker 镜像（使用 BuildKit 缓存）
 	@echo "构建完成: $(DOCKER_IMAGE)"
 
 .PHONY: docker-run
-docker-run: ## 运行 Docker 容器（挂载 Go module 缓存到本地目录）
+docker-run: ## 运行 Docker 容器（映射端口 8081:8080）
 	@echo "正在运行 Docker 容器..."
-	@mkdir -p $(GOMOD_CACHE_DIR)
+	docker run -d \
+		-p 8081:8080 \
+		--name $(DOCKER_IMAGE) \
+		--restart unless-stopped \
+		$(DOCKER_IMAGE)
+	@echo "容器已启动，访问 http://localhost:8081"
+
+.PHONY: docker-run-foreground
+docker-run-foreground: ## 前台运行 Docker 容器（映射端口 8081:8080）
+	@echo "正在前台运行 Docker 容器..."
 	docker run --rm \
-		-v $(GOMOD_CACHE_DIR):/go/pkg/mod \
+		-p 8081:8080 \
 		$(DOCKER_IMAGE)
 
-.PHONY: docker-build-with-mount
-docker-build-with-mount: ## 构建并运行 Docker 容器（挂载本地 Go module 缓存目录）
-	@echo "正在构建 Docker 镜像..."
-	@mkdir -p $(GOMOD_CACHE_DIR)
-	DOCKER_BUILDKIT=1 docker build \
-		-f $(DOCKERFILE) \
-		-t $(DOCKER_IMAGE) .
-	@echo "构建完成: $(DOCKER_IMAGE)"
-	@echo "Go module 缓存目录: $(GOMOD_CACHE_DIR)"
-	@echo "提示: 运行 'make docker-run' 时会自动挂载缓存目录"
+.PHONY: docker-stop
+docker-stop: ## 停止 Docker 容器
+	@echo "正在停止 Docker 容器..."
+	-docker stop $(DOCKER_IMAGE) 2>/dev/null || true
+	@echo "容器已停止"
+
+.PHONY: docker-logs
+docker-logs: ## 查看 Docker 容器日志
+	docker logs -f $(DOCKER_IMAGE)
 
 .PHONY: docker-build-no-cache
 docker-build-no-cache: ## 构建 Docker 镜像（不使用缓存）
