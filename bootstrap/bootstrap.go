@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/config"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/router"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
@@ -44,6 +45,10 @@ func Boot() error {
 		return err
 	}
 	logger.Logger.Info("Gin service initialized successfully")
+
+	// Setup routes
+	router.SetupRouter(service.Engine)
+	logger.Logger.Info("Routes initialized successfully")
 
 	// Start the server (this will block)
 	logger.Logger.Info("Starting server...")

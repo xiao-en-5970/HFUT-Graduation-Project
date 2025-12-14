@@ -1,0 +1,1585 @@
+openapi: 3.0.3
+info:
+  title: HFUT Graduation Project API
+  description: 合肥工业大学毕业设计项目 API 接口文档
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: 本地开发环境
+  - url: https://api.example.com/api/v1
+    description: 生产环境
+
+tags:
+  - name: 用户
+    description: 用户相关接口
+  - name: 文章
+    description: 文章相关接口
+  - name: 评论
+    description: 评论相关接口
+  - name: 点赞
+    description: 点赞相关接口
+  - name: 商品
+    description: 商品相关接口
+  - name: 标签
+    description: 标签相关接口
+  - name: 学校
+    description: 学校相关接口
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT 认证，格式：Bearer {token}
+
+  schemas:
+    Response:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 状态码
+          example: 200
+        message:
+          type: string
+          description: 响应消息
+          example: 操作成功
+        data:
+          type: object
+          description: 响应数据
+
+    UserRegisterRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: 用户名
+          example: "testuser"
+        password:
+          type: string
+          minLength: 6
+          maxLength: 255
+          description: 密码
+          example: "password123"
+        school_id:
+          type: integer
+          format: int64
+          description: 学校ID（可选，不指定则默认为1）
+          example: 1
+
+    UserLoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: 用户名
+          example: "testuser"
+        password:
+          type: string
+          description: 密码
+          example: "password123"
+
+    UserUpdateRequest:
+      type: object
+      properties:
+        avatar:
+          type: string
+          maxLength: 255
+          description: 用户头像URL
+          example: "https://example.com/avatar.jpg"
+        background:
+          type: string
+          maxLength: 255
+          description: 用户背景图URL
+          example: "https://example.com/bg.jpg"
+        bind_qq:
+          type: string
+          maxLength: 128
+          description: 绑定的QQ号
+          example: "123456789"
+        bind_wx:
+          type: string
+          maxLength: 128
+          description: 绑定的微信号
+          example: "wechat123"
+        bind_phone:
+          type: string
+          maxLength: 20
+          description: 绑定的手机号
+          example: "13800138000"
+        school_id:
+          type: integer
+          format: int64
+          description: 学校ID
+          example: 1
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        username:
+          type: string
+          description: 用户名
+          example: "testuser"
+        school_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: 学校ID
+          example: 1
+        school:
+          $ref: '#/components/schemas/SchoolResponse'
+        avatar:
+          type: string
+          description: 用户头像URL
+          example: "https://example.com/avatar.jpg"
+        background:
+          type: string
+          description: 用户背景图URL
+          example: "https://example.com/bg.jpg"
+        status:
+          type: integer
+          format: int8
+          description: 用户状态，1:正常 2:禁用
+          example: 1
+        role:
+          type: integer
+          format: int8
+          description: 用户角色，1:普通用户 2:管理员 3:超级管理员 4:匿名用户
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-01 12:00:00"
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT Token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        user:
+          $ref: '#/components/schemas/UserResponse'
+
+    ArticleCreateRequest:
+      type: object
+      required:
+        - title
+        - content
+      properties:
+        title:
+          type: string
+          maxLength: 255
+          description: 文章标题
+          example: "我的第一篇文章"
+        content:
+          type: string
+          description: 文章内容
+          example: "这是文章的内容..."
+        publish_status:
+          type: integer
+          format: int8
+          description: 发布状态，1:私密 2:公开
+          example: 2
+        type:
+          type: integer
+          description: 文章类型，1:普通文章 2:提问 3:回答
+          example: 1
+
+    ArticleUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 255
+        content:
+          type: string
+        publish_status:
+          type: integer
+          format: int8
+        status:
+          type: integer
+          format: int8
+
+    ArticleListRequest:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          description: 页码
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+          description: 每页数量
+        type:
+          type: integer
+          description: 文章类型，1:普通文章 2:提问 3:回答
+          example: 1
+        status:
+          type: integer
+          format: int8
+          description: 文章状态，1:正常 2:禁用
+          example: 1
+        user_id:
+          type: integer
+          format: int64
+          description: 用户ID
+          example: 1
+        keyword:
+          type: string
+          description: 搜索关键词（用于搜索文章标题和内容）
+          example: "技术"
+
+    ArticleResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+          description: 用户ID
+          example: 1
+        user:
+          $ref: '#/components/schemas/UserResponse'
+        title:
+          type: string
+          description: 文章标题
+          example: "我的第一篇文章"
+        content:
+          type: string
+          description: 文章内容
+          example: "这是文章的内容..."
+        status:
+          type: integer
+          format: int8
+          description: 文章状态，1:正常 2:禁用
+          example: 1
+        publish_status:
+          type: integer
+          format: int8
+          description: 发布状态，1:私密 2:公开
+          example: 2
+        type:
+          type: integer
+          description: 文章类型，1:普通文章 2:提问 3:回答
+          example: 1
+        view_count:
+          type: integer
+          description: 浏览次数
+          example: 100
+        like_count:
+          type: integer
+          description: 点赞/同问次数
+          example: 10
+        collect_count:
+          type: integer
+          description: 收藏次数
+          example: 5
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CommentCreateRequest:
+      type: object
+      required:
+        - ext_type
+        - ext_id
+        - content
+      properties:
+        ext_type:
+          type: integer
+          description: 关联类型，1:articles 2:goods
+          example: 1
+        ext_id:
+          type: integer
+          description: 关联ID
+          example: 1
+        parent_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: 父评论ID（可选，用于回复评论）
+          example: 1
+        reply_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: 回复的评论ID（可选，用于指定回复哪条评论）
+          example: 2
+        content:
+          type: string
+          description: 评论内容
+          example: "这是一条评论"
+        images:
+          type: array
+          items:
+            type: string
+          description: 图片数组，评论附带的图片URL列表
+          example: ["https://example.com/image1.jpg"]
+
+    CommentListRequest:
+      type: object
+      required:
+        - ext_type
+        - ext_id
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+        ext_type:
+          type: integer
+          description: 关联类型，1:articles 2:goods
+          example: 1
+        ext_id:
+          type: integer
+          description: 关联ID（文章ID或商品ID）
+          example: 1
+
+    CommentResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+          description: 用户ID
+          example: 1
+        user:
+          $ref: '#/components/schemas/UserResponse'
+        ext_type:
+          type: integer
+          description: 关联类型，1:articles 2:goods
+          example: 1
+        ext_id:
+          type: integer
+          description: 关联ID（文章ID或商品ID）
+          example: 1
+        parent_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: 父评论ID
+          example: 1
+        reply_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: 回复评论ID
+          example: 2
+        images:
+          type: array
+          items:
+            type: string
+          description: 图片数组，评论附带的图片URL列表
+          example: ["https://example.com/image1.jpg"]
+        type:
+          type: integer
+          description: 评论类型，1:顶层评论 2:评论回复
+          example: 1
+        content:
+          type: string
+          description: 评论内容
+          example: "这是一条评论"
+        status:
+          type: integer
+          format: int8
+          description: 评论状态，1:正常 2:禁用
+          example: 1
+        like_count:
+          type: integer
+          description: 点赞次数
+          example: 5
+        created_at:
+          type: string
+          format: date-time
+        replies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommentResponse'
+
+    LikeCreateRequest:
+      type: object
+      required:
+        - ext_type
+        - ext_id
+      properties:
+        ext_type:
+          type: integer
+          description: 关联类型，1:articles（文章） 2:comments（评论） 3:goods（商品）
+          example: 1
+        ext_id:
+          type: integer
+          description: 关联ID（文章ID、评论ID或商品ID）
+          example: 1
+
+    LikeResponse:
+      type: object
+      properties:
+        is_liked:
+          type: boolean
+          description: 是否已点赞
+          example: true
+
+    GoodCreateRequest:
+      type: object
+      required:
+        - title
+        - content
+      properties:
+        title:
+          type: string
+          maxLength: 255
+          description: 商品名称
+          example: "二手笔记本电脑"
+        content:
+          type: string
+          description: 商品内容（商品描述）
+          example: "商品详细描述..."
+        price:
+          type: integer
+          minimum: 0
+          description: 商品价格，单位分
+          example: 500000
+        images:
+          type: array
+          items:
+            type: string
+          description: 图片数组，商品图片URL列表
+          example: ["https://example.com/good1.jpg"]
+        good_status:
+          type: integer
+          description: 商品状态，1:在售 2:下架
+          example: 1
+
+    GoodUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 255
+          description: 商品名称
+        content:
+          type: string
+          description: 商品内容（商品描述）
+        price:
+          type: integer
+          description: 商品价格，单位分
+        images:
+          type: array
+          items:
+            type: string
+          description: 图片数组，商品图片URL列表
+        good_status:
+          type: integer
+          description: 商品状态，1:在售 2:下架
+        status:
+          type: integer
+          format: int8
+          description: 商品状态，1:正常 2:禁用
+
+    GoodListRequest:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+        good_status:
+          type: integer
+          description: 商品状态，1:在售 2:下架
+          example: 1
+        status:
+          type: integer
+          format: int8
+          description: 商品状态，1:正常 2:禁用
+          example: 1
+        user_id:
+          type: integer
+          format: int64
+          description: 用户ID
+          example: 1
+        keyword:
+          type: string
+          description: 搜索关键词（用于搜索商品名称和内容）
+          example: "笔记本"
+        min_price:
+          type: integer
+          description: 最低价格（单位：分）
+          example: 100000
+        max_price:
+          type: integer
+          description: 最高价格（单位：分）
+          example: 1000000
+
+    GoodResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+          description: 用户ID
+          example: 1
+        user:
+          $ref: '#/components/schemas/UserResponse'
+        title:
+          type: string
+          description: 商品名称
+          example: "二手笔记本电脑"
+        images:
+          type: array
+          items:
+            type: string
+          description: 图片数组，商品图片URL列表
+          example: ["https://example.com/good1.jpg"]
+        content:
+          type: string
+          description: 商品内容（商品描述）
+          example: "商品详细描述..."
+        status:
+          type: integer
+          format: int8
+          description: 商品状态，1:正常 2:禁用
+          example: 1
+        good_status:
+          type: integer
+          description: 商品状态，1:在售 2:下架
+          example: 1
+        price:
+          type: integer
+          description: 商品价格，单位分
+          example: 500000
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TagCreateRequest:
+      type: object
+      required:
+        - name
+        - ext_type
+        - ext_id
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: 标签名称
+          example: "科技"
+        ext_type:
+          type: integer
+          description: 关联类型，1:articles（文章） 2:goods（商品）
+          example: 1
+        ext_id:
+          type: integer
+          description: 关联ID（文章ID或商品ID）
+          example: 1
+
+    TagResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          description: 标签名称
+          example: "科技"
+        ext_type:
+          type: integer
+          description: 关联类型，1:articles（文章） 2:goods（商品）
+          example: 1
+        ext_id:
+          type: integer
+          description: 关联ID（文章ID或商品ID）
+          example: 1
+        status:
+          type: integer
+          format: int8
+          description: 标签状态，1:正常 2:禁用
+          example: 1
+
+    SchoolCreateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          maxLength: 50
+          description: 学校名称
+          example: "合肥工业大学"
+        login_url:
+          type: string
+          maxLength: 255
+          description: 登录地址
+          example: "https://login.hfut.edu.cn"
+
+    SchoolResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 学校ID
+          example: 1
+        name:
+          type: string
+          description: 学校名称
+          example: "合肥工业大学"
+        login_url:
+          type: string
+          description: 登录地址
+          example: "https://login.hfut.edu.cn"
+        user_count:
+          type: integer
+          description: 用户数量
+          example: 100
+
+    PageResponse:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            type: object
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        page_size:
+          type: integer
+
+paths:
+  /users/register:
+    post:
+      tags:
+        - 用户
+      summary: 用户注册
+      description: 用户注册接口，不需要认证。如果不指定 school_id，则默认为 1
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegisterRequest'
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+  /users/login:
+    post:
+      tags:
+        - 用户
+      summary: 用户登录
+      description: 用户登录接口，不需要认证
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: 认证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+  /users/{id}:
+    get:
+      tags:
+        - 用户
+      summary: 获取用户信息
+      description: 根据ID获取用户信息，需要认证
+      operationId: getUserById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 用户ID
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserResponse'
+        '404':
+          description: 用户不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+    put:
+      tags:
+        - 用户
+      summary: 更新用户信息
+      description: 更新用户信息，需要认证，只能更新自己的信息
+      operationId: updateUser
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 用户ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserResponse'
+        '403':
+          description: 无权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+  /users:
+    get:
+      tags:
+        - 用户
+      summary: 获取用户列表
+      description: 获取用户列表，支持分页和筛选，需要认证
+      operationId: listUsers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 页码
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+          description: 每页数量
+        - name: school_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: 学校ID（可选）
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PageResponse'
+
+  /articles:
+    post:
+      tags:
+        - 文章
+      summary: 创建文章
+      description: 创建新文章，需要认证
+      operationId: createArticle
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleCreateRequest'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ArticleResponse'
+
+    get:
+      tags:
+        - 文章
+      summary: 获取文章列表
+      description: 获取文章列表，支持分页和筛选，需要认证
+      operationId: listArticles
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 页码
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: 每页数量
+        - name: type
+          in: query
+          schema:
+            type: integer
+          description: 文章类型，1:普通文章 2:提问 3:回答
+          example: 1
+        - name: status
+          in: query
+          schema:
+            type: integer
+            format: int8
+          description: 文章状态，1:正常 2:禁用
+          example: 1
+        - name: user_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: 用户ID
+          example: 1
+        - name: keyword
+          in: query
+          schema:
+            type: string
+          description: 搜索关键词（用于搜索文章标题和内容）
+          example: "技术"
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PageResponse'
+
+  /articles/{id}:
+    get:
+      tags:
+        - 文章
+      summary: 获取文章详情
+      description: 根据ID获取文章详情，需要认证
+      operationId: getArticleById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 文章ID
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ArticleResponse'
+        '404':
+          description: 文章不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+    put:
+      tags:
+        - 文章
+      summary: 更新文章
+      description: 更新文章，需要认证
+      operationId: updateArticle
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 文章ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleUpdateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ArticleResponse'
+
+    delete:
+      tags:
+        - 文章
+      summary: 删除文章
+      description: 删除文章，需要认证
+      operationId: deleteArticle
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 文章ID
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+  /comments:
+    post:
+      tags:
+        - 评论
+      summary: 创建评论
+      description: 创建新评论，需要认证
+      operationId: createComment
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentCreateRequest'
+      responses:
+        '200':
+          description: 评论成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CommentResponse'
+
+    get:
+      tags:
+        - 评论
+      summary: 获取评论列表
+      description: 获取评论列表，支持分页，需要认证
+      operationId: listComments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 页码
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: 每页数量
+        - name: ext_type
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: 关联类型
+        - name: ext_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: 关联ID
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PageResponse'
+
+  /comments/{id}:
+    delete:
+      tags:
+        - 评论
+      summary: 删除评论
+      description: 删除评论，需要认证
+      operationId: deleteComment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 评论ID
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+  /likes/toggle:
+    post:
+      tags:
+        - 点赞
+      summary: 切换点赞状态
+      description: 切换点赞状态（点赞/取消点赞），需要认证
+      operationId: toggleLike
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LikeCreateRequest'
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LikeResponse'
+
+  /likes/check:
+    get:
+      tags:
+        - 点赞
+      summary: 检查是否已点赞
+      description: 检查当前用户是否已点赞指定对象，需要认证
+      operationId: checkLike
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ext_type
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: 关联类型，1:articles（文章） 2:comments（评论） 3:goods（商品）
+          example: 1
+        - name: ext_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: 关联ID（文章ID、评论ID或商品ID）
+          example: 1
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LikeResponse'
+
+  /goods:
+    post:
+      tags:
+        - 商品
+      summary: 创建商品
+      description: 创建新商品，需要认证
+      operationId: createGood
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoodCreateRequest'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/GoodResponse'
+
+    get:
+      tags:
+        - 商品
+      summary: 获取商品列表
+      description: 获取商品列表，支持分页和筛选，需要认证
+      operationId: listGoods
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 页码
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: 每页数量
+        - name: good_status
+          in: query
+          schema:
+            type: integer
+          description: 商品状态，1:在售 2:下架
+          example: 1
+        - name: status
+          in: query
+          schema:
+            type: integer
+            format: int8
+          description: 商品状态，1:正常 2:禁用
+          example: 1
+        - name: user_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: 用户ID
+          example: 1
+        - name: keyword
+          in: query
+          schema:
+            type: string
+          description: 搜索关键词（用于搜索商品名称和内容）
+          example: "笔记本"
+        - name: min_price
+          in: query
+          schema:
+            type: integer
+          description: 最低价格（单位：分）
+          example: 100000
+        - name: max_price
+          in: query
+          schema:
+            type: integer
+          description: 最高价格（单位：分）
+          example: 1000000
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PageResponse'
+
+  /goods/{id}:
+    get:
+      tags:
+        - 商品
+      summary: 获取商品详情
+      description: 根据ID获取商品详情，需要认证
+      operationId: getGoodById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 商品ID
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/GoodResponse'
+        '404':
+          description: 商品不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+    put:
+      tags:
+        - 商品
+      summary: 更新商品
+      description: 更新商品，需要认证
+      operationId: updateGood
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 商品ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoodUpdateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/GoodResponse'
+
+    delete:
+      tags:
+        - 商品
+      summary: 删除商品
+      description: 删除商品，需要认证
+      operationId: deleteGood
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 商品ID
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+  /tags:
+    post:
+      tags:
+        - 标签
+      summary: 创建标签
+      description: 创建新标签，需要认证
+      operationId: createTag
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagCreateRequest'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TagResponse'
+
+    get:
+      tags:
+        - 标签
+      summary: 根据关联对象获取标签列表
+      description: 根据关联对象获取标签列表，需要认证
+      operationId: getTagsByExt
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: ext_type
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: 关联类型，1:articles（文章） 2:goods（商品）
+          example: 1
+        - name: ext_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: 关联ID（文章ID或商品ID）
+          example: 1
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TagResponse'
+
+  /schools:
+    post:
+      tags:
+        - 学校
+      summary: 创建学校
+      description: 创建新学校，需要认证
+      operationId: createSchool
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchoolCreateRequest'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SchoolResponse'
+
+    get:
+      tags:
+        - 学校
+      summary: 获取学校列表
+      description: 获取学校列表，需要认证
+      operationId: listSchools
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SchoolResponse'
+
+  /schools/{id}:
+    get:
+      tags:
+        - 学校
+      summary: 获取学校详情
+      description: 根据ID获取学校详情，需要认证
+      operationId: getSchoolById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: 学校ID
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SchoolResponse'
+        '404':
+          description: 学校不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
