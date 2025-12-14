@@ -1,21 +1,24 @@
+FROM golang:1.23.7-alpine
 
-FROM ubuntu:latest
 
-LABEL authors="dp"
+# 设置 Go module 缓存目录
+ENV GOMODCACHE=/var/modtmp
+ENV GOPATH=/go
 
-# 安装必要的基础库（ca-certificates 用于 HTTPS 请求）
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-# 从本地复制二进制文件
-COPY ./bin/app.exe /app/app.exe
+# 设置 Go 中国代理
+ENV GOPROXY=https://goproxy.cn,direct
 
 # 设置工作目录
 WORKDIR /app
 
-# 确保二进制文件有执行权限
-RUN chmod +x /app/app.exe
+# 复制 go mod 文件
+COPY go.mod go.sum ./
+
+# 下载依赖（缓存会保存到 /var/modtmp，通过 volume 挂载）
+RUN go mod download
+
+# 复制所有源代码
+COPY . .
 
 # 运行应用
-CMD ["./app.exe"]
+CMD ["go", "run", "."]

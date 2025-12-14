@@ -57,7 +57,9 @@ func LoadConfig() error {
 	DBPassword = getEnv("DB_PASSWORD", "postgres")
 	DBName = getEnv("DB_NAME", "graduation_project")
 	DBSSLMode = getEnv("DB_SSLMODE", "disable")
-	DBTimezone = getEnv("DB_TIMEZONE", "Asia/Shanghai")
+	// 使用 PRC（PostgreSQL 内置支持）而不是 Asia/Shanghai（需要系统时区数据）
+	// 在 Docker 容器中，PRC 更可靠
+	DBTimezone = getEnv("DB_TIMEZONE", "PRC")
 
 	// Redis configuration
 	RedisHost = getEnv("REDIS_HOST", "localhost")
