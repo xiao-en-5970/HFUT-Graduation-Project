@@ -702,6 +702,7 @@ paths:
       summary: 用户注册
       description: 用户注册接口，不需要认证。如果不指定 school_id，则默认为 1
       operationId: registerUser
+      security: []
       requestBody:
         required: true
         content:
@@ -734,6 +735,7 @@ paths:
       summary: 用户登录
       description: 用户登录接口，不需要认证
       operationId: loginUser
+      security: []
       requestBody:
         required: true
         content:
@@ -754,6 +756,40 @@ paths:
                         $ref: '#/components/schemas/LoginResponse'
         '401':
           description: 认证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+
+  /users/info:
+    get:
+      tags:
+        - 用户
+      summary: 获取当前登录用户信息
+      description: 获取当前通过JWT认证的用户信息，需要认证
+      operationId: getCurrentUserInfo
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Response'
+        '404':
+          description: 用户不存在
           content:
             application/json:
               schema:

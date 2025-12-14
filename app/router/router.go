@@ -34,6 +34,7 @@ func SetupRouter(engine *gin.Engine) {
 			usersAuth := users.Group("")
 			usersAuth.Use(middleware.JWTAuth())
 			{
+				usersAuth.GET("/info", userController.Info)   // 获取当前登录用户信息
 				usersAuth.GET("/:id", userController.GetByID) // 获取用户信息
 				usersAuth.PUT("/:id", userController.Update)  // 更新用户信息
 				usersAuth.GET("", userController.List)        // 获取用户列表

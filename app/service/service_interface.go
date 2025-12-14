@@ -12,6 +12,7 @@ type UserServiceInterface interface {
 	GetByID(id uint) (*response.UserResponse, error)
 	Update(id uint, req *request.UserUpdateRequest) (*response.UserResponse, error)
 	List(page, pageSize int, schoolID *uint) (*response.PageResponse, error)
+	GetCurrentUser(id uint) (*response.UserResponse, error)
 }
 
 // ArticleServiceInterface 文章服务接口
@@ -57,4 +58,3 @@ type SchoolServiceInterface interface {
 	GetByID(id uint) (*response.SchoolResponse, error)
 	List() ([]*response.SchoolResponse, error)
 }
-

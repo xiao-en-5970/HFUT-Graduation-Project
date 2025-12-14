@@ -180,3 +180,30 @@ func (c *UserController) List(ctx *gin.Context) {
 	})
 }
 
+// Info 获取当前登录用户信息
+func (c *UserController) Info(ctx *gin.Context) {
+	// 从 JWT 中获取当前用户ID
+	currentUserID := middleware.GetUserID(ctx)
+	if currentUserID == 0 {
+		ctx.JSON(http.StatusUnauthorized, response.Response{
+			Code:    401,
+			Message: "未认证",
+		})
+		return
+	}
+
+	user, err := c.userService.GetCurrentUser(currentUserID)
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, response.Response{
+			Code:    404,
+			Message: "用户不存在",
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, response.Response{
+		Code:    200,
+		Message: "获取成功",
+		Data:    user,
+	})
+}

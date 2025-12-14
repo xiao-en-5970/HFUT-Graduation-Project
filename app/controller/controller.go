@@ -11,6 +11,7 @@ type UserControllerInterface interface {
 	GetByID(ctx *gin.Context)
 	Update(ctx *gin.Context)
 	List(ctx *gin.Context)
+	Info(ctx *gin.Context)
 }
 
 // ArticleControllerInterface 文章控制器接口
@@ -56,4 +57,3 @@ type SchoolControllerInterface interface {
 	GetByID(ctx *gin.Context)
 	List(ctx *gin.Context)
 }
-

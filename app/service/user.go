@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/request"
@@ -183,3 +184,7 @@ func (s *UserService) List(page, pageSize int, schoolID *uint) (*response.PageRe
 	}, nil
 }
 
+// GetCurrentUser 获取当前登录用户信息
+func (s *UserService) GetCurrentUser(id uint) (*response.UserResponse, error) {
+	return s.GetByID(id)
+}
