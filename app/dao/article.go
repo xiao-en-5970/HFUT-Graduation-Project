@@ -93,3 +93,13 @@ func (d *ArticleDAO) DecrementLikeCount(id uint) error {
 	return pgsql.DB.Model(&model.Article{}).Where("id = ?", id).UpdateColumn("like_count", gorm.Expr("GREATEST(like_count - 1, 0)")).Error
 }
 
+// IncrementCollectCount 增加收藏数
+func (d *ArticleDAO) IncrementCollectCount(id uint) error {
+	return pgsql.DB.Model(&model.Article{}).Where("id = ?", id).UpdateColumn("collect_count", gorm.Expr("collect_count + ?", 1)).Error
+}
+
+// DecrementCollectCount 减少收藏数
+func (d *ArticleDAO) DecrementCollectCount(id uint) error {
+	return pgsql.DB.Model(&model.Article{}).Where("id = ?", id).UpdateColumn("collect_count", gorm.Expr("GREATEST(collect_count - 1, 0)")).Error
+}
+

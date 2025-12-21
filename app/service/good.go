@@ -30,6 +30,7 @@ func (s *GoodService) Create(userID uint, req *request.GoodCreateRequest) (*resp
 		Title:      req.Title,
 		Content:    req.Content,
 		Price:      req.Price,
+		Stock:      req.Stock,
 		GoodStatus: req.GoodStatus,
 		Status:     1,
 	}
@@ -83,6 +84,9 @@ func (s *GoodService) Update(userID, goodID uint, req *request.GoodUpdateRequest
 	}
 	if req.Price != nil {
 		good.Price = *req.Price
+	}
+	if req.Stock != nil {
+		good.Stock = *req.Stock
 	}
 	if req.GoodStatus != nil {
 		good.GoodStatus = *req.GoodStatus

@@ -36,6 +36,7 @@ type SchoolResponse struct {
 	Name      string `json:"name"`
 	LoginURL  string `json:"login_url,omitempty"`
 	UserCount int    `json:"user_count"`
+	Status    int8   `json:"status"`
 }
 
 // ArticleResponse 文章响应
@@ -84,6 +85,7 @@ type GoodResponse struct {
 	Status     int8          `json:"status"`
 	GoodStatus int           `json:"good_status"`
 	Price      int           `json:"price"`
+	Stock      int           `json:"stock"` // 库存数量
 	CreatedAt  string        `json:"created_at"`
 	UpdatedAt  string        `json:"updated_at"`
 }
@@ -134,6 +136,7 @@ func ToSchoolResponse(school *model.School) *SchoolResponse {
 		Name:      school.Name,
 		LoginURL:  school.LoginURL,
 		UserCount: school.UserCount,
+		Status:    school.Status,
 	}
 }
 
@@ -202,6 +205,7 @@ func ToGoodResponse(good *model.Good) *GoodResponse {
 		Status:     good.Status,
 		GoodStatus: good.GoodStatus,
 		Price:      good.Price,
+		Stock:      good.Stock,
 		CreatedAt:  good.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt:  good.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
@@ -226,4 +230,112 @@ func ToTagResponse(tag *model.Tag) *TagResponse {
 		ExtID:   tag.ExtID,
 		Status:  tag.Status,
 	}
+}
+
+// CollectResponse 收藏响应
+type CollectResponse struct {
+	ID        uint          `json:"id"`
+	UserID    uint          `json:"user_id"`
+	User      *UserResponse `json:"user,omitempty"`
+	ExtType   int           `json:"ext_type"`
+	ExtID     int           `json:"ext_id"`
+	Status    int8          `json:"status"`
+	CreatedAt string        `json:"created_at"`
+	UpdatedAt string        `json:"updated_at"`
+}
+
+// ToCollectResponse 转换收藏模型为响应
+func ToCollectResponse(collect *model.Collect) *CollectResponse {
+	if collect == nil {
+		return nil
+	}
+	resp := &CollectResponse{
+		ID:        collect.ID,
+		UserID:    collect.UserID,
+		ExtType:   collect.ExtType,
+		ExtID:     collect.ExtID,
+		Status:    collect.Status,
+		CreatedAt: collect.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt: collect.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}
+	if collect.User != nil {
+		resp.User = ToUserResponse(collect.User)
+	}
+	return resp
+}
+
+// FollowResponse 关注响应
+type FollowResponse struct {
+	ID        uint          `json:"id"`
+	UserID    uint          `json:"user_id"`
+	User      *UserResponse `json:"user,omitempty"`      // 关注者信息
+	FollowID  uint          `json:"follow_id"`
+	Followed  *UserResponse `json:"followed,omitempty"`  // 被关注者信息
+	Status    int8          `json:"status"`
+	CreatedAt string        `json:"created_at"`
+	UpdatedAt string        `json:"updated_at"`
+}
+
+// FollowCountResponse 关注数量响应
+type FollowCountResponse struct {
+	FollowingCount int64 `json:"following_count"` // 关注数量（我关注的人数）
+	FollowersCount int64 `json:"followers_count"` // 粉丝数量（关注我的人数）
+}
+
+// ToFollowResponse 转换关注模型为响应
+func ToFollowResponse(follow *model.Follow) *FollowResponse {
+	if follow == nil {
+		return nil
+	}
+	resp := &FollowResponse{
+		ID:        follow.ID,
+		UserID:    follow.UserID,
+		FollowID:  follow.FollowID,
+		Status:    follow.Status,
+		CreatedAt: follow.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt: follow.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}
+	if follow.User != nil {
+		resp.User = ToUserResponse(follow.User)
+	}
+	if follow.Followed != nil {
+		resp.Followed = ToUserResponse(follow.Followed)
+	}
+	return resp
+}
+
+// OrderResponse 订单响应
+type OrderResponse struct {
+	ID          uint          `json:"id"`
+	UserID      uint          `json:"user_id"`
+	User        *UserResponse `json:"user,omitempty"`
+	GoodsID     uint          `json:"goods_id"`
+	Good        *GoodResponse `json:"good,omitempty"`
+	Status      int8          `json:"status"`
+	OrderStatus int8          `json:"order_status"`
+	CreatedAt   string        `json:"created_at"`
+	UpdatedAt   string        `json:"updated_at"`
+}
+
+// ToOrderResponse 转换订单模型为响应
+func ToOrderResponse(order *model.Order) *OrderResponse {
+	if order == nil {
+		return nil
+	}
+	resp := &OrderResponse{
+		ID:          order.ID,
+		UserID:      order.UserID,
+		GoodsID:     order.GoodsID,
+		Status:      order.Status,
+		OrderStatus: order.OrderStatus,
+		CreatedAt:   order.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:   order.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}
+	if order.User != nil {
+		resp.User = ToUserResponse(order.User)
+	}
+	if order.Good != nil {
+		resp.Good = ToGoodResponse(order.Good)
+	}
+	return resp
 }

@@ -17,6 +17,7 @@ type Good struct {
 	Status     int8           `gorm:"not null;default:1" json:"status"`      // 1:正常 2:禁用
 	GoodStatus int       `gorm:"not null;default:1" json:"good_status"` // 1:在售 2:下架
 	Price      int       `gorm:"not null;default:0" json:"price"`       // 价格，单位分
+	Stock      int       `gorm:"not null;default:0" json:"stock"`       // 库存数量
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }

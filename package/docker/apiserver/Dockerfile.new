@@ -1,0 +1,35 @@
+# 选择一个合适的基础镜像。对于 Go 项目：
+FROM golang:1.23.7-alpine
+
+# 设置 Go module 缓存目录
+ENV GOMODCACHE=/var/modtmp
+ENV GOPATH=/go
+
+# 设置 Go 中国代理
+ENV GOPROXY=https://goproxy.cn,direct
+
+# 设置容器内的工作目录为 /app
+WORKDIR /app
+
+# 首先复制项目依赖声明文件（go.mod 和 go.sum）
+COPY go.mod go.sum ./
+
+# 安装依赖（下载 Go modules）
+RUN go mod download
+
+# 将当前目录下的所有文件（在 .dockerignore 中排除的除外）复制到工作目录
+COPY . .
+
+# 声明容器运行时监听的端口（这里与 compose 中映射的内部端口一致）
+# 注意：应用默认端口是 8080，如果使用 8082，需要通过环境变量 SERVER_PORT 设置
+EXPOSE 8080
+
+# 定义容器启动时执行的命令
+# 使用 go run 运行应用（开发模式）
+CMD ["go", "run", "."]
+
+# 生产环境建议使用编译后的二进制文件：
+# RUN go build -o /app/main .
+# CMD ["/app/main"]
+
+

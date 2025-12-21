@@ -1,24 +1,20 @@
-FROM golang:1.23.7-alpine
+FROM ubuntu:latest
 
+# 安装时区数据
+RUN apt-get update && apt-get install -y tzdata ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# 设置 Go module 缓存目录
-ENV GOMODCACHE=/var/modtmp
-ENV GOPATH=/go
-
-# 设置 Go 中国代理
-ENV GOPROXY=https://goproxy.cn,direct
+# 设置时区为 Asia/Shanghai（解决 PostgreSQL 时区问题）
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # 设置工作目录
 WORKDIR /app
 
-# 复制 go mod 文件
-COPY go.mod go.sum ./
+# 复制二进制文件
+COPY bin/app.exe ./bin/app.exe
 
-# 下载依赖（缓存会保存到 /var/modtmp，通过 volume 挂载）
-RUN go mod download
-
-# 复制所有源代码
-COPY . .
+# 复制 .env 文件
+COPY .env ./
 
 # 运行应用
-CMD ["go", "run", "."]
+CMD ["./bin/app.exe"]

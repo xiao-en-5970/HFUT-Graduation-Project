@@ -3,6 +3,7 @@ package dao
 import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
+	"gorm.io/gorm"
 )
 
 type GoodDAO struct{}
@@ -81,5 +82,10 @@ func (d *GoodDAO) List(page, pageSize int, userID *uint, goodStatus *int, status
 	offset := (page - 1) * pageSize
 	err := query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&goods).Error
 	return goods, total, err
+}
+
+// DecrementStock 减少库存
+func (d *GoodDAO) DecrementStock(id uint) error {
+	return pgsql.DB.Model(&model.Good{}).Where("id = ?", id).UpdateColumn("stock", gorm.Expr("GREATEST(stock - 1, 0)")).Error
 }
 

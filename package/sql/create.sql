@@ -129,8 +129,12 @@ comment on column goods.title is '商品名称';
 comment on column goods.images is '图片数组';
 comment on column goods.content is '商品内容';
 comment on column goods.status is '1:正常 2:禁用';
-comment on column goods.good_status is '1:在售 2:下架';
+comment on column goods.good_status is '1:在售 2:下架 3:已售出';
 comment on column goods.price is '商品价格，单位分';
+
+-- 添加库存数量字段
+ALTER TABLE goods ADD COLUMN IF NOT EXISTS stock integer NOT NULL DEFAULT 0;
+comment on column goods.stock is '库存数量';
 
 create table tags (
             id SERIAL PRIMARY KEY,
@@ -148,5 +152,51 @@ comment on column tags.ext_type is '关联类型 1:articles 2:goods';
 comment on column tags.status is '1:正常 2:禁用';
 
 
+create table collect (
+            id SERIAL PRIMARY KEY,
+            user_id integer REFERENCES users(id),
+            ext_id integer not null,
+            ext_type integer not null DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
+comment on column collect.user_id is '用户ID';
+comment on column collect.ext_id is '关联ID';
+comment on column collect.ext_type is '关联类型 1:articles 2:goods';
 
+create table follow (
+            id SERIAL PRIMARY KEY,
+            user_id integer REFERENCES users(id),
+            follow_id integer REFERENCES users(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+comment on column follow.user_id is '用户ID';
+comment on column follow.follow_id is '关注用户ID';
+
+create table orders (
+            id SERIAL PRIMARY KEY,
+            user_id integer REFERENCES users(id),
+            goods_id integer REFERENCES goods(id),
+            status smallint not null DEFAULT 1,
+            order_status smallint not null DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+comment on column orders.user_id is '用户ID';
+comment on column orders.goods_id is '商品ID';
+comment on column orders.status is '1:正常 2:禁用';
+comment on column orders.order_status is '1:待支付 2:已支付 3:已发货 4:已收货 5:已取消';
+
+-- 为没有 status 字段的表添加 status 字段
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;
+comment on column schools.status is '1:正常 2:禁用';
+
+ALTER TABLE collect ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;
+comment on column collect.status is '1:正常 2:禁用';
+
+ALTER TABLE follow ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;
+comment on column follow.status is '1:正常 2:禁用';

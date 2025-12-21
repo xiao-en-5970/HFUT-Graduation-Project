@@ -1,14 +1,14 @@
 package controller
 
 import (
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/request"
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
 type ArticleController struct {
@@ -31,64 +31,41 @@ func (c *ArticleController) Create(ctx *gin.Context) {
 
 	var req request.ArticleCreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "参数错误: " + err.Error(),
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	article, err := c.articleService.Create(userID, &req)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		reply.ReplyErrWithMessage(ctx, errcode.ErrArticleCreateFailed, err.Error())
 		return
 	}
 
-	ctx.JSON(http.StatusOK, response.Response{
-		Code:    200,
-		Message: "创建成功",
-		Data:    article,
-	})
+	reply.ReplyOKWithMessageAndData(ctx, "创建成功", article)
 }
 
 // GetByID 根据 ID 获取文章
 func (c *ArticleController) GetByID(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "无效的文章ID",
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	article, err := c.articleService.GetByID(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, response.Response{
-			Code:    404,
-			Message: "文章不存在",
-		})
+		reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, response.Response{
-		Code:    200,
-		Message: "获取成功",
-		Data:    article,
-	})
+	reply.ReplyOKWithData(ctx, article)
 }
 
 // Update 更新文章
 func (c *ArticleController) Update(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "无效的文章ID",
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
@@ -96,80 +73,50 @@ func (c *ArticleController) Update(ctx *gin.Context) {
 
 	var req request.ArticleUpdateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "参数错误: " + err.Error(),
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	article, err := c.articleService.Update(userID, uint(id), &req)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		reply.ReplyErrWithMessage(ctx, errcode.ErrArticleUpdateFailed, err.Error())
 		return
 	}
 
-	ctx.JSON(http.StatusOK, response.Response{
-		Code:    200,
-		Message: "更新成功",
-		Data:    article,
-	})
+	reply.ReplyOKWithMessageAndData(ctx, "更新成功", article)
 }
 
 // Delete 删除文章
 func (c *ArticleController) Delete(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "无效的文章ID",
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	userID := middleware.GetUserID(ctx)
 
 	if err := c.articleService.Delete(userID, uint(id)); err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		reply.ReplyErrWithMessage(ctx, errcode.ErrArticleDeleteFailed, err.Error())
 		return
 	}
 
-	ctx.JSON(http.StatusOK, response.Response{
-		Code:    200,
-		Message: "删除成功",
-	})
+	reply.ReplyOKWithMessage(ctx, "删除成功")
 }
 
 // List 获取文章列表
 func (c *ArticleController) List(ctx *gin.Context) {
 	var req request.ArticleListRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "参数错误: " + err.Error(),
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	result, err := c.articleService.List(&req)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, response.Response{
-			Code:    500,
-			Message: err.Error(),
-		})
+		reply.ReplyInternalError(ctx, err)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, response.Response{
-		Code:    200,
-		Message: "获取成功",
-		Data:    result,
-	})
+	reply.ReplyOKWithData(ctx, result)
 }
-

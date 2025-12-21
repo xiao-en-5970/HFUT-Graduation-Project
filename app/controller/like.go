@@ -1,14 +1,14 @@
 package controller
 
 import (
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/request"
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
 type LikeController struct {
@@ -31,19 +31,13 @@ func (c *LikeController) ToggleLike(ctx *gin.Context) {
 
 	var req request.LikeCreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "参数错误: " + err.Error(),
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	isLiked, err := c.likeService.ToggleLike(userID, &req)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		reply.ReplyErrWithMessage(ctx, errcode.ErrLikeAlreadyExists, err.Error())
 		return
 	}
 
@@ -52,12 +46,8 @@ func (c *LikeController) ToggleLike(ctx *gin.Context) {
 		action = "点赞成功"
 	}
 
-	ctx.JSON(http.StatusOK, response.Response{
-		Code:    200,
-		Message: action,
-		Data: gin.H{
-			"is_liked": isLiked,
-		},
+	reply.ReplyOKWithMessageAndData(ctx, action, gin.H{
+		"is_liked": isLiked,
 	})
 }
 
@@ -69,46 +59,30 @@ func (c *LikeController) IsLiked(ctx *gin.Context) {
 	extIDStr := ctx.Query("ext_id")
 
 	if extTypeStr == "" || extIDStr == "" {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "参数错误: ext_type 和 ext_id 必填",
-		})
+		reply.ReplyInvalidParams(ctx, nil)
 		return
 	}
 
 	extType, err := strconv.Atoi(extTypeStr)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "无效的 ext_type",
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	extID, err := strconv.Atoi(extIDStr)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "无效的 ext_id",
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	isLiked, err := c.likeService.IsLiked(userID, extType, extID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, response.Response{
-			Code:    500,
-			Message: err.Error(),
-		})
+		reply.ReplyInternalError(ctx, err)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, response.Response{
-		Code:    200,
-		Message: "获取成功",
-		Data: gin.H{
-			"is_liked": isLiked,
-		},
+	reply.ReplyOKWithData(ctx, gin.H{
+		"is_liked": isLiked,
 	})
 }
 

@@ -58,3 +58,32 @@ type SchoolServiceInterface interface {
 	GetByID(id uint) (*response.SchoolResponse, error)
 	List() ([]*response.SchoolResponse, error)
 }
+
+// CollectServiceInterface 收藏服务接口
+type CollectServiceInterface interface {
+	Create(userID uint, req *request.CollectCreateRequest) (*response.CollectResponse, error)
+	GetByID(id uint) (*response.CollectResponse, error)
+	Delete(userID, collectID uint) error
+	DeleteByExt(userID uint, req *request.CollectDeleteRequest) error
+	List(req *request.CollectListRequest) (*response.PageResponse, error)
+	IsCollected(userID uint, extType int, extID int) (bool, error)
+}
+
+// FollowServiceInterface 关注服务接口
+type FollowServiceInterface interface {
+	Follow(userID uint, followID uint) (*response.FollowResponse, error)
+	Unfollow(userID uint, followID uint) error
+	GetFollowingList(req *request.FollowListRequest) (*response.PageResponse, error)
+	GetFollowersList(req *request.FollowListRequest) (*response.PageResponse, error)
+	GetFollowCount(userID uint) (*response.FollowCountResponse, error)
+	IsFollowing(userID uint, followID uint) (bool, error)
+}
+
+// OrderServiceInterface 订单服务接口
+type OrderServiceInterface interface {
+	Create(userID uint, req *request.OrderCreateRequest) (*response.OrderResponse, error)
+	GetByID(id uint) (*response.OrderResponse, error)
+	Update(userID, orderID uint, req *request.OrderUpdateRequest) (*response.OrderResponse, error)
+	Delete(userID, orderID uint) error
+	List(req *request.OrderListRequest) (*response.PageResponse, error)
+}

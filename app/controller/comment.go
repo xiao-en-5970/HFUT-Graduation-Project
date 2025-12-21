@@ -1,14 +1,14 @@
 package controller
 
 import (
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/request"
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
 type CommentController struct {
@@ -31,79 +31,50 @@ func (c *CommentController) Create(ctx *gin.Context) {
 
 	var req request.CommentCreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "参数错误: " + err.Error(),
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	comment, err := c.commentService.Create(userID, &req)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		reply.ReplyErrWithMessage(ctx, errcode.ErrCommentCreateFailed, err.Error())
 		return
 	}
 
-	ctx.JSON(http.StatusOK, response.Response{
-		Code:    200,
-		Message: "评论成功",
-		Data:    comment,
-	})
+	reply.ReplyOKWithMessageAndData(ctx, "评论成功", comment)
 }
 
 // List 获取评论列表
 func (c *CommentController) List(ctx *gin.Context) {
 	var req request.CommentListRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "参数错误: " + err.Error(),
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	result, err := c.commentService.List(&req)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, response.Response{
-			Code:    500,
-			Message: err.Error(),
-		})
+		reply.ReplyInternalError(ctx, err)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, response.Response{
-		Code:    200,
-		Message: "获取成功",
-		Data:    result,
-	})
+	reply.ReplyOKWithData(ctx, result)
 }
 
 // Delete 删除评论
 func (c *CommentController) Delete(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: "无效的评论ID",
-		})
+		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
 
 	userID := middleware.GetUserID(ctx)
 
 	if err := c.commentService.Delete(userID, uint(id)); err != nil {
-		ctx.JSON(http.StatusBadRequest, response.Response{
-			Code:    400,
-			Message: err.Error(),
-		})
+		reply.ReplyErrWithMessage(ctx, errcode.ErrCommentNoPermission, err.Error())
 		return
 	}
 
-	ctx.JSON(http.StatusOK, response.Response{
-		Code:    200,
-		Message: "删除成功",
-	})
+	reply.ReplyOKWithMessage(ctx, "删除成功")
 }

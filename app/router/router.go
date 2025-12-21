@@ -17,6 +17,9 @@ func SetupRouter(engine *gin.Engine) {
 	goodController := controller.NewGoodController()
 	tagController := controller.NewTagController()
 	schoolController := controller.NewSchoolController()
+	collectController := controller.NewCollectController()
+	followController := controller.NewFollowController()
+	orderController := controller.NewOrderController()
 
 	// API 路由组
 	api := engine.Group("/api/v1")
@@ -95,6 +98,41 @@ func SetupRouter(engine *gin.Engine) {
 			schools.POST("", schoolController.Create)     // 创建学校
 			schools.GET("/:id", schoolController.GetByID) // 获取学校详情
 			schools.GET("", schoolController.List)        // 获取学校列表
+		}
+
+		// 收藏相关路由（需要认证）
+		collects := api.Group("/collects")
+		collects.Use(middleware.JWTAuth())
+		{
+			collects.POST("", collectController.Create)             // 创建收藏
+			collects.GET("/:id", collectController.GetByID)         // 获取收藏详情
+			collects.DELETE("/:id", collectController.Delete)       // 删除收藏（通过收藏ID）
+			collects.POST("/delete", collectController.DeleteByExt) // 删除收藏（通过关联对象）
+			collects.GET("", collectController.List)                // 获取收藏列表
+			collects.GET("/check", collectController.IsCollected)   // 检查是否已收藏
+		}
+
+		// 关注相关路由（需要认证）
+		follows := api.Group("/follows")
+		follows.Use(middleware.JWTAuth())
+		{
+			follows.POST("", followController.Follow)                       // 关注用户
+			follows.POST("/unfollow", followController.Unfollow)            // 取消关注
+			follows.GET("/following", followController.GetFollowingList)    // 获取关注列表（我关注的人）
+			follows.GET("/followers", followController.GetFollowersList)    // 获取粉丝列表（关注我的人）
+			follows.GET("/check", followController.IsFollowing)             // 检查是否已关注
+			follows.GET("/count/:user_id", followController.GetFollowCount) // 获取关注和粉丝数量（放在最后避免路由冲突）
+		}
+
+		// 订单相关路由（需要认证）
+		orders := api.Group("/orders")
+		orders.Use(middleware.JWTAuth())
+		{
+			orders.POST("", orderController.Create)       // 创建订单
+			orders.GET("/:id", orderController.GetByID)   // 获取订单详情
+			orders.PUT("/:id", orderController.Update)    // 更新订单
+			orders.DELETE("/:id", orderController.Delete) // 删除订单
+			orders.GET("", orderController.List)          // 获取订单列表
 		}
 	}
 }

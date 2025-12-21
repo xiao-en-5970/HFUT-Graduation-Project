@@ -79,6 +79,7 @@ type GoodCreateRequest struct {
 	Title      string   `json:"title" binding:"required,max=255"`
 	Content    string   `json:"content" binding:"required"`
 	Price      int      `json:"price" binding:"min=0"`
+	Stock      int      `json:"stock" binding:"min=0"` // 库存数量
 	Images     []string `json:"images"`
 	GoodStatus int      `json:"good_status"` // 1:在售 2:下架
 }
@@ -88,6 +89,7 @@ type GoodUpdateRequest struct {
 	Title      string   `json:"title" binding:"max=255"`
 	Content    string   `json:"content"`
 	Price      *int     `json:"price"`
+	Stock      *int     `json:"stock"` // 库存数量
 	Images     []string `json:"images"`
 	GoodStatus *int     `json:"good_status"`
 	Status     *int8    `json:"status"`
@@ -116,4 +118,57 @@ type TagCreateRequest struct {
 type SchoolCreateRequest struct {
 	Name     string `json:"name" binding:"required,max=50"`
 	LoginURL string `json:"login_url" binding:"max=255"`
+}
+
+// CollectCreateRequest 创建收藏请求
+type CollectCreateRequest struct {
+	ExtType int `json:"ext_type" binding:"required"` // 1:articles 2:goods
+	ExtID   int `json:"ext_id" binding:"required"`
+}
+
+// CollectDeleteRequest 删除收藏请求（通过关联对象）
+type CollectDeleteRequest struct {
+	ExtType int `json:"ext_type" binding:"required"` // 1:articles 2:goods
+	ExtID   int `json:"ext_id" binding:"required"`
+}
+
+// CollectListRequest 收藏列表请求
+type CollectListRequest struct {
+	Page     int   `form:"page" binding:"min=1"`
+	PageSize int   `form:"page_size" binding:"min=1,max=100"`
+	UserID   *uint `form:"user_id"`
+	ExtType  *int  `form:"ext_type"`
+	ExtID    *int  `form:"ext_id"`
+}
+
+// FollowRequest 关注/取消关注请求
+type FollowRequest struct {
+	FollowID uint `json:"follow_id" binding:"required"` // 被关注用户ID
+}
+
+// FollowListRequest 关注列表请求
+type FollowListRequest struct {
+	Page     int  `form:"page" binding:"min=1"`
+	PageSize int  `form:"page_size" binding:"min=1,max=100"`
+	UserID   uint `form:"user_id"` // 用户ID，不传则使用当前登录用户
+}
+
+// OrderCreateRequest 创建订单请求
+type OrderCreateRequest struct {
+	GoodsID uint `json:"goods_id" binding:"required"` // 商品ID
+}
+
+// OrderUpdateRequest 更新订单请求
+type OrderUpdateRequest struct {
+	OrderStatus *int8 `json:"order_status"` // 1:待支付 2:已支付 3:已发货 4:已收货 5:已取消
+	Status      *int8 `json:"status"`       // 1:正常 2:禁用
+}
+
+// OrderListRequest 订单列表请求
+type OrderListRequest struct {
+	Page        int   `form:"page" binding:"min=1"`
+	PageSize    int   `form:"page_size" binding:"min=1,max=100"`
+	UserID      *uint `form:"user_id"`
+	GoodsID     *uint `form:"goods_id"`
+	OrderStatus *int8 `form:"order_status"`
 }

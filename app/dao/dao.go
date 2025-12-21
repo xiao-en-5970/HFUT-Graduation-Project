@@ -19,6 +19,7 @@ type SchoolDAOInterface interface {
 	Create(school *model.School) error
 	GetByID(id uint) (*model.School, error)
 	Update(school *model.School) error
+	Delete(id uint) error
 	List() ([]model.School, error)
 	IncrementUserCount(id uint) error
 }
@@ -33,6 +34,8 @@ type ArticleDAOInterface interface {
 	IncrementViewCount(id uint) error
 	IncrementLikeCount(id uint) error
 	DecrementLikeCount(id uint) error
+	IncrementCollectCount(id uint) error
+	DecrementCollectCount(id uint) error
 }
 
 // CommentDAOInterface 评论 DAO 接口
@@ -62,6 +65,7 @@ type GoodDAOInterface interface {
 	Update(good *model.Good) error
 	Delete(id uint) error
 	List(page, pageSize int, userID *uint, goodStatus *int, status *int8, keyword string, minPrice, maxPrice *int) ([]model.Good, int64, error)
+	DecrementStock(id uint) error
 }
 
 // TagDAOInterface 标签 DAO 接口
@@ -73,3 +77,35 @@ type TagDAOInterface interface {
 	DeleteByExt(extType int, extID int) error
 }
 
+// CollectDAOInterface 收藏 DAO 接口
+type CollectDAOInterface interface {
+	Create(collect *model.Collect) error
+	GetByID(id uint) (*model.Collect, error)
+	GetByUserAndExt(userID uint, extType int, extID int) (*model.Collect, error)
+	Delete(id uint) error
+	DeleteByUserAndExt(userID uint, extType int, extID int) error
+	List(page, pageSize int, userID *uint, extType *int, extID *int) ([]model.Collect, int64, error)
+	CountByExt(extType int, extID int) (int64, error)
+}
+
+// FollowDAOInterface 关注 DAO 接口
+type FollowDAOInterface interface {
+	Create(follow *model.Follow) error
+	GetByID(id uint) (*model.Follow, error)
+	GetByUserAndFollow(userID uint, followID uint) (*model.Follow, error)
+	Delete(id uint) error
+	DeleteByUserAndFollow(userID uint, followID uint) error
+	ListFollowing(page, pageSize int, userID uint) ([]model.Follow, int64, error)
+	ListFollowers(page, pageSize int, userID uint) ([]model.Follow, int64, error)
+	CountFollowing(userID uint) (int64, error)
+	CountFollowers(userID uint) (int64, error)
+}
+
+// OrderDAOInterface 订单 DAO 接口
+type OrderDAOInterface interface {
+	Create(order *model.Order) error
+	GetByID(id uint) (*model.Order, error)
+	Update(order *model.Order) error
+	Delete(id uint) error
+	List(page, pageSize int, userID *uint, goodsID *uint, orderStatus *int8) ([]model.Order, int64, error)
+}
