@@ -23,6 +23,8 @@ scp .env root@47.94.197.213:/opt/app/.env
 ssh root@47.94.197.213 "mkdir -p /opt/app && chmod 600 /opt/app/.env"
 ```
 
+> **重要**：`.env` 必须包含 `DB_HOST`、`DB_USER`、`DB_NAME`、`DB_PASSWORD` 等变量，且不能为空，否则容器会连不上数据库。
+
 ### 4. 配置 GitHub Secrets
 
 仓库 **Settings** → **Secrets and variables** → **Actions** → **New repository secret**：
@@ -94,6 +96,15 @@ docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
 ```
 
 > **说明**：`--env-file` 要求无行内空格，否则会报 `variable contains whitespaces`。若 `.env` 无空格可直接用 `--env-file /opt/app/.env`，否则需先用上述 Python 生成 `.env.docker`。
+
+---
+
+## 容器启动失败 / 连接数据库失败
+
+若报错 `dial tcp 127.0.0.1:5432: connection refused` 或 `user=postgres database=graduation_project`：
+
+- **原因**：容器未收到环境变量，使用了默认值（localhost）
+- **处理**：确认 `/opt/app/.env` 存在且包含 `DB_HOST`、`DB_USER`、`DB_NAME`、`DB_PASSWORD` 等，执行 `cat /opt/app/.env | grep DB_HOST` 应有输出。修复后重新部署。
 
 ---
 
