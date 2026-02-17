@@ -24,6 +24,7 @@ go.work.sum
 
 # env file
 .env
+prod.env
 
 # Build output
 build/

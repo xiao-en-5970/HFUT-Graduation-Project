@@ -10,9 +10,14 @@ sudo systemctl enable docker
 sudo systemctl start docker
 ```
 
-### 2. 应用目录
+### 2. 配置服务器 .env
 
-部署流程会自动创建 `/opt/app`。环境变量通过 GitHub Secret `DEPLOY_ENV_B64` 下发，无需在服务器手动创建 .env。
+将本地 `.env` 拷贝到服务器 `/opt/app/.env`（首次部署或配置变更时执行一次）：
+
+```bash
+scp .env root@47.94.197.213:/opt/app/.env
+ssh root@47.94.197.213 "mkdir -p /opt/app && chmod 600 /opt/app/.env"
+```
 
 ### 3. 配置 GitHub Secrets
 
@@ -24,13 +29,6 @@ sudo systemctl start docker
 | DEPLOY_USER        | ✓ | SSH 用户名，如 `root` |
 | DEPLOY_SSH_KEY     | ✓* | 私钥完整内容，或使用 DEPLOY_SSH_KEY_B64 |
 | DEPLOY_SSH_KEY_B64 | * | 私钥的 Base64 编码：`base64 -w 0 ~/.ssh/deploy_key`（Linux） |
-| DEPLOY_ENV_B64     | ✓ | 生产环境 .env 的 Base64 编码，见下方 |
-
-**DEPLOY_ENV_B64（环境变量全覆盖）**：
-1. 复制 `deploy/env.production.example`，填入实际密码和配置
-2. 保存为临时文件（如 `prod.env`）
-3. 生成 Base64：`base64 -w 0 prod.env`（Linux）或 `base64 -i prod.env | tr -d '\n'`（Mac）
-4. 将输出粘贴到 `DEPLOY_ENV_B64` Secret
 
 ### 4. 在服务器添加部署公钥
 
@@ -111,13 +109,12 @@ docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
 
 ---
 
-## 部署网络与数据库访问
+## 部署与数据库访问
 
-部署使用 Docker 网络 **1panel-network**，通过容器名访问 1Panel 的 PostgreSQL 和 Redis：
+容器通过公网 IP `47.94.197.213` 访问 PostgreSQL 和 Redis。需确保：
 
-| 服务      | 容器名                | 配置项    |
-|-----------|-----------------------|-----------|
-| PostgreSQL| 1Panel-postgresql-2pcq| DB_HOST   |
-| Redis     | 1Panel-redis-Fy6t     | REDIS_HOST|
+1. **1Panel**：PostgreSQL、Redis 容器已映射端口 5432、6379
+2. **防火墙/安全组**：开放 5432、6379 入站（建议仅允许本机或可信 IP）
+3. **监听地址**：PostgreSQL `listen_addresses='*'`，Redis `bind 0.0.0.0`
 
-详见 `deploy/env.production.example`。
+若容器无法连接，可尝试在 `.env` 中改用 `DB_HOST=172.17.0.1`、`REDIS_HOST=172.17.0.1`（Docker 网桥网关）。

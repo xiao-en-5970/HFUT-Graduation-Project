@@ -22,26 +22,12 @@ jobs:
           docker build -t apiserver:latest .
           docker save apiserver:latest | gzip > apiserver.tar.gz
 
-      - name: 写入部署环境变量
-        id: deploy_env
-        run: |
-          if [ -n "$DEPLOY_ENV_B64" ]; then
-            echo "$DEPLOY_ENV_B64" | base64 -d > deploy.env
-            echo "has_env=true" >> $GITHUB_OUTPUT
-          else
-            echo "未配置 DEPLOY_ENV_B64，将使用服务器已有 /opt/app/.env"
-            echo "has_env=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          DEPLOY_ENV_B64: ${{ secrets.DEPLOY_ENV_B64 }}
-
       - name: 配置 SSH 并部署
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
-          HAS_DEPLOY_ENV: ${{ steps.deploy_env.outputs.has_env }}
         run: |
           set -e
           mkdir -p ~/.ssh
@@ -53,29 +39,26 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效"; exit 1; }
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          echo "[1/3] 传输镜像到服务器..."
+          echo "[1/2] 传输镜像到服务器..."
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
-          echo "[2/3] 传输环境变量..."
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p /opt/app"
-          if [ "$HAS_DEPLOY_ENV" = "true" ]; then
-            scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no deploy.env "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/app/.env"
-          fi
-          echo "[3/3] 替换容器并启动..."
+          echo "[2/2] 替换容器并启动..."
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
+            [ -f /opt/app/.env ] || { echo "::error::服务器缺少 /opt/app/.env，请将本地 .env 拷贝到服务器"; exit 1; }
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
             mkdir -p /opt/app
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
-            ENV_OPT=""
-            [ -f /opt/app/.env ] && ENV_OPT="--env-file /opt/app/.env"
             docker run -d --name apiserver --restart unless-stopped \
-              --network 1panel-network \
               -p 8081:8081 -e SERVER_PORT=8081 -e SERVER_HOST=0.0.0.0 \
-              $ENV_OPT apiserver:latest
-            echo "=== 部署完成 ==="
-            echo "容器状态:"
-            docker ps -a --filter name=apiserver
-            echo "若状态为 Exited，查看日志: docker logs apiserver"
+              --env-file /opt/app/.env apiserver:latest
+            sleep 3
+            if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
+              echo "::error::容器启动失败，可能无法连接数据库/Redis"
+              docker logs apiserver 2>&1 || true
+              exit 1
+            fi
+            echo "=== 部署成功 ==="
+            docker ps --filter name=apiserver
           '
