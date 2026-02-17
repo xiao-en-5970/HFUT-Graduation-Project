@@ -43,19 +43,19 @@ func ReplyOKWithMessageAndData(ctx *gin.Context, message string, data interface{
 }
 
 // ReplyErr 错误响应（使用错误码）
-func ReplyErr(ctx *gin.Context, code int) {
-	httpStatus := getHTTPStatus(code)
+func ReplyErr(ctx *gin.Context, err error) {
+	httpStatus := getHTTPStatus(500)
 	ctx.JSON(httpStatus, response.Response{
-		Code:    code,
-		Message: errcode.GetMsg(code),
+		Code:    500,
+		Message: err.Error(),
 	})
 }
 
 // ReplyErrWithMessage 错误响应（使用错误码和自定义消息）
-func ReplyErrWithMessage(ctx *gin.Context, code int, message string) {
-	httpStatus := getHTTPStatus(code)
+func ReplyErrWithMessage(ctx *gin.Context, message string) {
+	httpStatus := getHTTPStatus(500)
 	ctx.JSON(httpStatus, response.Response{
-		Code:    code,
+		Code:    500,
 		Message: message,
 	})
 }

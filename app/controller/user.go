@@ -21,9 +21,14 @@ func UserRegister(ctx *gin.Context) {
 		logger.Error(ctx, "用户注册失败", zap.Error(err))
 	}
 	if user.RePassword != user.Password {
-		logger.Errorf(ctx, "两次密码不一致！")
+		reply.ReplyErrWithMessage(ctx, "两次密码不一致！")
+		return
 	}
-	service.User().Register(ctx, user.Username, user.Password)
+	err := service.User().Register(ctx, user.Username, user.Password)
+	if err != nil {
+		reply.ReplyErr(ctx, err)
+		return
+	}
 	reply.ReplyOK(ctx)
 }
 
@@ -35,39 +40,59 @@ func UserLogin(ctx *gin.Context) {
 	}
 	var user Login
 	if err := ctx.BindJSON(&user); err != nil {
-		logger.Error(ctx, "用户登录失败", zap.Error(err))
+		reply.ReplyInvalidParams(ctx, err)
+		return
 	}
 	token, err := service.User().Login(ctx, user.Username, user.Password)
 	if err != nil {
-		logger.Error(ctx, "用户登录失败", zap.Error(err))
+		reply.ReplyInternalError(ctx, err)
+		return
 	}
 	reply.ReplyOKWithMessageAndData(ctx, "登录成功", token)
+	return
 }
 
 func UserInfo(ctx *gin.Context) {
 	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyErrWithMessage(ctx, "用户不存在")
+		return
+	}
 	info, err := service.User().Info(ctx, userID)
 	if err != nil {
-		logger.Error(ctx, "用户信息获取失败", zap.Error(err))
+		reply.ReplyInternalError(ctx, err)
+		return
 	}
 	reply.ReplyOKWithData(ctx, info)
+	return
 }
 
 func UserUpdate(ctx *gin.Context) {
 	user := &model.User{}
 	err := ctx.BindJSON(user)
 	if err != nil {
-		logger.Error(ctx, "用户信息更新失败", zap.Error(err))
+		reply.ReplyInvalidParams(ctx, err)
+		return
 	}
-	service.User().Update(ctx, user)
+	err = service.User().Update(ctx, user)
+	if err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	reply.ReplyOK(ctx)
 }
 
 func UserBindSchool(ctx *gin.Context) {
 	schoolId := uint(0)
-	ctx.BindJSON(&schoolId)
-	err := service.User().BindSchool(ctx, schoolId)
+	err := ctx.BindJSON(&schoolId)
+	if err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	err = service.User().BindSchool(ctx, schoolId)
 	if err != nil {
 		logger.Error(ctx, "用户绑定学校失败", zap.Error(err))
+		reply.ReplyInternalError(ctx, err)
 	}
 	reply.ReplyOK(ctx)
 }
