@@ -11,8 +11,12 @@ import (
 type UserStore struct {
 }
 
-func (s *UserStore) Create(ctx context.Context, user *model.User) error {
-	return pgsql.DB.Create(user).Error
+func (s *UserStore) Create(ctx context.Context, user *model.User) (uint, error) {
+	err := pgsql.DB.Create(user).Error
+	if err != nil {
+		return 0, err
+	}
+	return user.ID, nil
 }
 
 func (s *UserStore) Update(ctx context.Context, user *model.User) error {
@@ -23,15 +27,15 @@ func (s *UserStore) Delete(ctx context.Context, user *model.User) error {
 }
 
 func (s *UserStore) GetByID(ctx context.Context, id uint) (*model.User, error) {
-	var user model.User
-	err := pgsql.DB.Where("id = ?", id).First(&user).Error
-	return &user, err
+	user := &model.User{}
+	err := pgsql.DB.Where("id = ?", id).First(user).Error
+	return user, err
 }
 
 func (s *UserStore) GetByUsername(ctx context.Context, username string) (*model.User, error) {
-	var user model.User
-	err := pgsql.DB.Where("username = ?", username).First(&user).Error
-	return &user, err
+	user := &model.User{}
+	err := pgsql.DB.Where("username = ?", username).First(user).Error
+	return user, err
 }
 
 func (s *UserStore) UpdateColumn(ctx context.Context, column string, value interface{}) error {

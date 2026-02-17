@@ -24,12 +24,12 @@ func UserRegister(ctx *gin.Context) {
 		reply.ReplyErrWithMessage(ctx, "两次密码不一致！")
 		return
 	}
-	err := service.User().Register(ctx, user.Username, user.Password)
+	userId, err := service.User().Register(ctx, user.Username, user.Password)
 	if err != nil {
 		reply.ReplyErr(ctx, err)
 		return
 	}
-	reply.ReplyOK(ctx)
+	reply.ReplyOKWithData(ctx, gin.H{"user_id": userId})
 }
 
 // Login 用户登录

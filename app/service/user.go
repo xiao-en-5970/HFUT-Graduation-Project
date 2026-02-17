@@ -21,15 +21,15 @@ func User() *userService {
 	return &userService{}
 }
 
-func (s *userService) Register(ctx *gin.Context, username, password string) error {
-	user, err := dao.User().GetByUsername(ctx, username)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		logger.Error(ctx, "用户注册失败", zap.Error(err))
-		return err
-	}
-	if user != nil {
+func (s *userService) Register(ctx *gin.Context, username, password string) (uint, error) {
+	_, err := dao.User().GetByUsername(ctx, username)
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		logger.Error(ctx, "用户已存在", zap.Error(err))
-		return errors.New("用户已存在")
+		return 0, errors.New("用户已存在")
+	}
+	if err != nil {
+		logger.Error(ctx, "用户注册失败", zap.Error(err))
+		return 0, err
 	}
 	passwordHash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return dao.User().Create(ctx, &model.User{
