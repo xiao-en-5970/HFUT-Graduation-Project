@@ -2,7 +2,7 @@ name: CI/CD
 
 permissions:
   contents: read
-  actions: read    # deploy_only 需读取其他 run 的 artifact
+  actions: read
 
 on:
   push:
@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       deploy_only:
-        description: "仅部署（复用最近一次构建，不执行检查与构建）"
+        description: "仅部署（复用最近一次构建，需仓库 Workflow 权限为 Read and write）"
         required: false
-        default: true
+        default: false
         type: boolean
 
 jobs:
@@ -125,22 +125,25 @@ jobs:
             docker ps --filter name=apiserver
           '
 
-  # 步骤 3b：仅部署（复用最近一次构建，跳过检查与构建）
+  # 步骤 3b：仅部署（复用最近一次构建，需 GH_ACTIONS_READ_TOKEN 或仓库 Workflow 权限）
   deploy_only:
     name: 3. 仅部署
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && inputs.deploy_only
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
       - name: 获取最近一次构建产物
         id: artifact
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_ACTIONS_READ_TOKEN || github.token }}
         run: |
-          RUN_ID=$(gh run list --workflow=deploy.yml --branch="${{ github.ref_name }}" --status=success --limit=1 --json=databaseId -q '.[0].databaseId')
+          RUN_ID=$(gh run list --workflow=deploy.yml --branch="${{ github.ref_name }}" --status=success --limit=1 --json=databaseId -q '.[0].databaseId' 2>/dev/null) || true
           if [ -z "$RUN_ID" ]; then
-            echo "::error::未找到成功的构建记录，请先 push 代码触发一次完整构建"
+            echo "::error::获取构建记录失败。请：1) 仓库 Settings → Actions → General → Workflow permissions 设为 Read and write；或 2) 添加 GH_ACTIONS_READ_TOKEN secret（PAT，需 actions:read）"
             exit 1
           fi
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
@@ -149,6 +152,7 @@ jobs:
         with:
           name: apiserver-image
           run-id: ${{ steps.artifact.outputs.run_id }}
+          token: ${{ secrets.GH_ACTIONS_READ_TOKEN || github.token }}
 
       - name: 配置 SSH 并部署
         env:
