@@ -10,11 +10,7 @@ sudo systemctl enable docker
 sudo systemctl start docker
 ```
 
-### 2. 确保服务器有 Python 3
-
-部署脚本会运行 `python3` 生成 Docker 兼容的 `.env.docker`。Ubuntu/Debian 通常已预装；若无则执行 `apt install python3`。
-
-### 3. 配置服务器 .env
+### 2. 配置服务器 .env
 
 将本地 `.env` 拷贝到服务器 `/opt/app/.env`（首次部署或配置变更时执行一次）：
 
@@ -23,9 +19,9 @@ scp .env root@47.94.197.213:/opt/app/.env
 ssh root@47.94.197.213 "mkdir -p /opt/app && chmod 600 /opt/app/.env"
 ```
 
-> **重要**：`.env` 必须包含 `DB_HOST`、`DB_USER`、`DB_NAME`、`DB_PASSWORD` 等变量，且不能为空，否则容器会连不上数据库。
+> **重要**：容器通过挂载 `/opt/app/.env` 读取配置，应用使用 godotenv 解析，格式宽松，无需额外转换。
 
-### 4. 配置 GitHub Secrets
+### 3. 配置 GitHub Secrets
 
 仓库 **Settings** → **Secrets and variables** → **Actions** → **New repository secret**：
 
@@ -37,7 +33,7 @@ ssh root@47.94.197.213 "mkdir -p /opt/app && chmod 600 /opt/app/.env"
 | DEPLOY_SSH_KEY_B64 | * | 私钥的 Base64 编码：`base64 -w 0 ~/.ssh/deploy_key`（Linux） |
 | GH_ACTIONS_READ_TOKEN |  | 可选。仅部署时若遇 403，添加 PAT（需 actions:read） |
 
-### 5. 在服务器添加部署公钥
+### 4. 在服务器添加部署公钥
 
 本机生成专用密钥对（仅用于部署）：
 
@@ -84,29 +80,25 @@ chmod 600 ~/.ssh/authorized_keys
 3. 在本地执行：
 
 ```bash
-# 上传镜像和 env 转换脚本到服务器
-scp apiserver.tar.gz .github/scripts/env-to-docker.py root@47.94.197.213:/tmp/
+# 上传镜像到服务器
+scp apiserver.tar.gz root@47.94.197.213:/tmp/
 
-# SSH 登录并部署（脚本生成 Docker 兼容的 .env.docker）
+# SSH 登录并部署（容器挂载 /opt/app/.env 读取配置）
 ssh root@47.94.197.213
-python3 /tmp/env-to-docker.py
 docker load < /tmp/apiserver.tar.gz
 docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null
 docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
-  -e SERVER_PORT=8081 -e SERVER_HOST=0.0.0.0 \
-  --env-file /opt/app/.env.docker apiserver:latest
+  -v /opt/app/.env:/app/.env:ro apiserver:latest
 ```
-
-> **说明**：`--env-file` 要求无行内空格，否则会报 `variable contains whitespaces`。若 `.env` 无空格可直接用 `--env-file /opt/app/.env`，否则需先用上述 Python 生成 `.env.docker`。
 
 ---
 
 ## 容器启动失败 / 连接数据库失败
 
-若报错 `dial tcp 127.0.0.1:5432: connection refused` 或 `user=postgres database=graduation_project`：
+若报错 `dial tcp 127.0.0.1:5432: connection refused`：
 
-- **原因**：容器未收到环境变量，使用了默认值（localhost）
-- **处理**：确认 `/opt/app/.env` 存在且包含 `DB_HOST`、`DB_USER`、`DB_NAME`、`DB_PASSWORD` 等，执行 `cat /opt/app/.env | grep DB_HOST` 应有输出。修复后重新部署。
+- **原因**：`/opt/app/.env` 不存在或未正确挂载，应用使用默认 localhost
+- **处理**：确认 `/opt/app/.env` 存在，执行 `cat /opt/app/.env | grep DB_HOST` 应有输出，然后重新部署
 
 ---
 
