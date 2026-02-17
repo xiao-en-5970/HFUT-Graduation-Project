@@ -45,6 +45,7 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
             [ -f /opt/app/.env ] || { echo "::error::服务器缺少 /opt/app/.env，请将本地 .env 拷贝到服务器"; exit 1; }
+            sed -e "s/^[[:space:]]*//" -e "s/[[:space:]]*$//" -e "s/=[[:space:]]*/=/" -e "/^#/d" -e "/^$/d" -e "s/\r$//" /opt/app/.env > /opt/app/.env.docker
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
             mkdir -p /opt/app
@@ -52,7 +53,7 @@ jobs:
             docker rm apiserver 2>/dev/null || true
             docker run -d --name apiserver --restart unless-stopped \
               -p 8081:8081 -e SERVER_PORT=8081 -e SERVER_HOST=0.0.0.0 \
-              --env-file /opt/app/.env apiserver:latest
+              --env-file /opt/app/.env.docker apiserver:latest
             sleep 3
             if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
               echo "::error::容器启动失败，可能无法连接数据库/Redis"
