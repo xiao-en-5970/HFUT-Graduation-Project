@@ -8,18 +8,11 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
-    inputs:
-      deploy_only:
-        description: "仅部署（复用最近一次构建，需仓库 Workflow 权限为 Read and write）"
-        required: false
-        default: false
-        type: boolean
 
 jobs:
-  # 步骤 1：代码语法检查（仅部署时跳过）
+  # 步骤 1：代码检查（格式、静态分析、编译验证）
   check:
     name: 1. 代码检查
-    if: github.event_name != 'workflow_dispatch' || !inputs.deploy_only
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,55 +22,28 @@ jobs:
           go-version: "1.23"
           cache-dependency-path: go.sum
 
-      - name: 语法检查 / 编译验证
+      - name: 代码格式检查
         run: |
-          go vet ./...
-          CGO_ENABLED=0 go build -o /dev/null .
+          UNFMT=$(gofmt -l . 2>/dev/null | grep -v '^$' || true)
+          if [ -n "$UNFMT" ]; then
+            echo "::error::以下文件格式不符，请运行 gofmt -w ."
+            echo "$UNFMT"
+            exit 1
+          fi
 
-  # 步骤 2：构建镜像（仅部署时跳过）
-  build:
-    name: 2. 构建镜像
-    if: github.event_name != 'workflow_dispatch' || !inputs.deploy_only
-    runs-on: ubuntu-latest
-    needs: check
-    steps:
-      - uses: actions/checkout@v4
+      - name: 静态分析
+        run: go vet ./...
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-          cache-dependency-path: go.sum
+      - name: 编译验证
+        run: CGO_ENABLED=0 go build -o /dev/null .
 
-      - name: 编译 Linux 二进制
-        run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/app main.go
-
-      - name: 构建 Docker 镜像
-        run: |
-          docker build -t apiserver:latest .
-
-      - name: 导出并上传镜像
-        run: |
-          docker save apiserver:latest | gzip > apiserver.tar.gz
-
-      - name: 上传产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: apiserver-image
-          path: apiserver.tar.gz
-
-  # 步骤 3a：部署（使用本次构建产物，需先执行检查+构建）
+  # 步骤 2：部署（传输代码到服务器，在服务器端编译、构建镜像、运行）
   deploy:
-    name: 3. 部署到服务器
+    name: 2. 部署到服务器
     runs-on: ubuntu-latest
-    needs: [check, build]
-    if: github.event_name == 'workflow_dispatch' && !inputs.deploy_only
+    needs: [check]
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: apiserver-image
 
       - name: 配置 SSH 并部署
         env:
@@ -99,94 +65,32 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效"; exit 1; }
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          echo "[1/2] 传输镜像到服务器..."
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
-          echo "[2/2] 替换容器并启动..."
+
+          echo "[1/3] 传输代码到服务器..."
+          tar -czf - --exclude='.git' --exclude='build' --exclude='.env' --exclude='*.test' . | \
+            ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              'mkdir -p /opt/app/src && tar -xzf - -C /opt/app/src'
+
+          echo "[2/3] 服务器端编译、构建镜像..."
+          echo "[3/3] 替换容器并启动..."
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
+            command -v go >/dev/null || { echo "::error::服务器需安装 Go (https://go.dev/dl/)"; exit 1; }
+            cd /opt/app/src
             [ -f /.env ] || { echo "::error::需先在宿主机创建 /.env 并填入环境变量（可参考 .env.example）"; exit 1; }
             grep -E "^[A-Za-z_][A-Za-z0-9_]*=" /.env > /tmp/.env.docker
             [ -s /tmp/.env.docker ] || { echo "::error::/.env 中无有效 KEY=VALUE 格式行（注释行 # 会被过滤）"; exit 1; }
-            docker load < /tmp/apiserver.tar.gz
-            rm -f /tmp/apiserver.tar.gz
+            echo "  - Go 编译..."
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/app main.go
+            echo "  - Docker 镜像构建..."
+            docker build -t apiserver:latest .
+            echo "  - 容器启动..."
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
             docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /tmp/.env.docker apiserver:latest
             sleep 3
             if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
               echo "::error::容器启动失败，可能无法连接数据库/Redis"
-              docker logs apiserver 2>&1 || true
-              exit 1
-            fi
-            echo "=== 部署成功 ==="
-            docker ps --filter name=apiserver
-          '
-
-  # 步骤 3b：仅部署（复用最近一次构建，需 GH_ACTIONS_READ_TOKEN 或仓库 Workflow 权限）
-  deploy_only:
-    name: 3. 仅部署
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy_only
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 获取最近一次构建产物
-        id: artifact
-        env:
-          GH_TOKEN: ${{ secrets.GH_ACTIONS_READ_TOKEN || github.token }}
-        run: |
-          RUN_ID=$(gh run list --workflow=deploy.yml --branch="${{ github.ref_name }}" --status=success --limit=1 --json=databaseId -q '.[0].databaseId' 2>/dev/null) || true
-          if [ -z "$RUN_ID" ]; then
-            echo "::error::获取构建记录失败。请：1) 仓库 Settings → Actions → General → Workflow permissions 设为 Read and write；或 2) 添加 GH_ACTIONS_READ_TOKEN secret（PAT，需 actions:read）"
-            exit 1
-          fi
-          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: apiserver-image
-          run-id: ${{ steps.artifact.outputs.run_id }}
-          token: ${{ secrets.GH_ACTIONS_READ_TOKEN || github.token }}
-
-      - name: 配置 SSH 并部署
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
-        run: |
-          set -e
-          [ -n "$DEPLOY_HOST" ] || { echo "::error::缺少 Secrets: DEPLOY_HOST"; exit 1; }
-          [ -n "$DEPLOY_USER" ] || { echo "::error::缺少 Secrets: DEPLOY_USER"; exit 1; }
-          [ -n "$DEPLOY_SSH_KEY$DEPLOY_SSH_KEY_B64" ] || { echo "::error::缺少 Secrets: 至少配置 DEPLOY_SSH_KEY 或 DEPLOY_SSH_KEY_B64"; exit 1; }
-          mkdir -p ~/.ssh
-          if [ -n "$DEPLOY_SSH_KEY_B64" ]; then
-            echo "$DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
-          else
-            printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
-          fi
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效"; exit 1; }
-          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          echo "[1/2] 传输镜像到服务器..."
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
-          echo "[2/2] 替换容器并启动..."
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
-            set -e
-            [ -f /.env ] || { echo "::error::需先在宿主机创建 /.env 并填入环境变量（可参考 .env.example）"; exit 1; }
-            grep -E "^[A-Za-z_][A-Za-z0-9_]*=" /.env > /tmp/.env.docker
-            [ -s /tmp/.env.docker ] || { echo "::error::/.env 中无有效 KEY=VALUE 格式行（注释行 # 会被过滤）"; exit 1; }
-            docker load < /tmp/apiserver.tar.gz
-            rm -f /tmp/apiserver.tar.gz
-            docker stop apiserver 2>/dev/null || true
-            docker rm apiserver 2>/dev/null || true
-            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /tmp/.env.docker apiserver:latest
-            sleep 3
-            if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
-              echo "::error::容器启动失败"
               docker logs apiserver 2>&1 || true
               exit 1
             fi

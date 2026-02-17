@@ -2,12 +2,18 @@
 
 ## 服务器首次配置
 
-### 1. 安装 Docker
+### 1. 安装 Docker 与 Go
 
 ```bash
+# Docker
 curl -fsSL https://get.docker.com | sh
 sudo systemctl enable docker
 sudo systemctl start docker
+
+# Go（用于服务器端编译）
+curl -OL https://go.dev/dl/go1.23.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.23.linux-amd64.tar.gz
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc && source ~/.bashrc
 ```
 
 ### 2. 配置宿主机 .env
@@ -31,7 +37,6 @@ sudo systemctl start docker
 | DEPLOY_USER        | ✓ | SSH 用户名，如 `root` |
 | DEPLOY_SSH_KEY     | ✓* | 私钥完整内容，或使用 DEPLOY_SSH_KEY_B64 |
 | DEPLOY_SSH_KEY_B64 | * | 私钥的 Base64 编码：`base64 -w 0 ~/.ssh/deploy_key`（Linux） |
-| GH_ACTIONS_READ_TOKEN |  | 可选。仅部署时若遇 403，添加 PAT（需 actions:read） |
 
 ### 4. 在服务器添加部署公钥
 
@@ -59,8 +64,8 @@ chmod 600 ~/.ssh/authorized_keys
 
 推送到 `main` / `master` 后自动执行：
 
-1. **代码检查**：`go vet` + `go build`，确认可编译
-2. **构建镜像**：编译 Linux 二进制 → 构建 Docker 镜像 → 上传为 Artifact
+1. **代码检查**：`gofmt` 格式检查 + `go vet` 静态分析 + `go build` 编译验证
+2. **部署**：传输代码到服务器 → 服务器端 Go 编译 → 构建 Docker 镜像 → 启动容器
 
 ### 手动部署
 
@@ -68,25 +73,19 @@ chmod 600 ~/.ssh/authorized_keys
 
 1. 打开 **Actions** → 选择 **「CI/CD」**
 2. 点击 **Run workflow** → 选择分支
-3. **完整流程**（默认）：不勾选「仅部署」，执行 检查 → 构建 → 部署
-4. **仅部署**：勾选「仅部署」可复用最近一次构建；若遇 403，需在仓库 Settings → Actions → General 将 Workflow permissions 设为 Read and write，或添加 GH_ACTIONS_READ_TOKEN secret
+3. 执行 检查 → 部署
 
 ---
 
 ## 手动部署（无 Actions）
 
-1. 在 Actions 最新一次成功运行中下载 **apiserver-image** 产物  
-2. 重命名为 `apiserver.tar.gz`  
-3. 在本地执行：
+1. 在本地打包并传输代码，在服务器编译、构建、运行：
 
 ```bash
-scp apiserver.tar.gz root@47.94.197.213:/tmp/
-ssh root@47.94.197.213
-docker load < /tmp/apiserver.tar.gz
-docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null
-docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
-  --env-file /.env apiserver:latest
+tar -czf - --exclude='.git' --exclude='build' --exclude='.env' . | ssh root@47.94.197.213 'mkdir -p /opt/app/src && tar -xzf - -C /opt/app/src'
+ssh root@47.94.197.213 'cd /opt/app/src && CGO_ENABLED=0 go build -o build/app main.go && docker build -t apiserver:latest . && docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null; docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /tmp/.env.docker apiserver:latest'
 ```
+（需先在服务器执行 `grep -E "^[A-Za-z_][A-Za-z0-9_]*=" /.env > /tmp/.env.docker` 生成 env 文件）
 
 ---
 
