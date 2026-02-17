@@ -41,7 +41,7 @@ func (s *userService) Register(ctx *gin.Context, username, password string) erro
 
 func (s *userService) Login(ctx *gin.Context, username, password string) (token string, err error) {
 	user, err := dao.User().GetByUsername(ctx, username)
-	if user == nil {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		logger.Error(ctx, "用户不存在", zap.Error(err))
 		return token, errors.New("用户不存在")
 	}
