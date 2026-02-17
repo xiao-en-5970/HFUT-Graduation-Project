@@ -67,9 +67,9 @@ chmod 600 ~/.ssh/authorized_keys
 
 需要部署时：
 
-1. 打开 **Actions** → 选择 **「手动部署」**
-2. 点击 **Run workflow** → **Run workflow**
-3. 会编译、构建镜像并部署到服务器
+1. 打开 **Actions** → 选择 **「CI/CD」**
+2. 点击 **Run workflow** → 选择分支 → **Run workflow**
+3. 会执行：代码检查 → 构建镜像 → 部署到服务器
 
 ---
 

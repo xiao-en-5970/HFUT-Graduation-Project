@@ -3,6 +3,7 @@ name: CI/CD
 on:
   push:
     branches: [main, master]
+  workflow_dispatch:  # 手动点击 "Run workflow" 执行部署；否则 push 仅执行到构建镜像
 
 jobs:
   # 步骤 1：代码语法检查
@@ -22,7 +23,7 @@ jobs:
           go vet ./...
           CGO_ENABLED=0 go build -o /dev/null .
 
-  # 步骤 2：构建镜像
+  # 步骤 2：构建镜像（push 和手动均执行，到此结束 push）
   build:
     name: 2. 构建镜像
     runs-on: ubuntu-latest
@@ -52,3 +53,76 @@ jobs:
         with:
           name: apiserver-image
           path: apiserver.tar.gz
+
+  # 步骤 3：部署到服务器（仅手动点击 Run workflow 时执行）
+  deploy:
+    name: 3. 部署到服务器
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: apiserver-image
+
+      - name: 配置 SSH 并部署
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
+        run: |
+          set -e
+          [ -n "$DEPLOY_HOST" ] || { echo "::error::缺少 Secrets: DEPLOY_HOST"; exit 1; }
+          [ -n "$DEPLOY_USER" ] || { echo "::error::缺少 Secrets: DEPLOY_USER"; exit 1; }
+          [ -n "$DEPLOY_SSH_KEY$DEPLOY_SSH_KEY_B64" ] || { echo "::error::缺少 Secrets: 至少配置 DEPLOY_SSH_KEY 或 DEPLOY_SSH_KEY_B64"; exit 1; }
+          mkdir -p ~/.ssh
+          if [ -n "$DEPLOY_SSH_KEY_B64" ]; then
+            echo "$DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
+          else
+            printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          fi
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效"; exit 1; }
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "[1/2] 传输镜像到服务器..."
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
+          echo "[2/2] 替换容器并启动..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
+            set -e
+            [ -f /opt/app/.env ] || { echo "::error::服务器缺少 /opt/app/.env"; exit 1; }
+            python3 << "PYEOF"
+import re
+out = []
+with open("/opt/app/.env") as f:
+    content = f.read()
+for line in content.splitlines():
+    line = line.rstrip("\r").strip()
+    if not line or line.startswith("#"): continue
+    m = re.match(r"^([^=]+)=(.*)$", line)
+    if m:
+        k = m.group(1).strip()
+        v = m.group(2).strip().replace("\n", " ").replace("\r", "")
+        if " " in v or "\t" in v:
+            v = '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        out.append(f"{k}={v}")
+with open("/opt/app/.env.docker", "w") as f:
+    f.write("\n".join(out))
+PYEOF
+            docker load < /tmp/apiserver.tar.gz
+            rm -f /tmp/apiserver.tar.gz
+            mkdir -p /opt/app
+            docker stop apiserver 2>/dev/null || true
+            docker rm apiserver 2>/dev/null || true
+            docker run -d --name apiserver --restart unless-stopped \
+              -p 8081:8081 -e SERVER_PORT=8081 -e SERVER_HOST=0.0.0.0 \
+              --env-file /opt/app/.env.docker apiserver:latest
+            sleep 3
+            if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
+              echo "::error::容器启动失败，可能无法连接数据库/Redis"
+              docker logs apiserver 2>&1 || true
+              exit 1
+            fi
+            echo "=== 部署成功 ==="
+            docker ps --filter name=apiserver
+          '
