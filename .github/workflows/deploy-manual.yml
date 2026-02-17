@@ -62,14 +62,20 @@ jobs:
           fi
           echo "[3/3] 替换容器并启动..."
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
+            set -e
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
             mkdir -p /opt/app
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
+            ENV_OPT=""
+            [ -f /opt/app/.env ] && ENV_OPT="--env-file /opt/app/.env"
             docker run -d --name apiserver --restart unless-stopped \
               --network 1panel-network \
               -p 8081:8081 -e SERVER_PORT=8081 -e SERVER_HOST=0.0.0.0 \
-              --env-file /opt/app/.env apiserver:latest
-            echo "部署完成，端口 8081，网络 1panel-network"
+              $ENV_OPT apiserver:latest
+            echo "=== 部署完成 ==="
+            echo "容器状态:"
+            docker ps -a --filter name=apiserver
+            echo "若状态为 Exited，查看日志: docker logs apiserver"
           '
