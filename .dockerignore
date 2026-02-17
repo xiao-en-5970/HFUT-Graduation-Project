@@ -1,0 +1,13 @@
+# 忽略无关文件，减小构建上下文
+.git
+.github
+*.md
+doc
+*.test
+vendor
+.env
+.env.*
+!.env.example
+.idea
+.vscode
+*_test.go

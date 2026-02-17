@@ -1,0 +1,70 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main, master]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: go.sum
+
+      - name: Build binary
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/app main.go
+
+      - name: Build Docker image
+        run: |
+          docker build -t apiserver:latest .
+
+      - name: Save image
+        run: |
+          docker save apiserver:latest | gzip > apiserver.tar.gz
+
+      - name: Deploy to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "apiserver.tar.gz"
+          target: "/tmp/"
+
+      - name: Load and run on server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            echo "Loading image..."
+            docker load < /tmp/apiserver.tar.gz
+            rm -f /tmp/apiserver.tar.gz
+            
+            echo "Stopping old container..."
+            docker stop apiserver 2>/dev/null || true
+            docker rm apiserver 2>/dev/null || true
+            
+            echo "Starting new container..."
+            ENV_FILE=""
+            [ -f /opt/app/.env ] && ENV_FILE="--env-file /opt/app/.env"
+            docker run -d \
+              --name apiserver \
+              --restart unless-stopped \
+              -p 8081:8081 \
+              -e SERVER_PORT=8081 \
+              -e SERVER_HOST=0.0.0.0 \
+              $ENV_FILE \
+              apiserver:latest
+            
+            echo "Deploy done. App running on port 8081"
