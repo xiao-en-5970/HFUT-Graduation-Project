@@ -7,7 +7,7 @@ type User struct {
 	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	Username    string    `gorm:"type:varchar(50);not null;uniqueIndex" json:"username"`
 	Password    string    `gorm:"type:varchar(255);not null" json:"password"`
-	SchoolID    *int      `gorm:"column:school_id;index" json:"school_id"`
+	SchoolID    int       `gorm:"column:school_id;index" json:"school_id"`
 	BindQQ      *string   `gorm:"column:bind_qq;type:varchar(128)" json:"bind_qq"`
 	BindWX      *string   `gorm:"column:bind_wx;type:varchar(128)" json:"bind_wx"`
 	BindPhone   *string   `gorm:"column:bind_phone;type:varchar(20)" json:"bind_phone"`

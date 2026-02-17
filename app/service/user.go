@@ -33,6 +33,7 @@ func (s *userService) Register(ctx *gin.Context, username, password string) erro
 	}
 	passwordHash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return dao.User().Create(ctx, &model.User{
+		SchoolID: 0,
 		Username: username,
 		Password: string(passwordHash),
 	})
