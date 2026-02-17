@@ -108,6 +108,7 @@ ssh root@47.94.197.213 '
   docker load < /tmp/apiserver.tar.gz
   docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null
   docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /tmp/.env.docker apiserver:latest
+  docker image prune -f
 '
 ```
 

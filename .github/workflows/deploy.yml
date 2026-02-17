@@ -111,5 +111,6 @@ jobs:
               exit 1
             fi
             echo "=== 部署成功 ==="
+            docker image prune -f
             docker ps --filter name=apiserver
           '
