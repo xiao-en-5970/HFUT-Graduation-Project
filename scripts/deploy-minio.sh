@@ -91,9 +91,38 @@ echo -e "${YELLOW}  Root User: ${MINIO_ROOT_USER}${NC}"
 echo -e "${YELLOW}  Root Password: ${MINIO_ROOT_PASSWORD}${NC}"
 echo -e "${RED}  请妥善保存密码！${NC}"
 
-# 6. 创建 systemd 服务文件
-echo -e "${YELLOW}[6/8] 创建 systemd 服务文件...${NC}"
-cat > /etc/systemd/system/minio.service <<EOF
+# 6. 检测是否支持 systemd
+SYSTEMD_AVAILABLE=false
+if command -v systemctl &> /dev/null && systemctl --version &> /dev/null; then
+    # 检查是否真的可以连接 systemd
+    if systemctl list-units &> /dev/null 2>&1; then
+        SYSTEMD_AVAILABLE=true
+    fi
+fi
+
+# 7. 创建启动脚本
+echo -e "${YELLOW}[7/8] 创建启动脚本...${NC}"
+cat > ${MINIO_HOME}/start-minio.sh <<EOF
+#!/bin/bash
+# 加载环境变量
+set -a
+. ${MINIO_CONFIG_DIR}/minio.env
+set +a
+cd ${MINIO_HOME}
+exec /usr/local/bin/minio server \$MINIO_OPTS \$MINIO_VOLUMES
+EOF
+chmod +x ${MINIO_HOME}/start-minio.sh
+chown ${MINIO_USER}:${MINIO_GROUP} ${MINIO_HOME}/start-minio.sh
+echo -e "${GREEN}✓ 启动脚本创建成功${NC}"
+
+# 8. 启动 MinIO 服务
+echo -e "${YELLOW}[8/8] 启动 MinIO 服务...${NC}"
+
+if [ "$SYSTEMD_AVAILABLE" = true ]; then
+    # 使用 systemd
+    # 使用变量替换，但避免 heredoc 中的 bash 解析问题
+    {
+        cat <<EOF
 [Unit]
 Description=MinIO Object Storage
 Documentation=https://docs.min.io
@@ -106,8 +135,8 @@ WorkingDirectory=${MINIO_HOME}
 User=${MINIO_USER}
 Group=${MINIO_GROUP}
 EnvironmentFile=${MINIO_CONFIG_DIR}/minio.env
-ExecStartPre=/bin/bash -c "if [ -z \"\${MINIO_VOLUMES}\" ]; then echo \"Variable MINIO_VOLUMES not set in \${MINIO_CONFIG_DIR}/minio.env\"; exit 1; fi"
-ExecStart=/usr/local/bin/minio server \$MINIO_OPTS \$MINIO_VOLUMES
+ExecStartPre=/bin/bash -c 'if [ -z "\${MINIO_VOLUMES}" ]; then echo "Variable MINIO_VOLUMES not set in ${MINIO_CONFIG_DIR}/minio.env"; exit 1; fi'
+ExecStart=/usr/local/bin/minio server \${MINIO_OPTS} \${MINIO_VOLUMES}
 
 Restart=always
 LimitNOFILE=65536
@@ -117,25 +146,76 @@ SendSIGKILL=no
 [Install]
 WantedBy=multi-user.target
 EOF
-echo -e "${GREEN}✓ systemd 服务文件创建成功${NC}"
-
-# 7. 重新加载 systemd 并启动服务
-echo -e "${YELLOW}[7/8] 启动 MinIO 服务...${NC}"
-systemctl daemon-reload
-systemctl enable minio
-systemctl start minio
-sleep 3
-
-# 检查服务状态
-if systemctl is-active --quiet minio; then
-    echo -e "${GREEN}✓ MinIO 服务启动成功${NC}"
+    } > /etc/systemd/system/minio.service
+    systemctl daemon-reload
+    systemctl enable minio
+    systemctl start minio
+    sleep 3
+    
+    if systemctl is-active --quiet minio; then
+        echo -e "${GREEN}✓ MinIO 服务启动成功（使用 systemd）${NC}"
+    else
+        echo -e "${RED}✗ MinIO 服务启动失败，请检查日志: journalctl -u minio${NC}"
+        exit 1
+    fi
 else
-    echo -e "${RED}✗ MinIO 服务启动失败，请检查日志: journalctl -u minio${NC}"
-    exit 1
+    # 使用 nohup 后台运行
+    echo -e "${YELLOW}  检测到系统不支持 systemd，使用 nohup 方式启动...${NC}"
+    
+    # 停止可能正在运行的 MinIO 进程
+    pkill -u ${MINIO_USER} -f "minio server" 2>/dev/null || true
+    sleep 1
+    
+    # 创建日志目录
+    mkdir -p ${MINIO_HOME}/logs
+    chown -R ${MINIO_USER}:${MINIO_GROUP} ${MINIO_HOME}/logs
+    
+    # 使用 nohup 启动 MinIO（使用 runuser 或 su 指定 shell）
+    if command -v runuser &> /dev/null; then
+        runuser -u ${MINIO_USER} -- bash -c "cd ${MINIO_HOME} && nohup ${MINIO_HOME}/start-minio.sh > ${MINIO_HOME}/logs/minio.log 2>&1 &"
+    else
+        su -s /bin/bash ${MINIO_USER} -c "cd ${MINIO_HOME} && nohup ${MINIO_HOME}/start-minio.sh > ${MINIO_HOME}/logs/minio.log 2>&1 &"
+    fi
+    sleep 3
+    
+    # 检查进程是否运行
+    if pgrep -u ${MINIO_USER} -f "minio server" > /dev/null; then
+        echo -e "${GREEN}✓ MinIO 服务启动成功（使用 nohup）${NC}"
+        echo -e "${YELLOW}  日志文件: ${MINIO_HOME}/logs/minio.log${NC}"
+        
+        # 创建停止脚本
+        cat > ${MINIO_HOME}/stop-minio.sh <<'STOPEOF'
+#!/bin/bash
+pkill -u minio -f "minio server"
+echo "MinIO 服务已停止"
+STOPEOF
+        chmod +x ${MINIO_HOME}/stop-minio.sh
+        chown ${MINIO_USER}:${MINIO_GROUP} ${MINIO_HOME}/stop-minio.sh
+        
+        # 创建重启脚本
+        cat > ${MINIO_HOME}/restart-minio.sh <<EOF
+#!/bin/bash
+SCRIPT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+\$SCRIPT_DIR/stop-minio.sh
+sleep 2
+if command -v runuser &> /dev/null; then
+    runuser -u ${MINIO_USER} -- bash -c "cd \\\${SCRIPT_DIR} && nohup \\\${SCRIPT_DIR}/start-minio.sh > \\\${SCRIPT_DIR}/logs/minio.log 2>&1 &"
+else
+    su -s /bin/bash ${MINIO_USER} -c "cd \\\${SCRIPT_DIR} && nohup \\\${SCRIPT_DIR}/start-minio.sh > \\\${SCRIPT_DIR}/logs/minio.log 2>&1 &"
+fi
+echo "MinIO 服务已重启"
+EOF
+        chmod +x ${MINIO_HOME}/restart-minio.sh
+        chown ${MINIO_USER}:${MINIO_GROUP} ${MINIO_HOME}/restart-minio.sh
+        
+    else
+        echo -e "${RED}✗ MinIO 服务启动失败，请检查日志: ${MINIO_HOME}/logs/minio.log${NC}"
+        exit 1
+    fi
 fi
 
-# 8. 配置防火墙（如果存在）
-echo -e "${YELLOW}[8/8] 配置防火墙...${NC}"
+# 9. 配置防火墙（如果存在）
+echo -e "${YELLOW}[9/9] 配置防火墙...${NC}"
 if command -v firewall-cmd &> /dev/null; then
     firewall-cmd --permanent --add-port=${MINIO_PORT}/tcp
     firewall-cmd --permanent --add-port=${MINIO_CONSOLE_PORT}/tcp
@@ -161,10 +241,18 @@ echo -e "Root Password: ${MINIO_ROOT_PASSWORD}"
 echo -e "${RED}请妥善保存上述信息！${NC}"
 echo ""
 echo -e "常用命令："
-echo -e "  查看状态:   systemctl status minio"
-echo -e "  查看日志:   journalctl -u minio -f"
-echo -e "  重启服务:   systemctl restart minio"
-echo -e "  停止服务:   systemctl stop minio"
-echo -e "  启动服务:   systemctl start minio"
+if [ "$SYSTEMD_AVAILABLE" = true ]; then
+    echo -e "  查看状态:   systemctl status minio"
+    echo -e "  查看日志:   journalctl -u minio -f"
+    echo -e "  重启服务:   systemctl restart minio"
+    echo -e "  停止服务:   systemctl stop minio"
+    echo -e "  启动服务:   systemctl start minio"
+else
+    echo -e "  查看进程:   ps aux | grep minio"
+    echo -e "  查看日志:   tail -f ${MINIO_HOME}/logs/minio.log"
+    echo -e "  停止服务:   ${MINIO_HOME}/stop-minio.sh"
+    echo -e "  重启服务:   ${MINIO_HOME}/restart-minio.sh"
+    echo -e "  启动服务:   ${MINIO_HOME}/restart-minio.sh"
+fi
 echo ""
 

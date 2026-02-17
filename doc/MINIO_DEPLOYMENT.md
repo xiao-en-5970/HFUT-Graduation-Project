@@ -30,9 +30,12 @@
    - 创建必要的目录结构
    - 下载并安装 MinIO 二进制文件
    - 配置环境变量
-   - 创建 systemd 服务
-   - 启动并启用 MinIO 服务
+   - 检测系统是否支持 systemd
+   - 如果支持 systemd：创建 systemd 服务并启动
+   - 如果不支持 systemd：使用 nohup 方式后台运行
    - 配置防火墙规则
+
+**注意：** 脚本会自动检测系统环境。在不支持 systemd 的环境中（如某些 Docker 容器、云服务器），会自动使用 nohup 方式运行，并创建管理脚本。
 
 ### 方法二：手动部署
 
@@ -137,14 +140,26 @@ ufw allow 50002/tcp
 
 ### 检查服务状态
 
+**使用 systemd：**
 ```bash
 systemctl status minio
 ```
 
+**使用 nohup：**
+```bash
+ps aux | grep minio
+```
+
 ### 查看日志
 
+**使用 systemd：**
 ```bash
 journalctl -u minio -f
+```
+
+**使用 nohup：**
+```bash
+tail -f /opt/minio/logs/minio.log
 ```
 
 ### 测试访问
@@ -161,6 +176,8 @@ journalctl -u minio -f
    使用配置的 `MINIO_ROOT_USER` 和 `MINIO_ROOT_PASSWORD` 登录
 
 ## 常用管理命令
+
+### 使用 systemd（如果系统支持）
 
 ```bash
 # 启动服务
@@ -183,6 +200,27 @@ systemctl disable minio
 
 # 启用开机自启
 systemctl enable minio
+```
+
+### 使用 nohup（非 systemd 环境）
+
+在不支持 systemd 的环境中，脚本会创建以下管理脚本：
+
+```bash
+# 查看进程
+ps aux | grep minio
+
+# 查看日志
+tail -f /opt/minio/logs/minio.log
+
+# 停止服务
+/opt/minio/stop-minio.sh
+
+# 重启服务
+/opt/minio/restart-minio.sh
+
+# 手动启动（如果需要）
+su -s /bin/bash minio -c "cd /opt/minio && nohup /opt/minio/start-minio.sh > /opt/minio/logs/minio.log 2>&1 &"
 ```
 
 ## 配置说明

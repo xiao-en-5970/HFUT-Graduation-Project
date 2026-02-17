@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"context"
+
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/config"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/router"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
@@ -13,6 +15,7 @@ import (
 // Boot initializes all components
 func Boot() error {
 	// Load configuration
+	ctx := context.Background()
 	if err := config.LoadConfig(); err != nil {
 		return err
 	}
@@ -23,39 +26,38 @@ func Boot() error {
 	}
 	defer logger.Sync()
 
-	logger.Logger.Info("Logger initialized successfully")
+	logger.Infof(ctx, "Logger initialized successfully")
 
 	// Initialize PostgreSQL
 	if err := pgsql.Init(); err != nil {
-		logger.Logger.Error("Failed to initialize PostgreSQL", zap.Error(err))
+		logger.Error(ctx, "Failed to initialize PostgreSQL", zap.Error(err))
 		return err
 	}
-	logger.Logger.Info("PostgreSQL initialized successfully")
+	logger.Infof(ctx, "PostgreSQL initialized successfully")
 
 	// Initialize Redis
 	if err := redis.Init(); err != nil {
-		logger.Logger.Error("Failed to initialize Redis", zap.Error(err))
+		logger.Error(ctx, "Failed to initialize Redis", zap.Error(err))
 		return err
 	}
-	logger.Logger.Info("Redis initialized successfully")
+	logger.Infof(ctx, "Redis initialized successfully")
 
 	// Initialize Gin service
 	if err := service.Init(); err != nil {
-		logger.Logger.Error("Failed to initialize Gin service", zap.Error(err))
+		logger.Error(ctx, "Failed to initialize Gin service", zap.Error(err))
 		return err
 	}
-	logger.Logger.Info("Gin service initialized successfully")
+	logger.Infof(ctx, "Gin service initialized successfully")
 
 	// Setup routes
 	router.SetupRouter(service.Engine)
-	logger.Logger.Info("Routes initialized successfully")
+	logger.Infof(ctx, "Routes initialized successfully")
 
 	// Start the server (this will block)
-	logger.Logger.Info("Starting server...")
+	logger.Infof(ctx, "Starting server...")
 	if err := service.Run(); err != nil {
-		logger.Logger.Fatal("Failed to start server", zap.Error(err))
+		logger.Fatal(ctx, "Failed to start server", zap.Error(err))
 		return err
 	}
-
 	return nil
 }

@@ -25,6 +25,11 @@ comment on column users.school_id is '学校ID';
 comment on column users.username is '用户名';
 comment on column users.password is '密码';
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS follow_count integer NOT NULL DEFAULT 0;
+comment on column users.follow_count is '关注数量';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS fans_count integer NOT NULL DEFAULT 0;
+comment on column users.fans_count is '粉丝数量';
+
 CREATE TABLE schools (
                          id SERIAL PRIMARY KEY,
                          name VARCHAR(50),
@@ -64,7 +69,6 @@ comment on column articles.view_count is '浏览次数';
 comment on column articles.like_count is '点赞/同问次数';
 comment on column articles.collect_count is '收藏次数';
 
-drop table if exists comments;
 
 create table comments (
             id SERIAL PRIMARY KEY,
@@ -136,6 +140,14 @@ comment on column goods.price is '商品价格，单位分';
 ALTER TABLE goods ADD COLUMN IF NOT EXISTS stock integer NOT NULL DEFAULT 0;
 comment on column goods.stock is '库存数量';
 
+ALTER TABLE goods ADD COLUMN IF NOT EXISTS end_time integer NOT NULL DEFAULT 0;
+ALTER TABLE goods ADD COLUMN IF NOT EXISTS start_time integer NOT NULL DEFAULT 0;
+comment on column goods.start_time is '开始时间';
+comment on column goods.end_time is '结束时间';
+
+ALTER TABLE goods ADD COLUMN IF NOT EXISTS marked_price integer NOT NULL DEFAULT 0;
+comment on column goods.marked_price is '标价，单位分';
+
 create table tags (
             id SERIAL PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
@@ -200,3 +212,9 @@ comment on column collect.status is '1:正常 2:禁用';
 
 ALTER TABLE follow ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;
 comment on column follow.status is '1:正常 2:禁用';
+
+ALTER TABLE goods ADD COLUMN IF NOT EXISTS school_id integer REFERENCES schools(id);
+comment on column goods.school_id is '学校ID';
+
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS school_id integer REFERENCES schools(id);
+comment on column articles.school_id is '学校ID';

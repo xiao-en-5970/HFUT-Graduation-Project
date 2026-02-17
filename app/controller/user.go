@@ -1,146 +1,77 @@
 package controller
 
 import (
-	"strconv"
-
 	"github.com/gin-gonic/gin"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/request"
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
+	"go.uber.org/zap"
 )
 
-type UserController struct {
-	userService *service.UserService
-}
-
-// 确保 UserController 实现了 UserControllerInterface 接口
-var _ UserControllerInterface = (*UserController)(nil)
-
-// NewUserController 创建用户控制器
-func NewUserController() *UserController {
-	return &UserController{
-		userService: service.NewUserService(),
+func UserRegister(ctx *gin.Context) {
+	type Register struct {
+		Username   string `json:"username"`
+		Password   string `json:"password"`
+		RePassword string `json:"re_password"`
 	}
-}
-
-// Register 用户注册
-func (c *UserController) Register(ctx *gin.Context) {
-	var req request.UserRegisterRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		reply.ReplyInvalidParams(ctx, err)
-		return
+	var user Register
+	if err := ctx.BindJSON(&user); err != nil {
+		logger.Error(ctx, "用户注册失败", zap.Error(err))
 	}
-
-	loginResp, err := c.userService.Register(&req)
-	if err != nil {
-		reply.ReplyErrWithMessage(ctx, errcode.ErrUserAlreadyExists, err.Error())
-		return
+	if user.RePassword != user.Password {
+		logger.Errorf(ctx, "两次密码不一致！")
 	}
-
-	reply.ReplyOKWithMessageAndData(ctx, "注册成功", loginResp)
+	service.User().Register(ctx, user.Username, user.Password)
+	reply.ReplyOK(ctx)
 }
 
 // Login 用户登录
-func (c *UserController) Login(ctx *gin.Context) {
-	var req request.UserLoginRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		reply.ReplyInvalidParams(ctx, err)
-		return
+func UserLogin(ctx *gin.Context) {
+	type Login struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
 	}
-
-	loginResp, err := c.userService.Login(&req)
+	var user Login
+	if err := ctx.BindJSON(&user); err != nil {
+		logger.Error(ctx, "用户登录失败", zap.Error(err))
+	}
+	token, err := service.User().Login(ctx, user.Username, user.Password)
 	if err != nil {
-		reply.ReplyErrWithCodeAndMessage(ctx, 401, errcode.ErrUserPasswordWrong, err.Error())
-		return
+		logger.Error(ctx, "用户登录失败", zap.Error(err))
 	}
-
-	reply.ReplyOKWithMessageAndData(ctx, "登录成功", loginResp)
+	reply.ReplyOKWithMessageAndData(ctx, "登录成功", token)
 }
 
-// GetByID 根据 ID 获取用户
-func (c *UserController) GetByID(ctx *gin.Context) {
-	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+func UserInfo(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	info, err := service.User().Info(ctx, userID)
 	if err != nil {
-		reply.ReplyInvalidParams(ctx, err)
-		return
+		logger.Error(ctx, "用户信息获取失败", zap.Error(err))
 	}
-
-	user, err := c.userService.GetByID(uint(id))
-	if err != nil {
-		reply.ReplyNotFound(ctx, errcode.ErrUserNotFound)
-		return
-	}
-
-	reply.ReplyOKWithData(ctx, user)
+	reply.ReplyOKWithData(ctx, info)
 }
 
-// Update 更新用户信息
-func (c *UserController) Update(ctx *gin.Context) {
-	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+func UserUpdate(ctx *gin.Context) {
+	user := &model.User{}
+	err := ctx.BindJSON(user)
 	if err != nil {
-		reply.ReplyInvalidParams(ctx, err)
-		return
+		logger.Error(ctx, "用户信息更新失败", zap.Error(err))
 	}
-
-	// 从 JWT 中获取当前用户ID，验证权限
-	currentUserID := middleware.GetUserID(ctx)
-	if currentUserID != uint(id) {
-		reply.ReplyForbidden(ctx)
-		return
-	}
-
-	var req request.UserUpdateRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		reply.ReplyInvalidParams(ctx, err)
-		return
-	}
-
-	user, err := c.userService.Update(uint(id), &req)
-	if err != nil {
-		reply.ReplyErrWithMessage(ctx, errcode.ErrUserNoPermission, err.Error())
-		return
-	}
-
-	reply.ReplyOKWithMessageAndData(ctx, "更新成功", user)
+	service.User().Update(ctx, user)
 }
 
-// List 获取用户列表
-func (c *UserController) List(ctx *gin.Context) {
-	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
-	var schoolID *uint
-	if sid := ctx.Query("school_id"); sid != "" {
-		if id, err := strconv.ParseUint(sid, 10, 32); err == nil {
-			uid := uint(id)
-			schoolID = &uid
-		}
-	}
-
-	result, err := c.userService.List(page, pageSize, schoolID)
+func UserBindSchool(ctx *gin.Context) {
+	schoolId := uint(0)
+	ctx.BindJSON(&schoolId)
+	err := service.User().BindSchool(ctx, schoolId)
 	if err != nil {
-		reply.ReplyInternalError(ctx, err)
-		return
+		logger.Error(ctx, "用户绑定学校失败", zap.Error(err))
 	}
-
-	reply.ReplyOKWithData(ctx, result)
+	reply.ReplyOK(ctx)
 }
 
-// Info 获取当前登录用户信息
-func (c *UserController) Info(ctx *gin.Context) {
-	// 从 JWT 中获取当前用户ID
-	currentUserID := middleware.GetUserID(ctx)
-	if currentUserID == 0 {
-		reply.ReplyUnauthorized(ctx)
-		return
-	}
-
-	user, err := c.userService.GetCurrentUser(currentUserID)
-	if err != nil {
-		reply.ReplyNotFound(ctx, errcode.ErrUserNotFound)
-		return
-	}
-
-	reply.ReplyOKWithData(ctx, user)
+func UserLogout(ctx *gin.Context) {
+	return
 }

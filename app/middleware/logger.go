@@ -50,12 +50,11 @@ func ZapLogger() gin.HandlerFunc {
 		status := ctx.Writer.Status()
 		switch {
 		case status >= 500:
-			logger.Logger.Error("HTTP Request", fields...)
+			logger.Error(ctx, "HTTP Request", fields)
 		case status >= 400:
-			logger.Logger.Warn("HTTP Request", fields...)
+			logger.Warn(ctx, "HTTP Request", fields)
 		default:
-			logger.Logger.Info("HTTP Request", fields...)
+			logger.Info(ctx, "HTTP Request", fields)
 		}
 	}
 }
-
