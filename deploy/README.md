@@ -14,9 +14,13 @@ sudo systemctl start docker
 
 ```bash
 sudo mkdir -p /opt/app
-# 从项目根目录复制 .env.example，编辑后保存为 /opt/app/.env
+# 使用 deploy/.env.example 作为模板，编辑后保存为 /opt/app/.env
+sudo cp deploy/.env.example /opt/app/.env
+sudo nano /opt/app/.env   # 修改 DB_PASSWORD、JWT_SECRET 等
 sudo chmod 600 /opt/app/.env
 ```
+
+**重要**：容器通过服务器公网 IP + 端口访问 PostgreSQL/Redis，在 `.env` 中设置 `DB_HOST`、`REDIS_HOST` 为 `47.94.197.213`。
 
 ### 3. 配置 GitHub Secrets
 
@@ -107,3 +111,11 @@ docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
 3. **密钥对应**：私钥和公钥必须来自同一对，用 `ssh-keygen -y -f deploy_key` 验证。
 
 4. **权限**：`~/.ssh` 为 700，`authorized_keys` 为 600。
+
+---
+
+## 容器通过公网 IP 访问 PostgreSQL / Redis
+
+`.env` 中设置 `DB_HOST`、`REDIS_HOST` 为服务器公网 IP（如 `47.94.197.213`），容器直接经公网端口访问。
+
+**宿主机需配置**：PostgreSQL 和 Redis 需监听 `0.0.0.0`（或公网网卡），且防火墙开放 5432、6379 端口。
