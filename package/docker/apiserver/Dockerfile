@@ -11,10 +11,10 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 WORKDIR /app
 
 # 复制二进制文件
-COPY bin/app.exe ./bin/app.exe
+COPY build/app.exe ./build/app.exe
 
 # 复制 .env 文件
 COPY .env ./
 
 # 运行应用
-CMD ["./bin/app.exe"]
+CMD ["./build/app.exe"]
