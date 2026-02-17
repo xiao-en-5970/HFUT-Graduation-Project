@@ -105,11 +105,13 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
             [ -f /.env ] || { echo "::error::需先在宿主机创建 /.env 并填入环境变量（可参考 .env.example）"; exit 1; }
+            grep -E "^[A-Za-z_][A-Za-z0-9_]*=" /.env > /tmp/.env.docker
+            [ -s /tmp/.env.docker ] || { echo "::error::/.env 中无有效 KEY=VALUE 格式行（注释行 # 会被过滤）"; exit 1; }
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
-            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /.env apiserver:latest
+            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /tmp/.env.docker apiserver:latest
             sleep 3
             if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
               echo "::error::容器启动失败，可能无法连接数据库/Redis"
@@ -175,11 +177,13 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
             [ -f /.env ] || { echo "::error::需先在宿主机创建 /.env 并填入环境变量（可参考 .env.example）"; exit 1; }
+            grep -E "^[A-Za-z_][A-Za-z0-9_]*=" /.env > /tmp/.env.docker
+            [ -s /tmp/.env.docker ] || { echo "::error::/.env 中无有效 KEY=VALUE 格式行（注释行 # 会被过滤）"; exit 1; }
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
-            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /.env apiserver:latest
+            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /tmp/.env.docker apiserver:latest
             sleep 3
             if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
               echo "::error::容器启动失败"

@@ -15,8 +15,8 @@ sudo systemctl start docker
 在宿主机创建 `/.env` 并填入环境变量（可参考项目根目录 `.env.example`）：
 
 ```bash
-# 在宿主机创建 /.env，填写 SERVER_HOST、DB_HOST、REDIS_HOST、JWT_SECRET 等（见 .env.example）
-# docker run 使用 --env-file /.env 从该路径读取
+# 在宿主机创建 /.env，每行 KEY=VALUE 格式，填写 SERVER_HOST、DB_HOST、REDIS_HOST、JWT_SECRET 等（见 .env.example）
+# 部署时会过滤掉 # 注释行，仅保留 KEY=VALUE 传给容器；含空格的 value 需用双引号
 ```
 
 > **重要**：`.env` 含敏感信息，不提交到 Git。需手动上传到宿主机 `/.env`。
