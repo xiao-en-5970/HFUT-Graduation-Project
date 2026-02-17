@@ -37,6 +37,7 @@ echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc && source ~/.bashrc
 | DEPLOY_USER        | ✓ | SSH 用户名，如 `root` |
 | DEPLOY_SSH_KEY     | ✓* | 私钥完整内容，或使用 DEPLOY_SSH_KEY_B64 |
 | DEPLOY_SSH_KEY_B64 | * | 私钥的 Base64 编码：`base64 -w 0 ~/.ssh/deploy_key`（Linux） |
+| GH_ACTIONS_READ_TOKEN |  | 可选。仅部署时若遇 403，添加 PAT（需 actions:read） |
 
 ### 4. 在服务器添加部署公钥
 
@@ -73,7 +74,8 @@ chmod 600 ~/.ssh/authorized_keys
 
 1. 打开 **Actions** → 选择 **「CI/CD」**
 2. 点击 **Run workflow** → 选择分支
-3. 执行 检查 → 部署
+3. **完整流程**（默认）：不勾选「仅部署」，执行 检查 → 构建 → 部署
+4. **仅部署**：勾选「仅部署」可复用最近一次构建；若遇 403，需在仓库 Settings → Actions → General 将 Workflow permissions 设为 Read and write，或添加 GH_ACTIONS_READ_TOKEN secret
 
 ---
 

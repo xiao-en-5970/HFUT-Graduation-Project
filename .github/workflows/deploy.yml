@@ -8,11 +8,18 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
+    inputs:
+      deploy_only:
+        description: "仅部署（跳过代码检查，直接部署最新代码）"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   # 步骤 1：代码检查（格式、静态分析、编译验证）
   check:
     name: 1. 代码检查
+    if: github.event_name != 'workflow_dispatch' || !inputs.deploy_only
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +49,7 @@ jobs:
     name: 2. 部署到服务器
     runs-on: ubuntu-latest
     needs: [check]
+    if: ${{ always() && (needs.check.result == 'success' || needs.check.result == 'skipped') }}
     steps:
       - uses: actions/checkout@v4
 
