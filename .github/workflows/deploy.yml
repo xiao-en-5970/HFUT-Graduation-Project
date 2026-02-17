@@ -1,5 +1,9 @@
 name: CI/CD
 
+permissions:
+  contents: read
+  actions: read    # deploy_only 需读取其他 run 的 artifact
+
 on:
   push:
     branches: [main, master]
