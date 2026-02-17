@@ -14,13 +14,13 @@ var DB *gorm.DB
 // Init initializes PostgreSQL connection using GORM
 func Init() error {
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=%s",
-		config.DBHost(),
-		config.DBUser(),
-		config.DBPassword(),
-		config.DBName(),
-		config.DBPort(),
-		config.DBSSLMode(),
-		config.DBTimezone(),
+		config.DBHost,
+		config.DBUser,
+		config.DBPassword,
+		config.DBName,
+		config.DBPort,
+		config.DBSSLMode,
+		config.DBTimezone,
 	)
 
 	var err error

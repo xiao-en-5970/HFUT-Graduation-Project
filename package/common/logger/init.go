@@ -16,7 +16,7 @@ var (
 // Init initializes Zap logger with colored console output
 func Init() error {
 	var level zapcore.Level
-	switch config.LogLevel() {
+	switch config.LogLevel {
 	case "debug":
 		level = zapcore.DebugLevel
 	case "info":
@@ -36,7 +36,7 @@ func Init() error {
 	encoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
 
 	var encoder zapcore.Encoder
-	if config.LogEncoding() == "console" {
+	if config.LogEncoding == "console" {
 		encoder = zapcore.NewConsoleEncoder(encoderConfig)
 	} else {
 		encoder = zapcore.NewJSONEncoder(encoderConfig)

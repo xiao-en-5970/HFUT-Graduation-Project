@@ -10,18 +10,16 @@ sudo systemctl enable docker
 sudo systemctl start docker
 ```
 
-### 2. 配置服务器 config.yaml
+### 2. 配置服务器 .env
 
-复制 `config.example.yaml` 为 `config.yaml` 并修改数据库等配置，然后拷贝到服务器：
+在服务器创建 `/opt/app/.env` 并填入环境变量（可参考项目根目录 `.env.example`）：
 
 ```bash
-cp config.example.yaml config.yaml
-# 编辑 config.yaml，填写 database、redis 等
-scp config.yaml root@47.94.197.213:/opt/app/config.yaml
-ssh root@47.94.197.213 "mkdir -p /opt/app && chmod 600 /opt/app/config.yaml"
+ssh root@47.94.197.213 "mkdir -p /opt/app"
+# 在服务器上创建 /opt/app/.env，填写 SERVER_HOST、DB_HOST、REDIS_HOST、JWT_SECRET 等（见 .env.example）
 ```
 
-> **重要**：配置文件支持热更新，修改后保存即可生效（log、jwt 等；database/redis 变更需重启）。
+> **重要**：`.env` 含敏感信息，不提交到 Git。需手动上传到服务器 `/opt/app/.env`。
 
 ### 3. 配置 GitHub Secrets
 
@@ -87,7 +85,7 @@ ssh root@47.94.197.213
 docker load < /tmp/apiserver.tar.gz
 docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null
 docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
-  -v /opt/app/config.yaml:/app/config.yaml:ro apiserver:latest
+  --env-file /opt/app/.env apiserver:latest
 ```
 
 ---
@@ -96,8 +94,8 @@ docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
 
 若报错 `dial tcp 127.0.0.1:5432: connection refused`：
 
-- **原因**：`/opt/app/config.yaml` 不存在或配置错误
-- **处理**：确认 config.yaml 存在且 `database.host` 指向正确地址，参考 config.example.yaml
+- **原因**：`/opt/app/.env` 不存在或 `DB_HOST` 等配置错误
+- **处理**：确认 `/opt/app/.env` 存在且 `DB_HOST` 指向正确地址，参考 `.env.example`
 
 ---
 
@@ -128,4 +126,4 @@ docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
 2. **防火墙/安全组**：开放 5432、6379 入站（建议仅允许本机或可信 IP）
 3. **监听地址**：PostgreSQL `listen_addresses='*'`，Redis `bind 0.0.0.0`
 
-若容器无法连接，可在 config.yaml 中改用 `database.host: 172.17.0.1`、`redis.host: 172.17.0.1`（Docker 网桥网关）。
+若容器无法连接，可在 `/opt/app/.env` 中改用 `DB_HOST=172.17.0.1`、`REDIS_HOST=172.17.0.1`（Docker 网桥网关）。

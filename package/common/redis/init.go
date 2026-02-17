@@ -15,14 +15,14 @@ var Ctx = context.Background()
 
 // Init initializes Redis connection
 func Init() error {
-	db, err := strconv.Atoi(config.RedisDB())
+	db, err := strconv.Atoi(config.RedisDB)
 	if err != nil {
 		return fmt.Errorf("invalid Redis DB number: %w", err)
 	}
 
 	Client = redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", config.RedisHost(), config.RedisPort()),
-		Password: config.RedisPassword(),
+		Addr:     fmt.Sprintf("%s:%s", config.RedisHost, config.RedisPort),
+		Password: config.RedisPassword,
 		DB:       db,
 	})
 

@@ -105,13 +105,12 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
             mkdir -p /opt/app
-            [ -f /opt/app/config.yaml ] || { echo "::error::服务器缺少 /opt/app/config.yaml，请复制 config.example.yaml 并 scp 到服务器"; exit 1; }
-            grep -q "database:" /opt/app/config.yaml || { echo "::error::config.yaml 格式异常"; exit 1; }
+            [ -f /opt/app/.env ] || { echo "::error::需先在服务器创建 /opt/app/.env 并填入环境变量（可参考 .env.example）"; exit 1; }
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
-            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 -v /opt/app/config.yaml:/app/config.yaml:ro apiserver:latest
+            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /opt/app/.env apiserver:latest
             sleep 3
             if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
               echo "::error::容器启动失败，可能无法连接数据库/Redis"
@@ -177,13 +176,12 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
             mkdir -p /opt/app
-            [ -f /opt/app/config.yaml ] || { echo "::error::服务器缺少 /opt/app/config.yaml，请复制 config.example.yaml 并 scp 到服务器"; exit 1; }
-            grep -q "database:" /opt/app/config.yaml || { echo "::error::config.yaml 格式异常"; exit 1; }
+            [ -f /opt/app/.env ] || { echo "::error::需先在服务器创建 /opt/app/.env 并填入环境变量（可参考 .env.example）"; exit 1; }
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
-            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 -v /opt/app/config.yaml:/app/config.yaml:ro apiserver:latest
+            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /opt/app/.env apiserver:latest
             sleep 3
             if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
               echo "::error::容器启动失败"

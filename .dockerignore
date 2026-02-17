@@ -8,7 +8,6 @@ vendor
 .env
 .env.*
 !.env.example
-config.yaml
 .idea
 .vscode
 *_test.go
