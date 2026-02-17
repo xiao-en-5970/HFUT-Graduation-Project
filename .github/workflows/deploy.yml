@@ -7,13 +7,30 @@ permissions:
 on:
   push:
     branches: [main, master]
-  workflow_dispatch:
 
 jobs:
-  # 构建：提交后自动执行（编译 + 镜像构建）
+  # 1. 代码检查
+  check:
+    name: 1. 代码检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: go.sum
+
+      - name: 静态分析
+        run: go vet ./...
+
+      - name: 编译验证
+        run: CGO_ENABLED=0 go build -o /dev/null .
+
+  # 2. 编译与镜像构建
   build:
-    name: 1. 构建镜像
-    if: github.event_name == 'push'
+    name: 2. 编译 & 镜像构建
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,8 +47,7 @@ jobs:
         run: docker build -t apiserver:latest .
 
       - name: 导出并上传镜像
-        run: |
-          docker save apiserver:latest | gzip > apiserver.tar.gz
+        run: docker save apiserver:latest | gzip > apiserver.tar.gz
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
@@ -39,32 +55,16 @@ jobs:
           name: apiserver-image
           path: apiserver.tar.gz
 
-  # 部署：手动 Run workflow 后执行（复用最近一次构建的镜像）
+  # 3. 部署（手动审批后执行，流水线在此暂停）
   deploy:
-    name: 2. 部署到服务器
-    if: github.event_name == 'workflow_dispatch'
+    name: 3. 部署
+    needs: build
     runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
+    environment: production
     steps:
-      - name: 获取最近一次构建产物
-        id: artifact
-        env:
-          GH_TOKEN: ${{ secrets.GH_ACTIONS_READ_TOKEN || github.token }}
-        run: |
-          RUN_ID=$(gh run list --workflow=deploy.yml --branch="${{ github.ref_name }}" --status=success --limit=1 --json=databaseId -q '.[0].databaseId' 2>/dev/null) || true
-          if [ -z "$RUN_ID" ]; then
-            echo "::error::未找到最近成功构建。请先 push 代码触发构建，或检查仓库 Settings → Actions → General → Workflow permissions 设为 Read and write"
-            exit 1
-          fi
-          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-
       - uses: actions/download-artifact@v4
         with:
           name: apiserver-image
-          run-id: ${{ steps.artifact.outputs.run_id }}
-          token: ${{ secrets.GH_ACTIONS_READ_TOKEN || github.token }}
 
       - name: 配置 SSH 并部署
         env:
