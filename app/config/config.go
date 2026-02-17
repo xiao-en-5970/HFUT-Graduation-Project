@@ -50,7 +50,7 @@ func LoadConfig() error {
 	DBPassword = getEnv("DB_PASSWORD", "postgres")
 	DBName = getEnv("DB_NAME", "graduation_project")
 	DBSSLMode = getEnv("DB_SSLMODE", "disable")
-	DBTimezone = getEnv("DB_TIMEZONE", "PRC")
+	DBTimezone = getEnv("DB_TIMEZONE", "Asia/Shanghai")
 
 	RedisHost = getEnv("REDIS_HOST", "localhost")
 	RedisPort = getEnv("REDIS_PORT", "6379")
