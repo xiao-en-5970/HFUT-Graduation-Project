@@ -33,15 +33,11 @@ var (
 	JWTExpireHour int
 )
 
-// LoadConfig 从 .env 或环境变量加载配置
-// 优先尝试 /opt/app/.env（服务器），其次 .env（本地）
+// LoadConfig 从宿主机固定路径 /.env 或环境变量加载配置
+// 服务器：/.env（宿主机路径）；容器：由 docker --env-file 注入；本地：run.sh 手动 export
 func LoadConfig() error {
-	paths := []string{"/opt/app/.env", ".env"}
-	for _, p := range paths {
-		if err := godotenv.Load(p); err == nil {
-			log.Printf("Loaded config from %s", p)
-			break
-		}
+	if err := godotenv.Load("/.env"); err == nil {
+		log.Printf("Loaded config from /.env")
 	}
 
 	ServerHost = getEnv("SERVER_HOST", "0.0.0.0")

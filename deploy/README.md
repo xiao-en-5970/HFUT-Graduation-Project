@@ -10,16 +10,16 @@ sudo systemctl enable docker
 sudo systemctl start docker
 ```
 
-### 2. 配置服务器 .env
+### 2. 配置宿主机 .env
 
-在服务器创建 `/opt/app/.env` 并填入环境变量（可参考项目根目录 `.env.example`）：
+在宿主机创建 `/.env` 并填入环境变量（可参考项目根目录 `.env.example`）：
 
 ```bash
-ssh root@47.94.197.213 "mkdir -p /opt/app"
-# 在服务器上创建 /opt/app/.env，填写 SERVER_HOST、DB_HOST、REDIS_HOST、JWT_SECRET 等（见 .env.example）
+# 在宿主机创建 /.env，填写 SERVER_HOST、DB_HOST、REDIS_HOST、JWT_SECRET 等（见 .env.example）
+# docker run 使用 --env-file /.env 从该路径读取
 ```
 
-> **重要**：`.env` 含敏感信息，不提交到 Git。需手动上传到服务器 `/opt/app/.env`。
+> **重要**：`.env` 含敏感信息，不提交到 Git。需手动上传到宿主机 `/.env`。
 
 ### 3. 配置 GitHub Secrets
 
@@ -85,7 +85,7 @@ ssh root@47.94.197.213
 docker load < /tmp/apiserver.tar.gz
 docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null
 docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
-  --env-file /opt/app/.env apiserver:latest
+  --env-file /.env apiserver:latest
 ```
 
 ---
@@ -94,8 +94,8 @@ docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
 
 若报错 `dial tcp 127.0.0.1:5432: connection refused`：
 
-- **原因**：`/opt/app/.env` 不存在或 `DB_HOST` 等配置错误
-- **处理**：确认 `/opt/app/.env` 存在且 `DB_HOST` 指向正确地址，参考 `.env.example`
+- **原因**：`/.env` 不存在或 `DB_HOST` 等配置错误
+- **处理**：确认宿主机 `/.env` 存在且 `DB_HOST` 指向正确地址，参考 `.env.example`
 
 ---
 
@@ -126,4 +126,4 @@ docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
 2. **防火墙/安全组**：开放 5432、6379 入站（建议仅允许本机或可信 IP）
 3. **监听地址**：PostgreSQL `listen_addresses='*'`，Redis `bind 0.0.0.0`
 
-若容器无法连接，可在 `/opt/app/.env` 中改用 `DB_HOST=172.17.0.1`、`REDIS_HOST=172.17.0.1`（Docker 网桥网关）。
+若容器无法连接，可在 `/.env` 中改用 `DB_HOST=172.17.0.1`、`REDIS_HOST=172.17.0.1`（Docker 网桥网关）。
