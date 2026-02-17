@@ -22,38 +22,29 @@ jobs:
           docker build -t apiserver:latest .
           docker save apiserver:latest | gzip > apiserver.tar.gz
 
-      - name: 写入 SSH 密钥
-        run: |
-          printf '%s\n' "$DEPLOY_SSH_KEY" > deploy_key
-          chmod 600 deploy_key
+      - name: 配置 SSH 并部署
         env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-
-      - name: 传输镜像到服务器
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key_path: deploy_key
-          source: "apiserver.tar.gz"
-          target: "/tmp/"
-          strip_components: 0
-
-      - name: 替换容器并启动
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key_path: deploy_key
-          script: |
-            set -e
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "[1/2] 传输镜像到服务器..."
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
+          echo "[2/2] 替换容器并启动..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
-            ENV_FILE=""
-            [ -f /opt/app/.env ] && ENV_FILE="--env-file /opt/app/.env"
+            ENV_OPT=""
+            [ -f /opt/app/.env ] && ENV_OPT="--env-file /opt/app/.env"
             docker run -d --name apiserver --restart unless-stopped \
               -p 8081:8081 -e SERVER_PORT=8081 -e SERVER_HOST=0.0.0.0 \
-              $ENV_FILE apiserver:latest
+              $ENV_OPT apiserver:latest
             echo "部署完成，端口 8081"
+          '
