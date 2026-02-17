@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/util"
@@ -68,8 +69,23 @@ func (s *userService) Login(ctx *gin.Context, username, password string) (token 
 	return token, nil
 }
 
-func (s *userService) Info(ctx *gin.Context, userID uint) (*model.User, error) {
-	return dao.User().GetByID(ctx, userID)
+func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, error) {
+	userDao, err := dao.User().GetByID(ctx, userID)
+	if err != nil {
+		return &response.UserInfo{}, err
+	}
+	userInfo := &response.UserInfo{
+		ID:          userDao.ID,
+		Username:    userDao.Username,
+		SchoolID:    userDao.SchoolID,
+		Role:        userDao.Role,
+		Status:      userDao.Status,
+		Avatar:      userDao.Avatar,
+		Background:  userDao.Background,
+		FollowCount: userDao.FollowCount,
+		FansCount:   userDao.FansCount,
+	}
+	return userInfo, nil
 }
 
 func (s *userService) BindSchool(ctx *gin.Context, schoolId uint) (err error) {
