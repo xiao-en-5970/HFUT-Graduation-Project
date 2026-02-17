@@ -74,4 +74,3 @@ func GetUsername(ctx *gin.Context) string {
 	}
 	return ""
 }
-
