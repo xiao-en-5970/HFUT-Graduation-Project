@@ -44,8 +44,25 @@ jobs:
           echo "[2/2] 替换容器并启动..."
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
-            [ -f /opt/app/.env ] || { echo "::error::服务器缺少 /opt/app/.env，请将本地 .env 拷贝到服务器"; exit 1; }
-            sed -e "s/^[[:space:]]*//" -e "s/[[:space:]]*$//" -e "s/=[[:space:]]*/=/" -e "/^#/d" -e "/^$/d" -e "s/\r$//" /opt/app/.env > /opt/app/.env.docker
+            [ -f /opt/app/.env ] || { echo "::error::服务器缺少 /opt/app/.env"; exit 1; }
+            python3 << "PYEOF"
+import re
+out = []
+with open("/opt/app/.env") as f:
+    content = f.read()
+for line in content.splitlines():
+    line = line.rstrip("\r").strip()
+    if not line or line.startswith("#"): continue
+    m = re.match(r"^([^=]+)=(.*)$", line)
+    if m:
+        k = m.group(1).strip()
+        v = m.group(2).strip().replace("\n", " ").replace("\r", "")
+        if " " in v or "\t" in v:
+            v = '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        out.append(f"{k}={v}")
+with open("/opt/app/.env.docker", "w") as f:
+    f.write("\n".join(out))
+PYEOF
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
             mkdir -p /opt/app
