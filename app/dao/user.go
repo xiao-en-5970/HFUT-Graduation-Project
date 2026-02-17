@@ -38,6 +38,14 @@ func (s *UserStore) GetByUsername(ctx context.Context, username string) (*model.
 	return user, err
 }
 
-func (s *UserStore) UpdateColumn(ctx context.Context, column string, value interface{}) error {
-	return pgsql.DB.Update(column, value).Error
+func (s *UserStore) UpdateSchoolByID(ctx context.Context, userID uint, schoolID uint) error {
+	return pgsql.DB.Model(&model.User{}).Where("id = ?", userID).Update("school_id", schoolID).Error
+}
+
+func (s *UserStore) UpdateAvatarByID(ctx context.Context, userID uint, avatar string) error {
+	return pgsql.DB.Model(&model.User{}).Where("id = ?", userID).Update("avatar", avatar).Error
+}
+
+func (s *UserStore) UpdateBackgroundByID(ctx context.Context, userID uint, background string) error {
+	return pgsql.DB.Model(&model.User{}).Where("id = ?", userID).Update("background", background).Error
 }

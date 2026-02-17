@@ -101,9 +101,10 @@ jobs:
             [ -s /tmp/.env.docker ] || { echo "::error::/.env 中无有效 KEY=VALUE 格式行"; exit 1; }
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
+            mkdir -p /var/oss && chmod 777 /var/oss
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
-            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /tmp/.env.docker apiserver:latest
+            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 -v /var/oss:/oss --env-file /tmp/.env.docker apiserver:latest
             sleep 3
             if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
               echo "::error::容器启动失败"

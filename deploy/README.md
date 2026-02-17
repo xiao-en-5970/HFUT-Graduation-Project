@@ -10,7 +10,12 @@ sudo systemctl enable docker
 sudo systemctl start docker
 ```
 
-### 2. 配置宿主机 .env
+### 2. 宿主机目录
+
+- **/var/oss**：挂载到容器 `/oss`，用于 OSS 文件存储持久化，对应 API `/api/v1/oss/*path`
+- 部署时会自动 `mkdir -p /var/oss && chmod 777 /var/oss`，确保容器可读写
+
+### 3. 配置宿主机 .env
 
 在宿主机创建 `/.env` 并填入环境变量（可参考项目根目录 `.env.example`）：
 
@@ -21,7 +26,7 @@ sudo systemctl start docker
 
 > **重要**：`.env` 含敏感信息，不提交到 Git。需手动上传到宿主机 `/.env`。
 
-### 3. 配置 GitHub Secrets
+### 4. 配置 GitHub Secrets
 
 仓库 **Settings** → **Secrets and variables** → **Actions** → **New repository secret**：
 
@@ -32,7 +37,7 @@ sudo systemctl start docker
 | DEPLOY_SSH_KEY     | ✓* | 私钥完整内容，或使用 DEPLOY_SSH_KEY_B64 |
 | DEPLOY_SSH_KEY_B64 | * | 私钥的 Base64 编码：`base64 -w 0 ~/.ssh/deploy_key`（Linux） |
 
-### 4. 在服务器添加部署公钥
+### 5. 在服务器添加部署公钥
 
 本机生成专用密钥对（仅用于部署）：
 
@@ -107,10 +112,31 @@ ssh root@47.94.197.213 '
   grep -E "^[A-Za-z_][A-Za-z0-9_]*=" /.env > /tmp/.env.docker
   docker load < /tmp/apiserver.tar.gz
   docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null
-  docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /tmp/.env.docker apiserver:latest
+  mkdir -p /var/oss && chmod 777 /var/oss
+  docker run -d --name apiserver --restart unless-stopped -p 8081:8081 -v /var/oss:/oss --env-file /tmp/.env.docker apiserver:latest
   docker image prune -f
 '
 ```
+
+---
+
+## OSS 文件 API
+
+通过 `/api/v1/oss/*path` 访问和存储文件，持久化到宿主机 `/var/oss`：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/v1/oss/*path | 下载/访问文件（公开，可直接用于 img src） |
+| POST | /api/v1/oss/*path | 上传文件（需 JWT），form 字段 `file` |
+| DELETE | /api/v1/oss/*path | 删除文件（需 JWT） |
+
+**特化接口（需 JWT）**：
+- `POST /api/v1/user/avatar`：上传头像，存于 `user/{id}/avatar.{jpg|png}`，并更新 user 表 avatar 字段
+- `POST /api/v1/user/background`：上传背景图，存于 `user/{id}/background.{jpg|png}`，并更新 user 表 background 字段
+
+**示例**：
+- 访问图片：`<img src="https://域名/api/v1/oss/user/1/avatar.jpg" />`
+- 上传头像：`POST /api/v1/user/avatar`，Header `Authorization: Bearer <token>`，Body `multipart/form-data` 字段 `file`
 
 ---
 

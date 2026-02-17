@@ -23,7 +23,8 @@ func PublicRouter(api *gin.RouterGroup) {
 		userGroup.POST("/login", controller.UserLogin)
 		userGroup.POST("/register", controller.UserRegister)
 	}
-
+	// OSS 文件访问（公开，前端可直接用 URL 展示图片等）
+	api.GET("/oss/*path", controller.OSSGet)
 }
 
 func PrivateRouter(api *gin.RouterGroup) {
@@ -34,6 +35,10 @@ func PrivateRouter(api *gin.RouterGroup) {
 		userGroup.GET("/logout", controller.UserLogout)
 		userGroup.POST("/update", controller.UserUpdate)
 		userGroup.POST("/bind/school", controller.UserBindSchool)
+		userGroup.POST("/avatar", controller.UserUploadAvatar)
+		userGroup.POST("/background", controller.UserUploadBackground)
 	}
-
+	// OSS 上传、删除（需 JWT）
+	api.POST("/oss/*path", controller.OSSUpload)
+	api.DELETE("/oss/*path", controller.OSSDelete)
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"mime/multipart"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
@@ -9,6 +10,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/util"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -88,10 +90,36 @@ func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, e
 	return userInfo, nil
 }
 
-func (s *userService) BindSchool(ctx *gin.Context, schoolId uint) (err error) {
-	return dao.User().UpdateColumn(ctx, "school_id", schoolId)
+func (s *userService) BindSchool(ctx *gin.Context, userID uint, schoolId uint) (err error) {
+	return dao.User().UpdateSchoolByID(ctx, userID, schoolId)
 }
 
 func (s *userService) Update(ctx *gin.Context, user *model.User) error {
 	return dao.User().Update(ctx, user)
+}
+
+func (s *userService) UploadAvatar(ctx *gin.Context, userID uint, file *multipart.FileHeader) (url string, err error) {
+	ext := oss.ExtFromFilename(file.Filename)
+	relPath := oss.UserAvatarPath(userID, ext)
+	url, err = oss.Save(file, relPath)
+	if err != nil {
+		return "", err
+	}
+	if err := dao.User().UpdateAvatarByID(ctx, userID, url); err != nil {
+		return "", err
+	}
+	return url, nil
+}
+
+func (s *userService) UploadBackground(ctx *gin.Context, userID uint, file *multipart.FileHeader) (url string, err error) {
+	ext := oss.ExtFromFilename(file.Filename)
+	relPath := oss.UserBackgroundPath(userID, ext)
+	url, err = oss.Save(file, relPath)
+	if err != nil {
+		return "", err
+	}
+	if err := dao.User().UpdateBackgroundByID(ctx, userID, url); err != nil {
+		return "", err
+	}
+	return url, nil
 }

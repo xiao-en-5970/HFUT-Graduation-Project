@@ -83,13 +83,18 @@ func UserUpdate(ctx *gin.Context) {
 }
 
 func UserBindSchool(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
 	schoolId := uint(0)
 	err := ctx.BindJSON(&schoolId)
 	if err != nil {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	err = service.User().BindSchool(ctx, schoolId)
+	err = service.User().BindSchool(ctx, userID, schoolId)
 	if err != nil {
 		logger.Error(ctx, "用户绑定学校失败", zap.Error(err))
 		reply.ReplyInternalError(ctx, err)
@@ -99,4 +104,42 @@ func UserBindSchool(ctx *gin.Context) {
 
 func UserLogout(ctx *gin.Context) {
 	return
+}
+
+func UserUploadAvatar(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	file, err := ctx.FormFile("file")
+	if err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	url, err := service.User().UploadAvatar(ctx, userID, file)
+	if err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"url": url})
+}
+
+func UserUploadBackground(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	file, err := ctx.FormFile("file")
+	if err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	url, err := service.User().UploadBackground(ctx, userID, file)
+	if err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"url": url})
 }

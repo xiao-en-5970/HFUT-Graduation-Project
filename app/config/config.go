@@ -31,6 +31,8 @@ var (
 
 	JWTSecret     string
 	JWTExpireHour int
+
+	OSSRoot string // OSS 存储根路径，容器内 /oss，对应宿主机 /var/oss
 )
 
 // LoadConfig 从宿主机固定路径 /.env 或环境变量加载配置
@@ -62,6 +64,7 @@ func LoadConfig() error {
 
 	JWTSecret = getEnv("JWT_SECRET", "your-secret-key-change-in-production")
 	JWTExpireHour = getEnvInt("JWT_EXPIRE_HOUR", 24)
+	OSSRoot = getEnv("OSS_ROOT", "/oss")
 
 	return nil
 }
