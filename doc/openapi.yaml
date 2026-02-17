@@ -13,6 +13,8 @@ tags:
     description: 服务健康检查
   - name: 用户
     description: 用户相关接口
+  - name: 帖子
+    description: 帖子/文章相关接口
   - name: OSS
     description: 对象存储，文件访问与上传，持久化到宿主机 /var/oss
 
@@ -148,6 +150,99 @@ components:
         follow_count:
           type: integer
         fans_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ArticleCreateRequest:
+      type: object
+      required:
+        - title
+        - content
+      properties:
+        title:
+          type: string
+          description: 文章标题
+        content:
+          type: string
+          description: 文章内容
+        type:
+          type: integer
+          description: 1:普通文章 2:提问 3:回答
+          default: 1
+        publish_status:
+          type: integer
+          description: 1:私密 2:公开
+          default: 1
+        school_id:
+          type: integer
+          description: 学校ID（可选）
+
+    ArticleUpdateRequest:
+      type: object
+      description: 更新帖子，只传需要更新的字段
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        type:
+          type: integer
+          description: 1:普通 2:提问 3:回答
+        publish_status:
+          type: integer
+          description: 1:私密 2:公开
+        school_id:
+          type: integer
+
+    ArticleUpdateImagesRequest:
+      type: object
+      required:
+        - images
+      properties:
+        images:
+          type: array
+          items:
+            type: string
+          description: 图片URL数组，如 ["/api/v1/oss/article/1/image_1.jpg"]
+
+    ArticleResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        school_id:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        status:
+          type: integer
+          description: 1:正常 2:禁用
+        publish_status:
+          type: integer
+          description: 1:私密 2:公开
+        type:
+          type: integer
+          description: 1:普通 2:提问 3:回答
+        view_count:
+          type: integer
+        like_count:
+          type: integer
+        collect_count:
+          type: integer
+        images:
+          type: array
+          items:
+            type: string
+        image_count:
           type: integer
         created_at:
           type: string
@@ -440,6 +535,305 @@ paths:
                             description: 背景图访问 URL
         '400':
           description: 参数错误
+        '401':
+          description: 未认证
+
+  /api/v1/article:
+    get:
+      tags:
+        - 帖子
+      summary: 帖子列表
+      description: 按学校分页列出公开帖子，需 JWT 认证且已绑定学校
+      operationId: articleList
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: 页码
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: 每页条数
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/ArticleResponse'
+                          total:
+                            type: integer
+                          page:
+                            type: integer
+                          page_size:
+                            type: integer
+        '401':
+          description: 未认证
+    post:
+      tags:
+        - 帖子
+      summary: 创建帖子
+      description: 创建帖子，需 JWT 认证且已绑定学校，学校隔离
+      operationId: articleCreate
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleCreateRequest'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: integer
+                            description: 帖子ID
+        '400':
+          description: 参数错误
+        '401':
+          description: 未认证
+
+  /api/v1/article/search:
+    get:
+      tags:
+        - 帖子
+      summary: 帖子搜索
+      description: 全文检索（标题、正文），按相关度+点赞量+收藏量排序，需 JWT 认证且已绑定学校
+      operationId: articleSearch
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 搜索关键词
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: 页码
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: 每页条数
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/ArticleResponse'
+                          total:
+                            type: integer
+                          page:
+                            type: integer
+                          page_size:
+                            type: integer
+        '401':
+          description: 未认证
+
+  /api/v1/article/{id}:
+    get:
+      tags:
+        - 帖子
+      summary: 获取帖子详情
+      description: 获取帖子详情，需 JWT 认证且已绑定学校，学校隔离
+      operationId: articleGet
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 帖子ID
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ArticleResponse'
+        '404':
+          description: 帖子不存在或无权限
+    put:
+      tags:
+        - 帖子
+      summary: 更新帖子
+      description: 更新帖子，需要 JWT 认证且为作者
+      operationId: articleUpdate
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 帖子ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleUpdateRequest'
+      responses:
+        '200':
+          description: 更新成功
+        '404':
+          description: 帖子不存在或无权限
+        '401':
+          description: 未认证
+    delete:
+      tags:
+        - 帖子
+      summary: 删除帖子（惰性）
+      description: 软删除帖子（将 status 设为禁用），需要 JWT 认证且为作者
+      operationId: articleDelete
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 帖子ID
+      responses:
+        '200':
+          description: 删除成功
+        '404':
+          description: 帖子不存在或无权限
+        '401':
+          description: 未认证
+
+  /api/v1/article/{id}/images:
+    post:
+      tags:
+        - 帖子
+      summary: 批量上传帖子图片
+      description: 批量上传图片，按顺序存储为 article/{id}/image_1.{ext}、image_2.{ext}...，form 字段 files
+      operationId: articleUploadImages
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 帖子ID
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - files
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: 多张图片文件
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          urls:
+                            type: array
+                            items:
+                              type: string
+                            description: 图片 URL 列表
+        '404':
+          description: 帖子不存在或无权限
+        '401':
+          description: 未认证
+    put:
+      tags:
+        - 帖子
+      summary: 更新帖子图片列表
+      description: 替换帖子的图片 URL 数组，需要 JWT 认证且为作者
+      operationId: articleUpdateImages
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 帖子ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleUpdateImagesRequest'
+      responses:
+        '200':
+          description: 更新成功
+        '404':
+          description: 帖子不存在或无权限
         '401':
           description: 未认证
 

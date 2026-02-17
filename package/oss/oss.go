@@ -43,7 +43,7 @@ func GetRelPath(relPath string) string {
 	return "/api/v1/oss/" + strings.TrimPrefix(relPath, "/")
 }
 
-// Save 保存上传文件到指定相对路径，同路径覆盖
+// Save 保存上传文件到指定相对路径，同路径无损覆盖（先写临时文件，成功后再原子替换）
 func Save(file *multipart.FileHeader, relPath string) (url string, err error) {
 	relPath = strings.TrimPrefix(relPath, "/")
 	if relPath == "" {
@@ -56,8 +56,13 @@ func Save(file *multipart.FileHeader, relPath string) (url string, err error) {
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return "", err
 	}
-	os.Remove(fullPath)
-	if err := saveUploadedFile(file, fullPath); err != nil {
+	tmpPath := fullPath + ".tmp"
+	if err := saveUploadedFile(file, tmpPath); err != nil {
+		os.Remove(tmpPath)
+		return "", err
+	}
+	if err := os.Rename(tmpPath, fullPath); err != nil {
+		os.Remove(tmpPath)
 		return "", err
 	}
 	return GetRelPath(relPath), nil
@@ -120,6 +125,15 @@ func UserBackgroundPath(userID uint, ext string) string {
 		ext = "jpg"
 	}
 	return "user/" + strconv.FormatUint(uint64(userID), 10) + "/background." + ext
+}
+
+// ArticleImagePath 帖子图片存储路径 article/{articleId}/image_{index}.{ext}
+func ArticleImagePath(articleID uint, index int, ext string) string {
+	ext = strings.TrimPrefix(ext, ".")
+	if ext == "" {
+		ext = "jpg"
+	}
+	return "article/" + strconv.FormatUint(uint64(articleID), 10) + "/image_" + strconv.Itoa(index) + "." + ext
 }
 
 // ExtFromFilename 从文件名获取扩展名，如 "x.jpg" -> "jpg"

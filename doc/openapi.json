@@ -11,6 +11,7 @@
   "tags": [
     { "name": "健康检查", "description": "服务健康检查" },
     { "name": "用户", "description": "用户相关接口" },
+    { "name": "帖子", "description": "帖子/文章相关接口" },
     { "name": "OSS", "description": "对象存储，文件访问与上传，持久化到宿主机 /var/oss" }
   ],
   "securityDefinitions": {
@@ -81,6 +82,54 @@
         "background": { "type": "string" },
         "follow_count": { "type": "integer" },
         "fans_count": { "type": "integer" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ArticleCreateRequest": {
+      "type": "object",
+      "required": ["title", "content"],
+      "properties": {
+        "title": { "type": "string", "description": "文章标题" },
+        "content": { "type": "string", "description": "文章内容" },
+        "type": { "type": "integer", "description": "1:普通 2:提问 3:回答", "default": 1 },
+        "publish_status": { "type": "integer", "description": "1:私密 2:公开", "default": 1 },
+        "school_id": { "type": "integer", "description": "学校ID" }
+      }
+    },
+    "ArticleUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "type": { "type": "integer" },
+        "publish_status": { "type": "integer" },
+        "school_id": { "type": "integer" }
+      }
+    },
+    "ArticleUpdateImagesRequest": {
+      "type": "object",
+      "required": ["images"],
+      "properties": {
+        "images": { "type": "array", "items": { "type": "string" }, "description": "图片URL数组" }
+      }
+    },
+    "ArticleResponse": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "user_id": { "type": "integer" },
+        "school_id": { "type": "integer" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "status": { "type": "integer" },
+        "publish_status": { "type": "integer" },
+        "type": { "type": "integer" },
+        "view_count": { "type": "integer" },
+        "like_count": { "type": "integer" },
+        "collect_count": { "type": "integer" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "image_count": { "type": "integer" },
         "created_at": { "type": "string", "format": "date-time" },
         "updated_at": { "type": "string", "format": "date-time" }
       }
@@ -211,6 +260,129 @@
         "responses": {
           "200": { "description": "上传成功", "schema": { "$ref": "#/definitions/Response" } },
           "400": { "description": "参数错误" },
+          "401": { "description": "未认证" }
+        }
+      }
+    },
+    "/api/v1/article": {
+      "get": {
+        "tags": ["帖子"],
+        "summary": "帖子列表",
+        "description": "按学校分页列出公开帖子，需 JWT 且已绑定学校",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "in": "query", "name": "page", "type": "integer", "description": "页码", "default": 1 },
+          { "in": "query", "name": "pageSize", "type": "integer", "description": "每页条数", "default": 20 }
+        ],
+        "responses": {
+          "200": { "description": "成功", "schema": { "$ref": "#/definitions/Response" } },
+          "401": { "description": "未认证" }
+        }
+      },
+      "post": {
+        "tags": ["帖子"],
+        "summary": "创建帖子",
+        "description": "创建帖子，需 JWT 认证",
+        "security": [{ "BearerAuth": [] }],
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/ArticleCreateRequest" } }],
+        "responses": {
+          "200": { "description": "创建成功", "schema": { "$ref": "#/definitions/Response" } },
+          "400": { "description": "参数错误" },
+          "401": { "description": "未认证" }
+        }
+      }
+    },
+    "/api/v1/article/search": {
+      "get": {
+        "tags": ["帖子"],
+        "summary": "帖子搜索",
+        "description": "全文检索（标题、正文），按相关度+点赞量+收藏量排序",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "in": "query", "name": "q", "required": true, "type": "string", "description": "搜索关键词" },
+          { "in": "query", "name": "page", "type": "integer", "default": 1 },
+          { "in": "query", "name": "pageSize", "type": "integer", "default": 20 }
+        ],
+        "responses": {
+          "200": { "description": "成功", "schema": { "$ref": "#/definitions/Response" } },
+          "401": { "description": "未认证" }
+        }
+      }
+    },
+    "/api/v1/article/{id}": {
+      "get": {
+        "tags": ["帖子"],
+        "summary": "获取帖子详情",
+        "description": "需 JWT 且已绑定学校，学校隔离",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID" }],
+        "produces": ["application/json"],
+        "responses": {
+          "200": { "description": "获取成功", "schema": { "$ref": "#/definitions/Response" } },
+          "404": { "description": "帖子不存在或无权限" }
+        }
+      },
+      "put": {
+        "tags": ["帖子"],
+        "summary": "更新帖子",
+        "security": [{ "BearerAuth": [] }],
+        "consumes": ["application/json"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID" },
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/ArticleUpdateRequest" } }
+        ],
+        "responses": {
+          "200": { "description": "更新成功" },
+          "404": { "description": "帖子不存在或无权限" },
+          "401": { "description": "未认证" }
+        }
+      },
+      "delete": {
+        "tags": ["帖子"],
+        "summary": "删除帖子（惰性）",
+        "description": "软删除，status 设为禁用",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID" }],
+        "responses": {
+          "200": { "description": "删除成功" },
+          "404": { "description": "帖子不存在或无权限" },
+          "401": { "description": "未认证" }
+        }
+      }
+    },
+    "/api/v1/article/{id}/images": {
+      "post": {
+        "tags": ["帖子"],
+        "summary": "批量上传帖子图片",
+        "description": "form 字段 files，按顺序存储为 image_1、image_2...",
+        "security": [{ "BearerAuth": [] }],
+        "consumes": ["multipart/form-data"],
+        "produces": ["application/json"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID" },
+          { "in": "formData", "name": "files", "type": "array", "items": { "type": "file" }, "required": true, "description": "多张图片" }
+        ],
+        "responses": {
+          "200": { "description": "上传成功，data.urls 为 URL 列表", "schema": { "$ref": "#/definitions/Response" } },
+          "404": { "description": "帖子不存在或无权限" },
+          "401": { "description": "未认证" }
+        }
+      },
+      "put": {
+        "tags": ["帖子"],
+        "summary": "更新帖子图片列表",
+        "description": "替换帖子的 images 数组",
+        "security": [{ "BearerAuth": [] }],
+        "consumes": ["application/json"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID" },
+          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/ArticleUpdateImagesRequest" } }
+        ],
+        "responses": {
+          "200": { "description": "更新成功" },
+          "404": { "description": "帖子不存在或无权限" },
           "401": { "description": "未认证" }
         }
       }

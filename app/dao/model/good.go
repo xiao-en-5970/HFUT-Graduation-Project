@@ -19,6 +19,7 @@ type Good struct {
 	Price       int            `gorm:"type:integer;not null;default:0" json:"price"`                            // 商品价格，单位分
 	MarkedPrice int            `gorm:"column:marked_price;type:integer;not null;default:0" json:"marked_price"` // 标价，单位分
 	Stock       int            `gorm:"type:integer;not null;default:0" json:"stock"`                            // 库存数量
+	ImageCount  int            `gorm:"column:image_count;type:integer;not null;default:0" json:"image_count"`   // 图片数量
 	StartTime   int            `gorm:"column:start_time;type:integer;not null;default:0" json:"start_time"`     // 开始时间
 	EndTime     int            `gorm:"column:end_time;type:integer;not null;default:0" json:"end_time"`         // 结束时间
 	CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`

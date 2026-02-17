@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/util"
 )
@@ -73,4 +74,32 @@ func GetUsername(ctx *gin.Context) string {
 		}
 	}
 	return ""
+}
+
+// LoadUserSchool 加载当前用户的学校ID到上下文，需在 JWTAuth 之后使用
+func LoadUserSchool() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		userID := GetUserID(ctx)
+		if userID == 0 {
+			ctx.Next()
+			return
+		}
+		user, err := dao.User().GetByID(ctx.Request.Context(), userID)
+		if err != nil {
+			ctx.Next()
+			return
+		}
+		ctx.Set("school_id", user.SchoolID)
+		ctx.Next()
+	}
+}
+
+// GetSchoolID 从上下文获取学校ID（需在 LoadUserSchool 之后调用，否则返回 0）
+func GetSchoolID(ctx *gin.Context) uint {
+	if schoolID, exists := ctx.Get("school_id"); exists {
+		if id, ok := schoolID.(uint); ok {
+			return id
+		}
+	}
+	return 0
 }

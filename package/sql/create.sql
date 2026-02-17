@@ -70,6 +70,14 @@ comment on column articles.like_count is '点赞/同问次数';
 comment on column articles.collect_count is '收藏次数';
 
 
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS images varchar(255)[];
+comment on column articles.images is '图片数组';
+
+
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS image_count integer NOT NULL DEFAULT 0;
+comment on column articles.image_count is '图片数量';
+
+
 create table comments (
             id SERIAL PRIMARY KEY,
             user_id integer REFERENCES users(id),
@@ -148,6 +156,9 @@ comment on column goods.end_time is '结束时间';
 ALTER TABLE goods ADD COLUMN IF NOT EXISTS marked_price integer NOT NULL DEFAULT 0;
 comment on column goods.marked_price is '标价，单位分';
 
+ALTER TABLE goods ADD COLUMN IF NOT EXISTS image_count integer NOT NULL DEFAULT 0;
+comment on column goods.image_count is '图片数量';
+
 create table tags (
             id SERIAL PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
@@ -218,3 +229,9 @@ comment on column goods.school_id is '学校ID';
 
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS school_id integer REFERENCES schools(id);
 comment on column articles.school_id is '学校ID';
+
+-- 全文检索：tsvector 倒排索引，用于标题、正文搜索
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS search_vector tsvector
+  GENERATED ALWAYS AS (setweight(to_tsvector('simple', coalesce(title,'')), 'A') ||
+                       setweight(to_tsvector('simple', coalesce(content,'')), 'B')) STORED;
+CREATE INDEX IF NOT EXISTS idx_articles_search ON articles USING GIN (search_vector);

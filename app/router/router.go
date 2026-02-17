@@ -38,6 +38,18 @@ func PrivateRouter(api *gin.RouterGroup) {
 		userGroup.POST("/avatar", controller.UserUploadAvatar)
 		userGroup.POST("/background", controller.UserUploadBackground)
 	}
+	articleGroup := api.Group("/article")
+	articleGroup.Use(middleware.LoadUserSchool())
+	{
+		articleGroup.GET("", controller.ArticleList)
+		articleGroup.GET("/search", controller.ArticleSearch)
+		articleGroup.GET("/:id", controller.ArticleGet)
+		articleGroup.POST("", controller.ArticleCreate)
+		articleGroup.PUT("/:id", controller.ArticleUpdate)
+		articleGroup.POST("/:id/images", controller.ArticleUploadImages)
+		articleGroup.PUT("/:id/images", controller.ArticleUpdateImages)
+		articleGroup.DELETE("/:id", controller.ArticleDelete)
+	}
 	// OSS 上传、删除（需 JWT）
 	api.POST("/oss/*path", controller.OSSUpload)
 	api.DELETE("/oss/*path", controller.OSSDelete)
