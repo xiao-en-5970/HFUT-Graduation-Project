@@ -13,6 +13,8 @@ tags:
     description: 服务健康检查
   - name: 用户
     description: 用户相关接口
+  - name: OSS
+    description: 对象存储，文件访问与上传，持久化到宿主机 /var/oss
 
 components:
   securitySchemes:
@@ -354,3 +356,167 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Response'
+
+  /api/v1/user/avatar:
+    post:
+      tags:
+        - 用户
+      summary: 上传头像
+      description: 上传当前用户头像，存储于 user/{id}/avatar.{jpg|png}，并更新 user 表 avatar 字段
+      operationId: userUploadAvatar
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 图片文件，建议 jpg 或 png
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          url:
+                            type: string
+                            description: 头像访问 URL，如 /api/v1/oss/user/1/avatar.jpg
+        '400':
+          description: 参数错误（缺少 file）
+        '401':
+          description: 未认证
+
+  /api/v1/user/background:
+    post:
+      tags:
+        - 用户
+      summary: 上传背景图
+      description: 上传当前用户背景图，存储于 user/{id}/background.{jpg|png}，并更新 user 表 background 字段
+      operationId: userUploadBackground
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 图片文件，建议 jpg 或 png
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          url:
+                            type: string
+                            description: 背景图访问 URL
+        '400':
+          description: 参数错误
+        '401':
+          description: 未认证
+
+  /api/v1/oss/{path}:
+    get:
+      tags:
+        - OSS
+      summary: 访问/下载文件
+      description: 根据路径获取文件，公开接口，无需认证。可用于 img src 等
+      operationId: ossGet
+      security: []
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 相对路径，如 user/1/avatar.jpg、avatar/x.png
+      responses:
+        '200':
+          description: 文件内容
+        '404':
+          description: 文件不存在
+        '400':
+          description: 路径非法
+    post:
+      tags:
+        - OSS
+      summary: 上传文件（通用）
+      description: 上传文件到指定路径，同路径会覆盖。需要 JWT 认证
+      operationId: ossUpload
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+          description: 存储路径，如 avatar/1.jpg；以 / 结尾则使用上传文件原名
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 上传成功，返回 url 和 path
+        '400':
+          description: 路径或参数错误
+        '401':
+          description: 未认证
+    delete:
+      tags:
+        - OSS
+      summary: 删除文件（通用）
+      description: 删除指定路径的文件，需要 JWT 认证
+      operationId: ossDelete
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: path
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 删除成功
+        '400':
+          description: 路径非法或文件不存在
+        '401':
+          description: 未认证
