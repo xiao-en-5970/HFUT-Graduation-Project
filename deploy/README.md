@@ -80,26 +80,12 @@ chmod 600 ~/.ssh/authorized_keys
 3. 在本地执行：
 
 ```bash
-# 上传到服务器
-scp apiserver.tar.gz root@47.94.197.213:/tmp/
+# 上传镜像和 env 转换脚本到服务器
+scp apiserver.tar.gz .github/scripts/env-to-docker.py root@47.94.197.213:/tmp/
 
-# SSH 登录并部署
+# SSH 登录并部署（脚本生成 Docker 兼容的 .env.docker）
 ssh root@47.94.197.213
-# 若 /opt/app/.env 含空格等，需先生成 Docker 兼容的 .env.docker
-python3 -c "
-import re
-out=[]
-with open('/opt/app/.env') as f:
-    for line in f:
-        line=line.rstrip('\n\r').strip()
-        if not line or line.startswith('#'): continue
-        m=re.match(r'^([^=]+)=(.*)$',line)
-        if m:
-            k,v=m.group(1).strip(),m.group(2).strip()
-            if ' ' in v or '\t' in v: v='"'+v.replace('\\','\\\\').replace('"','\\"')+'"'
-            out.append(f'{k}={v}')
-with open('/opt/app/.env.docker','w') as f: f.write('\n'.join(out))
-"
+python3 /tmp/env-to-docker.py
 docker load < /tmp/apiserver.tar.gz
 docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null
 docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \

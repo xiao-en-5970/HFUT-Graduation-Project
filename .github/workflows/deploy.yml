@@ -61,6 +61,8 @@ jobs:
     needs: build
     if: github.event_name == 'workflow_dispatch'
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: apiserver-image
@@ -85,32 +87,15 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效"; exit 1; }
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          echo "[1/2] 传输镜像到服务器..."
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
+          echo "[1/2] 传输镜像和脚本到服务器..."
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz .github/scripts/env-to-docker.py "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
           echo "[2/2] 替换容器并启动..."
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
             [ -f /opt/app/.env ] || { echo "::error::服务器缺少 /opt/app/.env"; exit 1; }
-            python3 << "PYEOF"
-import re
-out = []
-with open("/opt/app/.env") as f:
-    content = f.read()
-for line in content.splitlines():
-    line = line.rstrip("\r").strip()
-    if not line or line.startswith("#"): continue
-    m = re.match(r"^([^=]+)=(.*)$", line)
-    if m:
-        k = m.group(1).strip()
-        v = m.group(2).strip().replace("\n", " ").replace("\r", "")
-        if " " in v or "\t" in v:
-            v = '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
-        out.append(f"{k}={v}")
-with open("/opt/app/.env.docker", "w") as f:
-    f.write("\n".join(out))
-PYEOF
+            python3 /tmp/env-to-docker.py
             docker load < /tmp/apiserver.tar.gz
-            rm -f /tmp/apiserver.tar.gz
+            rm -f /tmp/apiserver.tar.gz /tmp/env-to-docker.py
             mkdir -p /opt/app
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
