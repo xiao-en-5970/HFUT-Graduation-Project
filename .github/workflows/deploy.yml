@@ -99,19 +99,24 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效"; exit 1; }
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          echo "[1/2] 传输镜像到服务器..."
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
+          echo "[1/2] 传输镜像和脚本到服务器..."
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz .github/scripts/env-to-docker.py "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
           echo "[2/2] 替换容器并启动..."
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
-            [ -f /opt/app/.env ] || { echo "::error::服务器缺少 /opt/app/.env，请 scp .env 到服务器"; exit 1; }
-            docker load < /tmp/apiserver.tar.gz
-            rm -f /tmp/apiserver.tar.gz
             mkdir -p /opt/app
+            if [ -d /opt/app/.env ]; then
+              echo "::error::/opt/app/.env 被误建为目录，请 ssh 执行: rm -rf /opt/app/.env，然后 scp .env 到服务器"
+              exit 1
+            fi
+            [ -f /opt/app/.env ] || { echo "::error::服务器缺少 /opt/app/.env，请 scp .env 到服务器"; exit 1; }
+            python3 /tmp/env-to-docker.py
+            [ -s /opt/app/.env.docker ] || { echo "::error::.env.docker 生成失败"; exit 1; }
+            docker load < /tmp/apiserver.tar.gz
+            rm -f /tmp/apiserver.tar.gz /tmp/env-to-docker.py
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
-            docker run -d --name apiserver --restart unless-stopped \
-              -p 8081:8081 -v /opt/app/.env:/app/.env:ro apiserver:latest
+            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /opt/app/.env.docker apiserver:latest
             sleep 3
             if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
               echo "::error::容器启动失败，可能无法连接数据库/Redis"
@@ -171,19 +176,24 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效"; exit 1; }
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          echo "[1/2] 传输镜像到服务器..."
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
+          echo "[1/2] 传输镜像和脚本到服务器..."
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz .github/scripts/env-to-docker.py "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
           echo "[2/2] 替换容器并启动..."
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             set -e
-            [ -f /opt/app/.env ] || { echo "::error::服务器缺少 /opt/app/.env，请 scp .env 到服务器"; exit 1; }
-            docker load < /tmp/apiserver.tar.gz
-            rm -f /tmp/apiserver.tar.gz
             mkdir -p /opt/app
+            if [ -d /opt/app/.env ]; then
+              echo "::error::/opt/app/.env 被误建为目录，请 ssh 执行: rm -rf /opt/app/.env，然后 scp .env 到服务器"
+              exit 1
+            fi
+            [ -f /opt/app/.env ] || { echo "::error::服务器缺少 /opt/app/.env，请 scp .env 到服务器"; exit 1; }
+            python3 /tmp/env-to-docker.py
+            [ -s /opt/app/.env.docker ] || { echo "::error::.env.docker 生成失败"; exit 1; }
+            docker load < /tmp/apiserver.tar.gz
+            rm -f /tmp/apiserver.tar.gz /tmp/env-to-docker.py
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
-            docker run -d --name apiserver --restart unless-stopped \
-              -p 8081:8081 -v /opt/app/.env:/app/.env:ro apiserver:latest
+            docker run -d --name apiserver --restart unless-stopped -p 8081:8081 --env-file /opt/app/.env.docker apiserver:latest
             sleep 3
             if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
               echo "::error::容器启动失败"

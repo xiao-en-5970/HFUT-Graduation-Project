@@ -19,7 +19,7 @@ scp .env root@47.94.197.213:/opt/app/.env
 ssh root@47.94.197.213 "mkdir -p /opt/app && chmod 600 /opt/app/.env"
 ```
 
-> **重要**：容器通过挂载 `/opt/app/.env` 读取配置，应用使用 godotenv 解析，格式宽松，无需额外转换。
+> **重要**：服务器上的 `.env` 会被转换为 Docker 兼容格式后注入容器，确保包含 `DB_HOST` 等变量。
 
 ### 3. 配置 GitHub Secrets
 
@@ -80,15 +80,16 @@ chmod 600 ~/.ssh/authorized_keys
 3. 在本地执行：
 
 ```bash
-# 上传镜像到服务器
-scp apiserver.tar.gz root@47.94.197.213:/tmp/
+# 上传镜像和 env 转换脚本
+scp apiserver.tar.gz .github/scripts/env-to-docker.py root@47.94.197.213:/tmp/
 
-# SSH 登录并部署（容器挂载 /opt/app/.env 读取配置）
+# SSH 登录并部署
 ssh root@47.94.197.213
+python3 /tmp/env-to-docker.py
 docker load < /tmp/apiserver.tar.gz
 docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null
 docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
-  -v /opt/app/.env:/app/.env:ro apiserver:latest
+  --env-file /opt/app/.env.docker apiserver:latest
 ```
 
 ---

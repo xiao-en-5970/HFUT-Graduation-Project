@@ -40,8 +40,8 @@ var (
 
 // LoadConfig loads configuration from environment variables
 func LoadConfig() error {
-	// Load .env file if it exists
-	if err := godotenv.Load(); err != nil {
+	// Load .env: try /app/.env first (Docker mount), then .env (local dev)
+	if err := godotenv.Load("/app/.env", ".env"); err != nil {
 		log.Println("Warning: .env file not found, using system environment variables")
 	}
 
