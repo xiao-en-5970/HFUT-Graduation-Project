@@ -6,7 +6,8 @@ permissions:
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
+    tags: ['*']
 
 jobs:
   # 1. 代码检查
@@ -55,12 +56,12 @@ jobs:
           name: apiserver-image
           path: apiserver.tar.gz
 
-  # 3. 部署（手动审批后执行，流水线在此暂停）
+  # 3. 部署（仅 tag 推送时执行，main 分支推送仅构建不部署）
   deploy:
     name: 3. 部署
     needs: build
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/download-artifact@v4
         with:

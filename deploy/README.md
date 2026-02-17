@@ -52,33 +52,25 @@ chmod 600 ~/.ssh/authorized_keys
 
 ---
 
-## CI/CD 流程（类似 GitLab）
+## CI/CD 流程
 
-推送到 `main` / `master` 后触发流水线：
+### 推送到 main 分支
+
+仅执行至镜像构建，不部署：
 
 1. **代码检查**：`go vet` + `go build` 验证
 2. **编译 & 镜像构建**：Go 编译 → Docker 构建 → 上传 Artifact
-3. **部署**：在 **production** 环境处暂停，等待手动审批
 
-### 手动审批部署
+### 打 tag 后推送（自动部署）
 
-流水线在「部署」步骤前暂停后：
+在 main 上打 tag 并推送后，会执行完整流水线并自动部署：
 
-1. 打开 **Actions** → 找到该次运行
-2. 点击 **Review deployments**（或部署 job 旁的审批入口）
-3. 选择 **production** → 点击 **Approve and deploy**
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-### 首次配置 Environment（生产环境审批）
-
-1. 打开仓库首页，点击 **Settings**
-2. 左侧菜单找到 **Environments**，点击进入
-3. 若列表为空，点击 **New environment**；若已有 `production`（首次运行流水线后自动创建），则直接点击进入
-4. 在 `production` 页面中，找到 **Environment protection rules** 区域
-5. 勾选 **Required reviewers**
-6. 在弹出框中搜索并添加审批人（可添加自己的 GitHub 用户名），点击 **Add**
-7. 点击 **Save protection rules** 保存
-
-配置后，每次流水线运行到「部署」步骤时会显示 **Review deployments** 按钮，需你进入 Actions 页面批准后才会继续执行。
+触发：代码检查 → 编译 & 镜像构建 → **自动部署**
 
 ---
 
