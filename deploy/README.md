@@ -10,7 +10,11 @@ sudo systemctl enable docker
 sudo systemctl start docker
 ```
 
-### 2. 配置服务器 .env
+### 2. 确保服务器有 Python 3
+
+部署脚本会运行 `python3` 生成 Docker 兼容的 `.env.docker`。Ubuntu/Debian 通常已预装；若无则执行 `apt install python3`。
+
+### 3. 配置服务器 .env
 
 将本地 `.env` 拷贝到服务器 `/opt/app/.env`（首次部署或配置变更时执行一次）：
 
@@ -19,7 +23,7 @@ scp .env root@47.94.197.213:/opt/app/.env
 ssh root@47.94.197.213 "mkdir -p /opt/app && chmod 600 /opt/app/.env"
 ```
 
-### 3. 配置 GitHub Secrets
+### 4. 配置 GitHub Secrets
 
 仓库 **Settings** → **Secrets and variables** → **Actions** → **New repository secret**：
 
@@ -30,7 +34,7 @@ ssh root@47.94.197.213 "mkdir -p /opt/app && chmod 600 /opt/app/.env"
 | DEPLOY_SSH_KEY     | ✓* | 私钥完整内容，或使用 DEPLOY_SSH_KEY_B64 |
 | DEPLOY_SSH_KEY_B64 | * | 私钥的 Base64 编码：`base64 -w 0 ~/.ssh/deploy_key`（Linux） |
 
-### 4. 在服务器添加部署公钥
+### 5. 在服务器添加部署公钥
 
 本机生成专用密钥对（仅用于部署）：
 
@@ -81,12 +85,29 @@ scp apiserver.tar.gz root@47.94.197.213:/tmp/
 
 # SSH 登录并部署
 ssh root@47.94.197.213
+# 若 /opt/app/.env 含空格等，需先生成 Docker 兼容的 .env.docker
+python3 -c "
+import re
+out=[]
+with open('/opt/app/.env') as f:
+    for line in f:
+        line=line.rstrip('\n\r').strip()
+        if not line or line.startswith('#'): continue
+        m=re.match(r'^([^=]+)=(.*)$',line)
+        if m:
+            k,v=m.group(1).strip(),m.group(2).strip()
+            if ' ' in v or '\t' in v: v='"'+v.replace('\\','\\\\').replace('"','\\"')+'"'
+            out.append(f'{k}={v}')
+with open('/opt/app/.env.docker','w') as f: f.write('\n'.join(out))
+"
 docker load < /tmp/apiserver.tar.gz
 docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null
 docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
   -e SERVER_PORT=8081 -e SERVER_HOST=0.0.0.0 \
-  --env-file /opt/app/.env apiserver:latest
+  --env-file /opt/app/.env.docker apiserver:latest
 ```
+
+> **说明**：`--env-file` 要求无行内空格，否则会报 `variable contains whitespaces`。若 `.env` 无空格可直接用 `--env-file /opt/app/.env`，否则需先用上述 Python 生成 `.env.docker`。
 
 ---
 

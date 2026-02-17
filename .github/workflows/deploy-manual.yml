@@ -30,6 +30,9 @@ jobs:
           DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
         run: |
           set -e
+          [ -n "$DEPLOY_HOST" ] || { echo "::error::缺少 Secrets: DEPLOY_HOST"; exit 1; }
+          [ -n "$DEPLOY_USER" ] || { echo "::error::缺少 Secrets: DEPLOY_USER"; exit 1; }
+          [ -n "$DEPLOY_SSH_KEY$DEPLOY_SSH_KEY_B64" ] || { echo "::error::缺少 Secrets: 至少配置 DEPLOY_SSH_KEY 或 DEPLOY_SSH_KEY_B64"; exit 1; }
           mkdir -p ~/.ssh
           if [ -n "$DEPLOY_SSH_KEY_B64" ]; then
             echo "$DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
