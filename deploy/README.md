@@ -22,11 +22,14 @@ sudo chmod 600 /opt/app/.env
 
 仓库 **Settings** → **Secrets and variables** → **Actions** → **New repository secret**：
 
-| Secret 名称   | 值 |
-|---------------|----|
-| DEPLOY_HOST   | `47.94.197.213` |
-| DEPLOY_USER   | `root`（或你的 SSH 用户名） |
-| DEPLOY_SSH_KEY| 私钥**完整内容**（含 `-----BEGIN...` 和 `-----END...`，每行末尾无多余空格） |
+| Secret 名称        | 值 |
+|--------------------|----|
+| DEPLOY_HOST        | `47.94.197.213` |
+| DEPLOY_USER        | `root`（或你的 SSH 用户名） |
+| DEPLOY_SSH_KEY     | 私钥完整内容（见下方说明） |
+| DEPLOY_SSH_KEY_B64 | （可选）若 DEPLOY_SSH_KEY 认证失败，用此方式：`cat ~/.ssh/deploy_key \| base64 -w0` 的输出 |
+
+**DEPLOY_SSH_KEY 正确填写方式**：在终端执行 `cat ~/.ssh/deploy_key`，整段复制（含首尾 `-----BEGIN/END-----`），不要增减空格或换行。若仍报 Permission denied，改用 `DEPLOY_SSH_KEY_B64`。
 
 ### 4. 在服务器添加部署公钥
 

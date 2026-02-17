@@ -27,11 +27,18 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
         run: |
           set -e
           mkdir -p ~/.ssh
-          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          # 支持原始私钥或 Base64 编码（Base64 可避免 GitHub 粘贴换行问题）
+          if [ -n "$DEPLOY_SSH_KEY_B64" ]; then
+            echo "$DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
+          else
+            printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          fi
           chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效，请检查 DEPLOY_SSH_KEY 是否正确"; exit 1; }
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           echo "[1/2] 传输镜像到服务器..."
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
