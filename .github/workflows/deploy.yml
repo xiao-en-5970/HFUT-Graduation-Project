@@ -1,11 +1,11 @@
-name: Build & Deploy
+name: CI/CD
 
 on:
   push:
     branches: [main, master]
 
 jobs:
-  # 步骤 1：代码语法检查，确保程序能编译通过
+  # 步骤 1：代码语法检查
   check:
     name: 1. 代码检查
     runs-on: ubuntu-latest
@@ -43,62 +43,12 @@ jobs:
         run: |
           docker build -t apiserver:latest .
 
-      - name: 导出镜像
+      - name: 导出并上传镜像
         run: |
           docker save apiserver:latest | gzip > apiserver.tar.gz
 
-      - name: 上传镜像产物
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: docker-image
+          name: apiserver-image
           path: apiserver.tar.gz
-
-  # 步骤 3：部署并替换旧容器
-  deploy:
-    name: 3. 部署容器
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: 下载镜像产物
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-image
-
-      - name: 传输镜像到服务器
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: "apiserver.tar.gz"
-          target: "/tmp/"
-
-      - name: 替换容器并启动
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            set -e
-            echo "[1/4] 加载镜像..."
-            docker load < /tmp/apiserver.tar.gz
-            rm -f /tmp/apiserver.tar.gz
-            
-            echo "[2/4] 停止旧容器..."
-            docker stop apiserver 2>/dev/null || true
-            docker rm apiserver 2>/dev/null || true
-            
-            echo "[3/4] 启动新容器..."
-            ENV_FILE=""
-            [ -f /opt/app/.env ] && ENV_FILE="--env-file /opt/app/.env"
-            docker run -d \
-              --name apiserver \
-              --restart unless-stopped \
-              -p 8081:8081 \
-              -e SERVER_PORT=8081 \
-              -e SERVER_HOST=0.0.0.0 \
-              $ENV_FILE \
-              apiserver:latest
-            
-            echo "[4/4] 部署完成，应用运行于端口 8081"

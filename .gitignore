@@ -28,6 +28,9 @@ go.work.sum
 # Build output
 build/
 
+# CI 临时文件
+deploy_key
+
 # Editor/IDE
 /.idea/
 /.vscode/
