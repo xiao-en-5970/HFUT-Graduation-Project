@@ -10,16 +10,18 @@ sudo systemctl enable docker
 sudo systemctl start docker
 ```
 
-### 2. 配置服务器 .env
+### 2. 配置服务器 config.yaml
 
-将本地 `.env` 拷贝到服务器 `/opt/app/.env`（首次部署或配置变更时执行一次）：
+复制 `config.example.yaml` 为 `config.yaml` 并修改数据库等配置，然后拷贝到服务器：
 
 ```bash
-scp .env root@47.94.197.213:/opt/app/.env
-ssh root@47.94.197.213 "mkdir -p /opt/app && chmod 600 /opt/app/.env"
+cp config.example.yaml config.yaml
+# 编辑 config.yaml，填写 database、redis 等
+scp config.yaml root@47.94.197.213:/opt/app/config.yaml
+ssh root@47.94.197.213 "mkdir -p /opt/app && chmod 600 /opt/app/config.yaml"
 ```
 
-> **重要**：服务器上的 `.env` 会被转换为 Docker 兼容格式后注入容器，确保包含 `DB_HOST` 等变量。
+> **重要**：配置文件支持热更新，修改后保存即可生效（log、jwt 等；database/redis 变更需重启）。
 
 ### 3. 配置 GitHub Secrets
 
@@ -80,16 +82,12 @@ chmod 600 ~/.ssh/authorized_keys
 3. 在本地执行：
 
 ```bash
-# 上传镜像和 env 转换脚本
-scp apiserver.tar.gz .github/scripts/env-to-docker.py root@47.94.197.213:/tmp/
-
-# SSH 登录并部署
+scp apiserver.tar.gz root@47.94.197.213:/tmp/
 ssh root@47.94.197.213
-python3 /tmp/env-to-docker.py
 docker load < /tmp/apiserver.tar.gz
 docker stop apiserver 2>/dev/null; docker rm apiserver 2>/dev/null
 docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
-  --env-file /opt/app/.env.docker apiserver:latest
+  -v /opt/app/config.yaml:/app/config.yaml:ro apiserver:latest
 ```
 
 ---
@@ -98,8 +96,8 @@ docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
 
 若报错 `dial tcp 127.0.0.1:5432: connection refused`：
 
-- **原因**：`/opt/app/.env` 不存在或未正确挂载，应用使用默认 localhost
-- **处理**：确认 `/opt/app/.env` 存在，执行 `cat /opt/app/.env | grep DB_HOST` 应有输出，然后重新部署
+- **原因**：`/opt/app/config.yaml` 不存在或配置错误
+- **处理**：确认 config.yaml 存在且 `database.host` 指向正确地址，参考 config.example.yaml
 
 ---
 
@@ -130,4 +128,4 @@ docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
 2. **防火墙/安全组**：开放 5432、6379 入站（建议仅允许本机或可信 IP）
 3. **监听地址**：PostgreSQL `listen_addresses='*'`，Redis `bind 0.0.0.0`
 
-若容器无法连接，可尝试在 `.env` 中改用 `DB_HOST=172.17.0.1`、`REDIS_HOST=172.17.0.1`（Docker 网桥网关）。
+若容器无法连接，可在 config.yaml 中改用 `database.host: 172.17.0.1`、`redis.host: 172.17.0.1`（Docker 网桥网关）。

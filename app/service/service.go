@@ -12,7 +12,7 @@ var Engine *gin.Engine
 // Init initializes Gin service
 func Init() error {
 	// Set Gin mode
-	gin.SetMode(config.ServerMode)
+	gin.SetMode(config.ServerMode())
 
 	// Create Gin engine
 	Engine = gin.New()
@@ -33,6 +33,6 @@ func Init() error {
 
 // Run starts the Gin server
 func Run() error {
-	addr := fmt.Sprintf("%s:%s", config.ServerHost, config.ServerPort)
+	addr := fmt.Sprintf("%s:%s", config.ServerHost(), config.ServerPort())
 	return Engine.Run(addr)
 }

@@ -26,6 +26,9 @@ go.work.sum
 .env
 prod.env
 
+# 配置文件（含敏感信息，使用 config.example.yaml 复制）
+config.yaml
+
 # Build output
 build/
 

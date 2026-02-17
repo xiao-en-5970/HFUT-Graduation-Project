@@ -1,97 +1,221 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
+	"sync"
 
-	"github.com/joho/godotenv"
+	"github.com/fsnotify/fsnotify"
+	"gopkg.in/yaml.v3"
 )
+
+// C 为 yaml 原始结构，供外部需要完整配置时使用
+type yamlConfig struct {
+	Server   serverCfg   `yaml:"server"`
+	Database databaseCfg `yaml:"database"`
+	Redis    redisCfg    `yaml:"redis"`
+	Log      logCfg      `yaml:"log"`
+	JWT      jwtCfg      `yaml:"jwt"`
+}
+
+type serverCfg struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+	Mode string `yaml:"mode"`
+}
+
+type databaseCfg struct {
+	Host         string `yaml:"host"`
+	Port         int    `yaml:"port"`
+	User         string `yaml:"user"`
+	Password     string `yaml:"password"`
+	Name         string `yaml:"name"`
+	SSLMode      string `yaml:"sslmode"`
+	Timezone     string `yaml:"timezone"`
+	MaxIdleConns int    `yaml:"max_idle_conns"`
+	MaxOpenConns int    `yaml:"max_open_conns"`
+}
+
+type redisCfg struct {
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
+	PoolSize int    `yaml:"pool_size"`
+}
+
+type logCfg struct {
+	Level    string `yaml:"level"`
+	Encoding string `yaml:"encoding"`
+}
+
+type jwtCfg struct {
+	Secret     string `yaml:"secret"`
+	ExpireHour int    `yaml:"expire_hour"`
+}
 
 var (
-	// Server config
-	ServerHost string
-	ServerPort string
-	ServerMode string
-
-	// PostgreSQL config
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPassword string
-	DBName     string
-	DBSSLMode  string
-	DBTimezone string
-
-	// Redis config
-	RedisHost     string
-	RedisPort     string
-	RedisPassword string
-	RedisDB       string
-
-	// Log config
-	LogLevel    string
-	LogEncoding string
-
-	// JWT config
-	JWTSecret     string
-	JWTExpireHour int
+	cfg     yamlConfig
+	cfgPath string
+	mu      sync.RWMutex
 )
 
-// LoadConfig loads configuration from environment variables
-func LoadConfig() error {
-	// Load .env: try /app/.env first (Docker mount), then .env (local dev)
-	if err := godotenv.Load("/app/.env", ".env"); err != nil {
-		log.Println("Warning: .env file not found, using system environment variables")
+func applyDefaults(c *yamlConfig) {
+	if c.Server.Host == "" {
+		c.Server.Host = "0.0.0.0"
 	}
+	if c.Server.Port == 0 {
+		c.Server.Port = 8080
+	}
+	if c.Server.Mode == "" {
+		c.Server.Mode = "debug"
+	}
+	if c.Database.Host == "" {
+		c.Database.Host = "localhost"
+	}
+	if c.Database.Port == 0 {
+		c.Database.Port = 5432
+	}
+	if c.Database.User == "" {
+		c.Database.User = "postgres"
+	}
+	if c.Database.Name == "" {
+		c.Database.Name = "graduation_project"
+	}
+	if c.Database.SSLMode == "" {
+		c.Database.SSLMode = "disable"
+	}
+	if c.Database.Timezone == "" {
+		c.Database.Timezone = "PRC"
+	}
+	if c.Database.MaxIdleConns == 0 {
+		c.Database.MaxIdleConns = 10
+	}
+	if c.Database.MaxOpenConns == 0 {
+		c.Database.MaxOpenConns = 100
+	}
+	if c.Redis.Host == "" {
+		c.Redis.Host = "localhost"
+	}
+	if c.Redis.Port == 0 {
+		c.Redis.Port = 6379
+	}
+	if c.Log.Level == "" {
+		c.Log.Level = "info"
+	}
+	if c.Log.Encoding == "" {
+		c.Log.Encoding = "console"
+	}
+	if c.JWT.Secret == "" {
+		c.JWT.Secret = "your-secret-key-change-in-production"
+	}
+	if c.JWT.ExpireHour == 0 {
+		c.JWT.ExpireHour = 24
+	}
+}
 
-	// Server configuration
-	ServerHost = getEnv("SERVER_HOST", "0.0.0.0")
-	ServerPort = getEnv("SERVER_PORT", "8080")
-	ServerMode = getEnv("SERVER_MODE", "debug")
+func resolveConfigPath() (string, error) {
+	for _, p := range []string{"/app/config.yaml", "config.yaml", "./config.yaml"} {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("未找到 config.yaml，请复制 config.example.yaml 为 config.yaml 并修改")
+}
 
-	// PostgreSQL configuration
-	DBHost = getEnv("DB_HOST", "localhost")
-	DBPort = getEnv("DB_PORT", "5432")
-	DBUser = getEnv("DB_USER", "postgres")
-	DBPassword = getEnv("DB_PASSWORD", "postgres")
-	DBName = getEnv("DB_NAME", "graduation_project")
-	DBSSLMode = getEnv("DB_SSLMODE", "disable")
-	// 使用 PRC（PostgreSQL 内置支持）而不是 Asia/Shanghai（需要系统时区数据）
-	// 在 Docker 容器中，PRC 更可靠
-	DBTimezone = getEnv("DB_TIMEZONE", "PRC")
-
-	// Redis configuration
-	RedisHost = getEnv("REDIS_HOST", "localhost")
-	RedisPort = getEnv("REDIS_PORT", "6379")
-	RedisPassword = getEnv("REDIS_PASSWORD", "")
-	RedisDB = getEnv("REDIS_DB", "0")
-
-	// Log configuration
-	LogLevel = getEnv("LOG_LEVEL", "info")
-	LogEncoding = getEnv("LOG_ENCODING", "console")
-
-	// JWT configuration
-	JWTSecret = getEnv("JWT_SECRET", "your-secret-key-change-in-production")
-	JWTExpireHour = getEnvInt("JWT_EXPIRE_HOUR", 24)
-
+func loadFromFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+	var c yamlConfig
+	if err := yaml.Unmarshal(data, &c); err != nil {
+		return fmt.Errorf("parse config: %w", err)
+	}
+	applyDefaults(&c)
+	mu.Lock()
+	cfg = c
+	mu.Unlock()
 	return nil
 }
 
-// getEnv gets an environment variable or returns a default value
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+// LoadConfig 从 config.yaml 加载配置，并启动监听热更新
+func LoadConfig() error {
+	path, err := resolveConfigPath()
+	if err != nil {
+		return err
 	}
-	return defaultValue
+	cfgPath = path
+	if err := loadFromFile(cfgPath); err != nil {
+		return err
+	}
+	go watchConfig()
+	return nil
 }
 
-// getEnvInt gets an environment variable as int or returns a default value
-func getEnvInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
+func watchConfig() {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Printf("config watcher create failed: %v", err)
+		return
+	}
+	defer watcher.Close()
+
+	dir := filepath.Dir(cfgPath)
+	if err := watcher.Add(dir); err != nil {
+		log.Printf("config watcher add dir %s: %v", dir, err)
+		return
+	}
+
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			if event.Has(fsnotify.Write) && filepath.Clean(event.Name) == filepath.Clean(cfgPath) {
+				if err := loadFromFile(cfgPath); err != nil {
+					log.Printf("config reload failed: %v", err)
+				} else {
+					log.Printf("config reloaded from %s", cfgPath)
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Printf("config watcher error: %v", err)
 		}
 	}
-	return defaultValue
 }
+
+// Server
+func ServerHost() string { mu.RLock(); defer mu.RUnlock(); return cfg.Server.Host }
+func ServerPort() string { mu.RLock(); defer mu.RUnlock(); return strconv.Itoa(cfg.Server.Port) }
+func ServerMode() string { mu.RLock(); defer mu.RUnlock(); return cfg.Server.Mode }
+
+// Database
+func DBHost() string     { mu.RLock(); defer mu.RUnlock(); return cfg.Database.Host }
+func DBPort() string     { mu.RLock(); defer mu.RUnlock(); return strconv.Itoa(cfg.Database.Port) }
+func DBUser() string     { mu.RLock(); defer mu.RUnlock(); return cfg.Database.User }
+func DBPassword() string { mu.RLock(); defer mu.RUnlock(); return cfg.Database.Password }
+func DBName() string     { mu.RLock(); defer mu.RUnlock(); return cfg.Database.Name }
+func DBSSLMode() string  { mu.RLock(); defer mu.RUnlock(); return cfg.Database.SSLMode }
+func DBTimezone() string { mu.RLock(); defer mu.RUnlock(); return cfg.Database.Timezone }
+
+// Redis
+func RedisHost() string     { mu.RLock(); defer mu.RUnlock(); return cfg.Redis.Host }
+func RedisPort() string     { mu.RLock(); defer mu.RUnlock(); return strconv.Itoa(cfg.Redis.Port) }
+func RedisPassword() string { mu.RLock(); defer mu.RUnlock(); return cfg.Redis.Password }
+func RedisDB() string       { mu.RLock(); defer mu.RUnlock(); return strconv.Itoa(cfg.Redis.DB) }
+
+// Log
+func LogLevel() string    { mu.RLock(); defer mu.RUnlock(); return cfg.Log.Level }
+func LogEncoding() string { mu.RLock(); defer mu.RUnlock(); return cfg.Log.Encoding }
+
+// JWT
+func JWTSecret() string  { mu.RLock(); defer mu.RUnlock(); return cfg.JWT.Secret }
+func JWTExpireHour() int { mu.RLock(); defer mu.RUnlock(); return cfg.JWT.ExpireHour }

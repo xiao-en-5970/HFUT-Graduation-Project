@@ -12,7 +12,10 @@ WORKDIR /app
 # 复制 CI 中已编译的 Linux 二进制（go build -o build/app）
 COPY build/app ./
 
-# 应用端口（与 bootstrap 中 config.ServerPort 对应）
+# 内置示例配置（生产部署时用 -v 挂载覆盖；config.yaml 在 .dockerignore 中不打包）
+COPY config.example.yaml ./config.yaml
+
+# 应用端口（由 config.yaml 的 server.port 控制，默认 8081）
 ENV SERVER_PORT=8081
 EXPOSE 8081
 

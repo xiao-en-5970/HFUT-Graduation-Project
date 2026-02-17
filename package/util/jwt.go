@@ -10,7 +10,7 @@ import (
 
 // getJWTSecret 获取 JWT 密钥
 func getJWTSecret() []byte {
-	return []byte(config.JWTSecret)
+	return []byte(config.JWTSecret())
 }
 
 // Claims JWT 载荷结构
@@ -23,7 +23,7 @@ type Claims struct {
 // GenerateToken 生成 JWT token
 func GenerateToken(userID uint, username string) (string, error) {
 	nowTime := time.Now()
-	expireTime := nowTime.Add(time.Duration(config.JWTExpireHour) * time.Hour)
+	expireTime := nowTime.Add(time.Duration(config.JWTExpireHour()) * time.Hour)
 
 	claims := Claims{
 		UserID:   userID,
@@ -66,4 +66,3 @@ func GetUserIDFromToken(token string) (uint, error) {
 	}
 	return claims.UserID, nil
 }
-

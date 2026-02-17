@@ -1,0 +1,31 @@
+# 复制为 config.yaml 并修改
+server:
+  host: "0.0.0.0"
+  port: 8081
+  mode: release
+
+database:
+  host: "47.94.197.213"
+  port: 5432
+  user: xiao_en
+  password: your_password
+  name: core
+  sslmode: disable
+  timezone: PRC
+  max_idle_conns: 10
+  max_open_conns: 100
+
+redis:
+  host: "47.94.197.213"
+  port: 6379
+  password: your_password
+  db: 0
+  pool_size: 10
+
+log:
+  level: info
+  encoding: console
+
+jwt:
+  secret: your-secret-key-change-in-production
+  expire_hour: 24
