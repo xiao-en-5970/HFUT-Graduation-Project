@@ -10,30 +10,27 @@ sudo systemctl enable docker
 sudo systemctl start docker
 ```
 
-### 2. 创建应用目录和 .env
+### 2. 应用目录
 
-```bash
-sudo mkdir -p /opt/app
-# 使用 deploy/.env.example 作为模板，编辑后保存为 /opt/app/.env
-sudo cp deploy/.env.example /opt/app/.env
-sudo nano /opt/app/.env   # 修改 DB_PASSWORD、JWT_SECRET 等
-sudo chmod 600 /opt/app/.env
-```
-
-**重要**：容器通过服务器公网 IP + 端口访问 PostgreSQL/Redis，在 `.env` 中设置 `DB_HOST`、`REDIS_HOST` 为 `47.94.197.213`。
+部署流程会自动创建 `/opt/app`。环境变量通过 GitHub Secret `DEPLOY_ENV_B64` 下发，无需在服务器手动创建 .env。
 
 ### 3. 配置 GitHub Secrets
 
 仓库 **Settings** → **Secrets and variables** → **Actions** → **New repository secret**：
 
-| Secret 名称        | 值 |
-|--------------------|----|
-| DEPLOY_HOST        | `47.94.197.213` |
-| DEPLOY_USER        | `root`（或你的 SSH 用户名） |
-| DEPLOY_SSH_KEY     | 私钥完整内容（见下方说明） |
-| DEPLOY_SSH_KEY_B64 | （可选）若 DEPLOY_SSH_KEY 认证失败，用此方式：`cat ~/.ssh/deploy_key \| base64 -w0` 的输出 |
+| Secret 名称        | 必填 | 说明 |
+|--------------------|------|------|
+| DEPLOY_HOST        | ✓ | 服务器 IP，如 `47.94.197.213` |
+| DEPLOY_USER        | ✓ | SSH 用户名，如 `root` |
+| DEPLOY_SSH_KEY     | ✓* | 私钥完整内容，或使用 DEPLOY_SSH_KEY_B64 |
+| DEPLOY_SSH_KEY_B64 | * | 私钥的 Base64 编码：`base64 -w 0 ~/.ssh/deploy_key`（Linux） |
+| DEPLOY_ENV_B64     | ✓ | 生产环境 .env 的 Base64 编码，见下方 |
 
-**DEPLOY_SSH_KEY 正确填写方式**：在终端执行 `cat ~/.ssh/deploy_key`，整段复制（含首尾 `-----BEGIN/END-----`），不要增减空格或换行。若仍报 Permission denied，改用 `DEPLOY_SSH_KEY_B64`。
+**DEPLOY_ENV_B64（环境变量全覆盖）**：
+1. 复制 `deploy/env.production.example`，填入实际密码和配置
+2. 保存为临时文件（如 `prod.env`）
+3. 生成 Base64：`base64 -w 0 prod.env`（Linux）或 `base64 -i prod.env | tr -d '\n'`（Mac）
+4. 将输出粘贴到 `DEPLOY_ENV_B64` Secret
 
 ### 4. 在服务器添加部署公钥
 
@@ -114,8 +111,13 @@ docker run -d --name apiserver --restart unless-stopped -p 8081:8081 \
 
 ---
 
-## 容器通过公网 IP 访问 PostgreSQL / Redis
+## 部署网络与数据库访问
 
-`.env` 中设置 `DB_HOST`、`REDIS_HOST` 为服务器公网 IP（如 `47.94.197.213`），容器直接经公网端口访问。
+部署使用 Docker 网络 **1panel-network**，通过容器名访问 1Panel 的 PostgreSQL 和 Redis：
 
-**宿主机需配置**：PostgreSQL 和 Redis 需监听 `0.0.0.0`（或公网网卡），且防火墙开放 5432、6379 端口。
+| 服务      | 容器名                | 配置项    |
+|-----------|-----------------------|-----------|
+| PostgreSQL| 1Panel-postgresql-2pcq| DB_HOST   |
+| Redis     | 1Panel-redis-Fy6t     | REDIS_HOST|
+
+详见 `deploy/env.production.example`。

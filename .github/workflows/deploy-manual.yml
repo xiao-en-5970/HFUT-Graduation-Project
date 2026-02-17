@@ -22,36 +22,54 @@ jobs:
           docker build -t apiserver:latest .
           docker save apiserver:latest | gzip > apiserver.tar.gz
 
+      - name: 写入部署环境变量
+        id: deploy_env
+        run: |
+          if [ -n "$DEPLOY_ENV_B64" ]; then
+            echo "$DEPLOY_ENV_B64" | base64 -d > deploy.env
+            echo "has_env=true" >> $GITHUB_OUTPUT
+          else
+            echo "未配置 DEPLOY_ENV_B64，将使用服务器已有 /opt/app/.env"
+            echo "has_env=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          DEPLOY_ENV_B64: ${{ secrets.DEPLOY_ENV_B64 }}
+
       - name: 配置 SSH 并部署
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_SSH_KEY_B64: ${{ secrets.DEPLOY_SSH_KEY_B64 }}
+          HAS_DEPLOY_ENV: ${{ steps.deploy_env.outputs.has_env }}
         run: |
           set -e
           mkdir -p ~/.ssh
-          # 支持原始私钥或 Base64 编码（Base64 可避免 GitHub 粘贴换行问题）
           if [ -n "$DEPLOY_SSH_KEY_B64" ]; then
             echo "$DEPLOY_SSH_KEY_B64" | base64 -d > ~/.ssh/deploy_key
           else
             printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           fi
           chmod 600 ~/.ssh/deploy_key
-          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效，请检查 DEPLOY_SSH_KEY 是否正确"; exit 1; }
+          ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效"; exit 1; }
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          echo "[1/2] 传输镜像到服务器..."
+          echo "[1/3] 传输镜像到服务器..."
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no apiserver.tar.gz "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/"
-          echo "[2/2] 替换容器并启动..."
+          echo "[2/3] 传输环境变量..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p /opt/app"
+          if [ "$HAS_DEPLOY_ENV" = "true" ]; then
+            scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no deploy.env "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/app/.env"
+          fi
+          echo "[3/3] 替换容器并启动..."
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" '
             docker load < /tmp/apiserver.tar.gz
             rm -f /tmp/apiserver.tar.gz
+            mkdir -p /opt/app
             docker stop apiserver 2>/dev/null || true
             docker rm apiserver 2>/dev/null || true
-            ENV_OPT=""
-            [ -f /opt/app/.env ] && ENV_OPT="--env-file /opt/app/.env"
             docker run -d --name apiserver --restart unless-stopped \
+              --network 1panel-network \
               -p 8081:8081 -e SERVER_PORT=8081 -e SERVER_HOST=0.0.0.0 \
-              $ENV_OPT apiserver:latest
-            echo "部署完成，端口 8081"
+              --env-file /opt/app/.env apiserver:latest
+            echo "部署完成，端口 8081，网络 1panel-network"
           '
