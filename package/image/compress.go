@@ -1,15 +1,20 @@
 package image
 
+// image.Decode 需导入格式包才会注册解码器，否则报 "unknown format"。支持的格式应与 oss.imageExts 一致
 import (
 	"bytes"
 	"fmt"
 	"image"
 	"image/color"
+	_ "image/gif" // 注册解码器，image.Decode 需导入格式包才能识别
 	"image/jpeg"
+	_ "image/png"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	_ "golang.org/x/image/webp" // 同上，imageExts 支持的格式需全部注册
 
 	"github.com/nfnt/resize"
 	"golang.org/x/image/draw"
