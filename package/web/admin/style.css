@@ -137,6 +137,15 @@ td { font-size: 0.9rem; }
   background: var(--bg-hover); color: var(--text); cursor: pointer; font-size: 0.85rem;
 }
 .modal input[type="file"]:hover::file-selector-button { background: var(--accent); color: white; }
+.modal .existing-images { margin-bottom: 1rem; }
+.modal .existing-images .label { font-size: 0.9rem; color: var(--text-muted); margin-right: 0.5rem; display: inline-block; vertical-align: top; }
+.modal .existing-images a { display: inline-block; margin: 0 0.25rem 0.25rem 0; }
+.modal .existing-images img { max-width: 64px; max-height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid #3d424d; }
+.list-images-wrap { display: flex; flex-wrap: wrap; gap: 2px; max-width: 180px; max-height: 80px; overflow: auto; }
+.list-images-wrap a { display: inline-block; }
+.list-thumb { max-width: 36px; max-height: 36px; object-fit: cover; border-radius: 4px; display: block; }
+.file-preview { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 0.5rem; }
+.preview-thumb { max-width: 64px; max-height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid #3d424d; }
 .modal .actions, .modal .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #2d323c; }
 .modal .modal-actions .btn { margin-left: 0; }
 .status-badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
