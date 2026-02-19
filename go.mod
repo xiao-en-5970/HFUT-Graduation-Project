@@ -5,6 +5,7 @@ go 1.23.0
 toolchain go1.23.7
 
 require (
+	github.com/bwmarrin/snowflake v0.3.0
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.3.0

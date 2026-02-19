@@ -3,6 +3,7 @@ package constant
 const (
 	StatusValid   = 1
 	StatusInvalid = 2
+	StatusDraft   = 3 // 草稿，仅创建元信息，用于先获取 ID 再做 OSS 上传
 )
 
 // ArticleType 文章类型

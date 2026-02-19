@@ -17,6 +17,10 @@
   },
   "tags": [
     {"name": "系统", "description": "健康检查"},
+    {
+      "name": "草稿",
+      "description": "帖子/提问/回答草稿汇总"
+    },
     {"name": "用户", "description": "注册、登录、个人信息"},
     {"name": "帖子", "description": "type=1 普通文章"},
     {"name": "提问", "description": "type=2 问答"},
@@ -51,30 +55,62 @@
     },
     "ArticleCreate": {
       "type": "object",
-      "required": ["title", "content"],
+      "description": "创建草稿（status=3），仅存元信息，立即返回 id。后续通过 PUT 编辑和上传图片，PUT 时传 status=1 发布",
       "properties": {
-        "title": {"type": "string", "description": "标题", "example": "我的第一篇文章"},
-        "content": {"type": "string", "description": "正文内容", "example": "这是文章正文..."},
+        "title": {
+          "type": "string",
+          "description": "标题，可选"
+        },
+        "content": {
+          "type": "string",
+          "description": "正文，可选"
+        },
         "publish_status": {"type": "integer", "description": "1=私密 2=公开", "default": 1},
         "parent_id": {"type": "integer", "description": "回答必传，对应提问ID"}
       },
-      "example": {"title": "如何学习Go", "content": "Go语言学习心得...", "publish_status": 2}
+      "example": {
+        "publish_status": 2
+      }
     },
     "ArticleUpdate": {
       "type": "object",
       "properties": {
         "title": {"type": "string"},
         "content": {"type": "string"},
-        "publish_status": {"type": "integer", "description": "1私密 2公开"}
+        "publish_status": {
+          "type": "integer",
+          "description": "1私密 2公开"
+        },
+        "status": {
+          "type": "integer",
+          "description": "1=发布 3=草稿，草稿改为 1 即发布"
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "图片 URL 列表，按传入顺序覆盖。需先通过 POST /:id/images 或 OSS 上传获得 URL"
+        }
       }
     },
     "ArticleImages": {
       "type": "object",
       "required": ["images"],
       "properties": {
-        "images": {"type": "array", "items": {"type": "string"}, "description": "图片URL数组"}
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "图片 URL 数组（.small 缩略图路径），已合并到 ArticleUpdate，此定义供参考"
+        }
       },
-      "example": {"images": ["http://api.example.com/api/v1/oss/article/1/image_1.jpg.small"]}
+      "example": {
+        "images": [
+          "/api/v1/oss/article/1/img_123456.jpg.small"
+        ]
+      }
     },
     "Article": {
       "type": "object",
@@ -203,7 +239,17 @@
         "user_id": {"type": "integer"},
         "school_id": {"type": "integer"},
         "publish_status": {"type": "integer"},
-        "images": {"type": "array", "items": {"type": "string"}, "description": "图片完整 URL 数组"}
+        "status": {
+          "type": "integer",
+          "description": "1正常 2禁用"
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "图片 URL 列表，按顺序覆盖。先通过 POST /oss/*path 上传获得 URL"
+        }
       }
     },
     "School": {
@@ -449,6 +495,7 @@
       "put": {
         "tags": ["帖子"],
         "summary": "更新帖子",
+        "description": "支持 title、content、publish_status、images。images 按传入顺序覆盖，图片替换统一在此接口完成",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
@@ -468,23 +515,29 @@
       "post": {
         "tags": ["帖子"],
         "summary": "上传帖子图片",
+        "description": "仅上传到 OSS，返回 data.urls，不更新文章。图片更新需配合 PUT /post/{id} 的 images 字段",
         "security": [{"BearerAuth": []}],
         "consumes": ["multipart/form-data"],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
-          {"in": "formData", "name": "files", "type": "file", "required": true}
+          {
+            "in": "formData",
+            "name": "files",
+            "type": "file",
+            "required": true,
+            "description": "多张图片"
+          }
         ],
-        "responses": {"200": {"schema": {"$ref": "#/definitions/Response"}}, "401": {}, "404": {}}
-      },
-      "put": {
-        "tags": ["帖子"],
-        "summary": "更新图片列表",
-        "security": [{"BearerAuth": []}],
-        "parameters": [
-          {"in": "path", "name": "id", "type": "integer", "required": true},
-          {"in": "body", "name": "body", "schema": {"$ref": "#/definitions/ArticleImages"}}
-        ],
-        "responses": {"200": {"schema": {"$ref": "#/definitions/Response"}}, "401": {}, "404": {}}
+        "responses": {
+          "200": {
+            "description": "data.urls 为图片 URL 数组",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {},
+          "404": {}
+        }
       }
     },
     "/api/v1/question": {
@@ -530,6 +583,7 @@
       "put": {
         "tags": ["提问"],
         "summary": "更新提问",
+        "description": "支持 title、content、publish_status、images，图片替换统一在此接口完成",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
@@ -562,23 +616,20 @@
       "post": {
         "tags": ["提问"],
         "summary": "上传提问图片",
+        "description": "仅上传到 OSS 返回 data.urls，不更新文章。图片更新走 PUT /question/{id}",
         "security": [{"BearerAuth": []}],
         "consumes": ["multipart/form-data"],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
           {"in": "formData", "name": "files", "type": "file", "required": true}
         ],
-        "responses": {"200": {}, "401": {}, "404": {}}
-      },
-      "put": {
-        "tags": ["提问"],
-        "summary": "更新提问图片列表",
-        "security": [{"BearerAuth": []}],
-        "parameters": [
-          {"in": "path", "name": "id", "type": "integer", "required": true},
-          {"in": "body", "name": "body", "schema": {"$ref": "#/definitions/ArticleImages"}}
-        ],
-        "responses": {"200": {}, "401": {}, "404": {}}
+        "responses": {
+          "200": {
+            "description": "data.urls"
+          },
+          "401": {},
+          "404": {}
+        }
       }
     },
     "/api/v1/answer": {
@@ -632,6 +683,7 @@
       "put": {
         "tags": ["回答"],
         "summary": "更新回答",
+        "description": "支持 title、content、publish_status、images，图片替换统一在此接口完成",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
@@ -651,23 +703,132 @@
       "post": {
         "tags": ["回答"],
         "summary": "上传回答图片",
+        "description": "仅上传到 OSS 返回 data.urls，不更新文章。图片更新走 PUT /answer/{id}",
         "security": [{"BearerAuth": []}],
         "consumes": ["multipart/form-data"],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
           {"in": "formData", "name": "files", "type": "file", "required": true}
         ],
-        "responses": {"200": {}, "401": {}, "404": {}}
-      },
-      "put": {
-        "tags": ["回答"],
-        "summary": "更新回答图片列表",
+        "responses": {
+          "200": {
+            "description": "data.urls"
+          },
+          "401": {},
+          "404": {}
+        }
+      }
+    },
+    "/api/v1/drafts": {
+      "get": {
+        "tags": [
+          "草稿"
+        ],
+        "summary": "草稿列表",
+        "description": "汇总当前用户的帖子/提问/回答草稿，草稿不可见，可发布为正式文章",
         "security": [{"BearerAuth": []}],
         "parameters": [
-          {"in": "path", "name": "id", "type": "integer", "required": true},
-          {"in": "body", "name": "body", "schema": {"$ref": "#/definitions/ArticleImages"}}
+          {
+            "in": "query",
+            "name": "type",
+            "type": "integer",
+            "description": "0=全部 1=帖子 2=提问 3=回答",
+            "default": 0
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
         ],
-        "responses": {"200": {}, "401": {}, "404": {}}
+        "responses": {
+          "200": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Response"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/definitions/ArticleListResponse"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "401": {}
+        }
+      }
+    },
+    "/api/v1/drafts/{id}/publish": {
+      "post": {
+        "tags": [
+          "草稿"
+        ],
+        "summary": "草稿发布",
+        "description": "将草稿发布为正式文章（status 3→1）",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {},
+          "404": {}
+        }
+      }
+    },
+    "/api/v1/drafts/{id}": {
+      "delete": {
+        "tags": [
+          "草稿"
+        ],
+        "summary": "删除草稿",
+        "description": "软删除草稿，复用现有删除逻辑",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {},
+          "404": {}
+        }
       }
     },
     "/api/v1/comments/{extType}/{id}": {

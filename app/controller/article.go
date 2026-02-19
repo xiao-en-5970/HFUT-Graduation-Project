@@ -16,10 +16,10 @@ import (
 
 // ArticleHandlers 返回指定类型的文章 CRUD 处理器（帖子1/提问2/回答3），学校+类型隔离
 func ArticleHandlers(articleType int) struct {
-	List, Search, Create, Get, Update, UploadImages, UpdateImages, Delete gin.HandlerFunc
+	List, Search, Create, Get, Update, UploadImages, Delete gin.HandlerFunc
 } {
 	return struct {
-		List, Search, Create, Get, Update, UploadImages, UpdateImages, Delete gin.HandlerFunc
+		List, Search, Create, Get, Update, UploadImages, Delete gin.HandlerFunc
 	}{
 		List: func(ctx *gin.Context) {
 			schoolID := middleware.GetSchoolID(ctx)
@@ -179,36 +179,6 @@ func ArticleHandlers(articleType int) struct {
 				return
 			}
 			reply.ReplyOKWithData(ctx, gin.H{"urls": urls})
-		},
-		UpdateImages: func(ctx *gin.Context) {
-			userID := middleware.GetUserID(ctx)
-			schoolID := middleware.GetSchoolID(ctx)
-			if userID == 0 {
-				reply.ReplyUnauthorized(ctx)
-				return
-			}
-			idStr := ctx.Param("id")
-			id, err := strconv.ParseUint(idStr, 10, 32)
-			if err != nil {
-				reply.ReplyInvalidParams(ctx, err)
-				return
-			}
-			var body struct {
-				Images []string `json:"images"`
-			}
-			if err := ctx.BindJSON(&body); err != nil {
-				reply.ReplyInvalidParams(ctx, err)
-				return
-			}
-			if err := service.Article().UpdateImages(ctx, uint(id), userID, schoolID, articleType, body.Images); err != nil {
-				if errors.Is(err, service.ErrArticleNotFoundOrNoPermission) {
-					reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
-					return
-				}
-				reply.ReplyInternalError(ctx, err)
-				return
-			}
-			reply.ReplyOK(ctx)
 		},
 		Delete: func(ctx *gin.Context) {
 			userID := middleware.GetUserID(ctx)

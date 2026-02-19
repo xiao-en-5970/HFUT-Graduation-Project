@@ -300,11 +300,11 @@ func adminArticleRestore(ctx *gin.Context, articleType int) {
 	reply.ReplyOK(ctx)
 }
 
-// AdminArticleCreate 管理员：创建文章（帖子/提问/回答）。user_id/school_id 可选，回答需 parent_id
+// AdminArticleCreate 管理员：创建草稿（status=3），仅存元信息，返回 id 供后续编辑和图片上传
 func AdminArticleCreate(ctx *gin.Context, articleType int) {
 	var body struct {
-		Title         string `json:"title" binding:"required"`
-		Content       string `json:"content" binding:"required"`
+		Title         string `json:"title"`
+		Content       string `json:"content"`
 		UserID        *uint  `json:"user_id"`
 		SchoolID      *uint  `json:"school_id"`
 		PublishStatus int16  `json:"publish_status"`
@@ -363,7 +363,7 @@ func AdminArticleCreate(ctx *gin.Context, articleType int) {
 		ParentID:      pid,
 		Title:         body.Title,
 		Content:       body.Content,
-		Status:        constant.StatusValid,
+		Status:        constant.StatusDraft,
 		PublishStatus: pubStatus,
 		Type:          articleType,
 	}

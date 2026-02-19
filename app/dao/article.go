@@ -38,10 +38,21 @@ func (s *ArticleStore) GetByIDWithSchool(ctx context.Context, id uint, schoolID 
 	return a, err
 }
 
-// GetByIDWithSchoolAndType 按ID获取，学校+类型隔离
+// GetByIDWithSchoolAndType 按ID获取，学校+类型隔离（仅 status=1）
 func (s *ArticleStore) GetByIDWithSchoolAndType(ctx context.Context, id uint, schoolID uint, articleType int) (*model.Article, error) {
 	a := &model.Article{}
 	q := pgsql.DB.Where("id = ? AND status = ? AND type = ?", id, constant.StatusValid, articleType)
+	if schoolID > 0 {
+		q = q.Where("school_id = ?", schoolID)
+	}
+	err := q.First(a).Error
+	return a, err
+}
+
+// GetByIDWithSchoolAndTypeAllowDraft 按ID获取，学校+类型，允许 status=1 或 3
+func (s *ArticleStore) GetByIDWithSchoolAndTypeAllowDraft(ctx context.Context, id uint, schoolID uint, articleType int) (*model.Article, error) {
+	a := &model.Article{}
+	q := pgsql.DB.Where("id = ? AND type = ? AND status IN ?", id, articleType, []int16{constant.StatusValid, constant.StatusDraft})
 	if schoolID > 0 {
 		q = q.Where("school_id = ?", schoolID)
 	}
@@ -188,7 +199,7 @@ func (s *ArticleStore) ExistsAndOwnedByWithSchool(ctx context.Context, id uint, 
 	return count > 0, err
 }
 
-// ExistsAndOwnedByWithSchoolAndType 校验存在、归属用户、同校且类型匹配
+// ExistsAndOwnedByWithSchoolAndType 校验存在、归属用户、同校且类型匹配（仅 status=1 正常）
 func (s *ArticleStore) ExistsAndOwnedByWithSchoolAndType(ctx context.Context, id uint, userID uint, schoolID uint, articleType int) (bool, error) {
 	var count int64
 	q := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ? AND type = ? AND status = ?", id, int(userID), articleType, constant.StatusValid)
@@ -197,6 +208,49 @@ func (s *ArticleStore) ExistsAndOwnedByWithSchoolAndType(ctx context.Context, id
 	}
 	err := q.Count(&count).Error
 	return count > 0, err
+}
+
+// ExistsAndOwnedByWithSchoolAndTypeAllowDraft 校验存在、归属、同校、类型，允许 status=1 或 3（草稿可编辑）
+func (s *ArticleStore) ExistsAndOwnedByWithSchoolAndTypeAllowDraft(ctx context.Context, id uint, userID uint, schoolID uint, articleType int) (bool, error) {
+	var count int64
+	q := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ? AND type = ?", id, int(userID), articleType).
+		Where("status IN ?", []int16{constant.StatusValid, constant.StatusDraft})
+	if schoolID > 0 {
+		q = q.Where("school_id = ?", schoolID)
+	}
+	err := q.Count(&count).Error
+	return count > 0, err
+}
+
+// ListDrafts 草稿列表，按用户汇总，type=0 全部 1帖子 2提问 3回答
+func (s *ArticleStore) ListDrafts(ctx context.Context, userID uint, schoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	q := pgsql.DB.WithContext(ctx).Model(&model.Article{}).Where("status = ? AND user_id = ?", constant.StatusDraft, int(userID))
+	if articleType > 0 {
+		q = q.Where("type = ?", articleType)
+	}
+	if schoolID > 0 {
+		q = q.Where("school_id = ?", schoolID)
+	}
+	var total int64
+	q.Count(&total)
+	var list []*model.Article
+	err := q.Order("created_at DESC").Limit(pageSize).Offset(offset).Find(&list).Error
+	return list, total, err
+}
+
+// PublishDraft 草稿发布为正式文章，返回是否更新成功
+func (s *ArticleStore) PublishDraft(ctx context.Context, id uint, userID uint) (bool, error) {
+	result := pgsql.DB.WithContext(ctx).Model(&model.Article{}).
+		Where("id = ? AND user_id = ? AND status = ?", id, int(userID), constant.StatusDraft).
+		Update("status", constant.StatusValid)
+	return result.RowsAffected > 0, result.Error
 }
 
 // ListByParentID 按父文章ID分页列出子文章（回答），学校隔离

@@ -141,6 +141,91 @@ td { font-size: 0.9rem; }
 .modal .existing-images .label { font-size: 0.9rem; color: var(--text-muted); margin-right: 0.5rem; display: inline-block; vertical-align: top; }
 .modal .existing-images a { display: inline-block; margin: 0 0.25rem 0.25rem 0; }
 .modal .existing-images img { max-width: 64px; max-height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid #3d424d; }
+
+.art-images-editor {
+    margin: 1rem 0;
+}
+
+.art-images-editor .label {
+    display: block;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.art-images-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 0.75rem;
+}
+
+.art-img-item {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    border: 1px solid #3d424d;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-dark);
+}
+
+.art-img-item img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: cover;
+}
+
+.art-img-del {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    line-height: 1;
+    font-size: 14px;
+    border: none;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.art-img-del:hover {
+    opacity: 1;
+    background: #dc2626;
+}
+
+.art-img-move {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.art-img-move:hover {
+    opacity: 1;
+}
+
+.art-add-label {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
 .list-images-wrap { display: flex; flex-wrap: wrap; gap: 2px; max-width: 180px; max-height: 80px; overflow: auto; }
 .list-images-wrap a { display: inline-block; }
 .list-thumb { max-width: 36px; max-height: 36px; object-fit: cover; border-radius: 4px; display: block; }

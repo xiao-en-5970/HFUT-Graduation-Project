@@ -387,9 +387,7 @@
     const parentOpts = isAnswer ? questionListForAnswer.map(q => `<option value="${q.id}" ${row?.parent_id === q.id ? 'selected' : ''}>#${q.id} ${(q.title||'').slice(0,30)}</option>`).join('') : '';
     const parentDefault = isAnswer ? '<option value="">请选择提问</option>' : '';
     const parentHtml = isAnswer ? `<label>父提问ID <select id="art-parent_id" required>${parentDefault}${parentOpts}</select></label>` : '';
-    const existingImgs = row?.images && Array.isArray(row.images) && row.images.length
-      ? `<div class="existing-images"><span class="label">已上传图片：</span>${row.images.map((u, i) => `<a href="${u || ''}" target="_blank" title="${u}"><img src="${u || ''}" alt="图${i + 1}" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`
-      : '';
+    const initialImgs = row?.images && Array.isArray(row.images) ? [...row.images] : [];
     showModal(title, `
       ${parentHtml}
       <label>标题 <input type="text" id="art-title" value="${row ? (row.title || '') : ''}" placeholder="标题" required></label>
@@ -397,9 +395,11 @@
       <label>用户ID <input type="number" id="art-user_id" value="${row?.user_id || ''}" placeholder="0"></label>
       <label>学校ID <input type="number" id="art-school_id" value="${row?.school_id || ''}" placeholder="0"></label>
       <label>公开 <select id="art-publish_status"><option value="1" ${row?.publish_status === 1 ? 'selected' : ''}>私密</option><option value="2" ${!row || row.publish_status === 2 ? 'selected' : ''}>公开</option></select></label>
-      ${existingImgs}
-      <label>图片（可多选）<input type="file" id="art-images" accept="image/*" multiple></label>
-      <div id="art-file-preview" class="file-preview"></div>
+      <div class="art-images-editor">
+        <span class="label">图片（可删除、调整顺序、新增）</span>
+        <div id="art-images-list" class="art-images-list"></div>
+        <label class="art-add-label">添加图片 <input type="file" id="art-images-add" accept="image/*" multiple></label>
+      </div>
     `, async (ov) => {
       const payload = {
         title: ov.querySelector('#art-title').value.trim(),
@@ -413,30 +413,17 @@
         if (!pid) throw new Error('请选择父提问');
         payload.parent_id = pid;
       }
-      const files = ov.querySelector('#art-images').files;
+      let images = Array.from(ov.querySelectorAll('#art-images-list .art-img-item')).map(el => el.dataset.url).filter(Boolean);
 
       const progress = ensureUploadProgress(ov);
       const confirmBtn = ov.querySelector('#modal-confirm');
-      const totalFiles = files && files.length ? files.length : 0;
       try {
         if (row) {
-          let images = row.images && Array.isArray(row.images) ? [...row.images] : [];
-          if (files && files.length) {
-            confirmBtn.disabled = true;
-            for (let i = 0; i < files.length; i++) {
-              progress.show(`上传图片 ${i + 1}/${totalFiles}`);
-              const ext = getExt(files[i].name);
-              const url = await apiUpload(`article/${row.id}/image_${images.length + i + 1}.${ext}`, files[i], {
-                onProgress: (p) => progress.update(p, `上传图片 ${i + 1}/${totalFiles} ${p}%`)
-              });
-              images.push(url);
-              progress.update(100);
-            }
-          }
           const putBody = { title: payload.title, content: payload.content, publish_status: payload.publish_status, user_id: payload.user_id, school_id: payload.school_id };
-          if (images.length) putBody.images = images;
+          putBody.images = images;
           await api(`/admin/${type}/${row.id}`, { method: 'PUT', body: JSON.stringify(putBody) });
         } else {
+          // 先创建草稿获取 id，再上传图片，最后 PUT 发布
           const createPayload = { title: payload.title, content: payload.content };
           if (payload.user_id) createPayload.user_id = payload.user_id;
           if (payload.school_id) createPayload.school_id = payload.school_id;
@@ -444,20 +431,26 @@
           if (isAnswer) createPayload.parent_id = payload.parent_id;
           const d = await api(`/admin/${type}`, { method: 'POST', body: JSON.stringify(createPayload) });
           const newId = d.data?.id;
-          if (newId && files && files.length) {
+          if (!newId) throw new Error('创建失败');
             confirmBtn.disabled = true;
-            const images = [];
-            for (let i = 0; i < files.length; i++) {
-              progress.show(`上传图片 ${i + 1}/${totalFiles}`);
-              const ext = getExt(files[i].name);
-              const url = await apiUpload(`article/${newId}/image_${i + 1}.${ext}`, files[i], {
-                onProgress: (p) => progress.update(p, `上传图片 ${i + 1}/${totalFiles} ${p}%`)
-              });
-              images.push(url);
-              progress.update(100);
+          const toUpload = Array.from(ov.querySelectorAll('#art-images-list .art-img-pending')).map(el => el._file).filter(Boolean);
+          let urls = [];
+          for (let i = 0; i < toUpload.length; i++) {
+            progress.show(`上传图片 ${i + 1}/${toUpload.length}`);
+            const ext = getExt(toUpload[i].name);
+            const path = `article/${newId}/img_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+            urls.push(await apiUpload(path, toUpload[i], {onProgress: (p) => progress.update(p)}));
             }
-            await api(`/admin/${type}/${newId}`, { method: 'PUT', body: JSON.stringify({ images }) });
-          }
+          const putBody = {
+            title: payload.title,
+            content: payload.content,
+            publish_status: payload.publish_status,
+            user_id: payload.user_id,
+            school_id: payload.school_id,
+            images: urls,
+            status: 1
+          };
+          await api(`/admin/${type}/${newId}`, {method: 'PUT', body: JSON.stringify(putBody)});
         }
       } finally {
         progress.hide();
@@ -467,16 +460,87 @@
       else if (type === 'questions') renderQuestions();
       else renderAnswers();
     }, null, (ov) => {
-      ov.querySelector('#art-images')?.addEventListener('change', function() {
-        const preview = ov.querySelector('#art-file-preview');
-        if (!preview) return;
-        preview.innerHTML = '';
-        for (let i = 0; i < this.files.length; i++) {
-          const img = document.createElement('img');
-          img.src = URL.createObjectURL(this.files[i]);
-          img.alt = '预览' + (i + 1);
-          img.className = 'preview-thumb';
-          preview.appendChild(img);
+      const listEl = ov.querySelector('#art-images-list');
+      const articleId = row?.id;
+
+      function renderImages(urls) {
+        listEl.innerHTML = urls.map((url, i) => `
+          <span class="art-img-item" data-url="${url || ''}" data-idx="${i}">
+            <img src="${url || ''}" alt="图${i + 1}" onerror="this.style.display='none'"/>
+            <button type="button" class="art-img-del" title="删除">×</button>
+            <span class="art-img-move" title="下移">⇅</span>
+          </span>
+        `).join('');
+        listEl.querySelectorAll('.art-img-del').forEach(btn => {
+          btn.onclick = () => btn.closest('.art-img-item').remove();
+        });
+        listEl.querySelectorAll('.art-img-move').forEach((span) => {
+          const item = span.closest('.art-img-item');
+          span.onclick = () => {
+            const next = item.nextElementSibling;
+            if (next) listEl.insertBefore(next, item);
+          };
+        });
+      }
+
+      function addImages(urls) {
+        urls.forEach(url => {
+          const span = document.createElement('span');
+          span.className = 'art-img-item';
+          span.dataset.url = url || '';
+          span.innerHTML = `<img src="${url || ''}" alt="" onerror="this.style.display='none'"/><button type="button" class="art-img-del" title="删除">×</button><span class="art-img-move" title="下移">⇅</span>`;
+          span.querySelector('.art-img-del').onclick = () => span.remove();
+          span.querySelector('.art-img-move').onclick = () => {
+            const next = span.nextElementSibling;
+            if (next) listEl.insertBefore(next, span);
+          };
+          listEl.appendChild(span);
+        });
+      }
+
+      function addPendingFiles(files) {
+        Array.from(files).forEach(file => {
+          const url = URL.createObjectURL(file);
+          const span = document.createElement('span');
+          span.className = 'art-img-item art-img-pending';
+          span.dataset.url = '';
+          span._file = file;
+          span.innerHTML = `<img src="${url}" alt="" onerror="this.style.display='none'"/><button type="button" class="art-img-del" title="删除">×</button><span class="art-img-move" title="下移">⇅</span>`;
+          span.querySelector('.art-img-del').onclick = () => {
+            URL.revokeObjectURL(url);
+            span.remove();
+          };
+          span.querySelector('.art-img-move').onclick = () => {
+            const next = span.nextElementSibling;
+            if (next) listEl.insertBefore(next, span);
+          };
+          listEl.appendChild(span);
+        });
+      }
+
+      renderImages(initialImgs);
+
+      ov.querySelector('#art-images-add')?.addEventListener('change', async function () {
+        const files = this.files;
+        this.value = '';
+        if (!files || !files.length) return;
+        if (articleId) {
+          const progress = ensureUploadProgress(ov);
+          try {
+            for (let i = 0; i < files.length; i++) {
+              progress.show(`上传图片 ${i + 1}/${files.length}`);
+              const ext = getExt(files[i].name);
+              const path = `article/${articleId}/img_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+              const url = await apiUpload(path, files[i], {onProgress: (p) => progress.update(p)});
+              addImages([url]);
+            }
+          } catch (e) {
+            alert(e.message);
+          } finally {
+            progress.hide();
+          }
+        } else {
+          addPendingFiles(files);
         }
       });
     });

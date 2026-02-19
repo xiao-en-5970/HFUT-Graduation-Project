@@ -253,13 +253,22 @@ func UserBackgroundPath(userID uint, ext string) string {
 	return "user/" + strconv.FormatUint(uint64(userID), 10) + "/background." + ext
 }
 
-// ArticleImagePath 帖子图片存储路径 article/{articleId}/image_{index}.{ext}
+// ArticleImagePath 帖子图片存储路径 article/{articleId}/image_{index}.{ext}（已弃用，新上传请用 ArticleImagePathWithSnowflake）
 func ArticleImagePath(articleID uint, index int, ext string) string {
 	ext = strings.TrimPrefix(ext, ".")
 	if ext == "" {
 		ext = "jpg"
 	}
 	return "article/" + strconv.FormatUint(uint64(articleID), 10) + "/image_" + strconv.Itoa(index) + "." + ext
+}
+
+// ArticleImagePathWithSnowflake 帖子图片存储路径（雪花 ID 避免冲突）article/{articleId}/img_{snowflake}.{ext}
+func ArticleImagePathWithSnowflake(articleID uint, snowflakeID int64, ext string) string {
+	ext = strings.TrimPrefix(ext, ".")
+	if ext == "" {
+		ext = "jpg"
+	}
+	return "article/" + strconv.FormatUint(uint64(articleID), 10) + "/img_" + strconv.FormatInt(snowflakeID, 10) + "." + ext
 }
 
 // PathForStorage 统一存 .small（缩略图），供数据库存储；若已是 .small 或非图片则原样返回

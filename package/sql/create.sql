@@ -62,7 +62,7 @@ create table articles (
 comment on column articles.user_id is '用户ID';
 comment on column articles.title is '文章标题';
 comment on column articles.content is '文章内容';
-comment on column articles.status is '1:正常 2:禁用';
+comment on column articles.status is '1:正常 2:禁用 3:草稿';
 comment on column articles.publish_status is '1:私密 2:公开';
 comment on column articles.type is '1:普通文章 2:提问 3:回答';
 comment on column articles.view_count is '浏览次数';
