@@ -112,6 +112,18 @@
   const ROLE_MAP = { 1: '普通用户', 2: '管理员', 3: '超级管理员', 4: '匿名用户' };
   const STATUS_MAP = { 1: '正常', 2: '禁用' };
 
+  /** 列表单图展示（头像/背景），与帖子图片同一套 display 逻辑 */
+  function renderListImage(url, title) {
+    if (!url) return '-';
+    return `<div class="list-images-wrap"><a href="${url}" target="_blank" title="${title || '图片'}"><img src="${url}" alt="${title || '图片'}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a></div>`;
+  }
+  /** 列表多图展示（帖子/提问/回答），与单图同一套 display 逻辑 */
+  function renderListImages(urls) {
+    const imgs = urls && Array.isArray(urls) ? urls : [];
+    if (!imgs.length) return '-';
+    return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${u || ''}" target="_blank" title="图${i + 1}"><img src="${u || ''}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
+  }
+
   let userPage = 1;
   async function renderUsers() {
     moduleContent.innerHTML = '<p>加载中...</p>';
@@ -122,6 +134,8 @@
       const columns = [
         { key: 'id', label: 'ID' },
         { key: 'username', label: '用户名' },
+        { key: 'avatar', label: '头像', render: r => renderListImage(r.avatar, '头像') },
+        { key: 'background', label: '背景图', render: r => renderListImage(r.background, '背景图') },
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${STATUS_MAP[r.status] || r.status}</span>` },
         { key: 'role', label: '角色', render: r => `<span class="role-${r.role}">${ROLE_MAP[r.role] || r.role}</span>` },
         { key: 'created_at', label: '注册时间', render: r => (r.created_at || '').slice(0, 19) },
@@ -167,10 +181,16 @@
 
   function showEditUserModal(id, user) {
     if (!user) return;
+    const existingAvatar = user.avatar ? `<div class="existing-images"><span class="label">已上传头像：</span><a href="${user.avatar}" target="_blank" title="头像"><img src="${user.avatar}" alt="头像" onerror="this.parentElement.style.display='none'"/></a></div>` : '';
+    const existingBg = user.background ? `<div class="existing-images"><span class="label">已上传背景图：</span><a href="${user.background}" target="_blank" title="背景图"><img src="${user.background}" alt="背景图" onerror="this.parentElement.style.display='none'"/></a></div>` : '';
     showModal('编辑用户 #' + id, `
       <label>学校ID <input type="number" id="ue-school_id" value="${user.school_id || 0}"></label>
-      <label>头像 <input type="file" id="ue-avatar" accept="image/*"></label>
-      <label>背景图 <input type="file" id="ue-background" accept="image/*"></label>
+      ${existingAvatar}
+      <label>头像（可更换）<input type="file" id="ue-avatar" accept="image/*"></label>
+      <div id="ue-avatar-preview" class="file-preview"></div>
+      ${existingBg}
+      <label>背景图（可更换）<input type="file" id="ue-background" accept="image/*"></label>
+      <div id="ue-background-preview" class="file-preview"></div>
     `, async (ov) => {
       const updates = { school_id: parseInt(ov.querySelector('#ue-school_id').value || '0', 10) || 0 };
       const avatarFile = ov.querySelector('#ue-avatar').files[0];
@@ -185,6 +205,31 @@
       }
       await api('/admin/users/' + id, { method: 'PUT', body: JSON.stringify(updates) });
       renderUsers();
+    }, null, (ov) => {
+      ov.querySelector('#ue-avatar')?.addEventListener('change', function() {
+        const preview = ov.querySelector('#ue-avatar-preview');
+        if (!preview) return;
+        preview.innerHTML = '';
+        if (this.files?.[0]) {
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(this.files[0]);
+          img.alt = '头像预览';
+          img.className = 'preview-thumb';
+          preview.appendChild(img);
+        }
+      });
+      ov.querySelector('#ue-background')?.addEventListener('change', function() {
+        const preview = ov.querySelector('#ue-background-preview');
+        if (!preview) return;
+        preview.innerHTML = '';
+        if (this.files?.[0]) {
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(this.files[0]);
+          img.alt = '背景图预览';
+          img.className = 'preview-thumb';
+          preview.appendChild(img);
+        }
+      });
     });
   }
 
@@ -198,11 +243,7 @@
       const columns = [
         { key: 'id', label: 'ID' },
         { key: 'title', label: '标题', render: r => (r.title || '').slice(0, 40) + (r.title?.length > 40 ? '...' : '') },
-        { key: 'images', label: '图片', render: r => {
-          const imgs = r.images && Array.isArray(r.images) ? r.images : [];
-          if (!imgs.length) return '-';
-          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${u || ''}" target="_blank" title="图${i + 1}"><img src="${u || ''}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
-        }},
+        { key: 'images', label: '图片', render: r => renderListImages(r.images) },
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
       ];
@@ -230,11 +271,7 @@
       const columns = [
         { key: 'id', label: 'ID' },
         { key: 'title', label: '标题', render: r => (r.title || '').slice(0, 40) + (r.title?.length > 40 ? '...' : '') },
-        { key: 'images', label: '图片', render: r => {
-          const imgs = r.images && Array.isArray(r.images) ? r.images : [];
-          if (!imgs.length) return '-';
-          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${u || ''}" target="_blank" title="图${i + 1}"><img src="${u || ''}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
-        }},
+        { key: 'images', label: '图片', render: r => renderListImages(r.images) },
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
       ];
@@ -268,11 +305,7 @@
         { key: 'id', label: 'ID' },
         { key: 'parent_id', label: '提问ID' },
         { key: 'title', label: '标题', render: r => (r.title || r.content || '').slice(0, 40) + (r.content?.length > 40 ? '...' : '') },
-        { key: 'images', label: '图片', render: r => {
-          const imgs = r.images && Array.isArray(r.images) ? r.images : [];
-          if (!imgs.length) return '-';
-          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${u || ''}" target="_blank" title="图${i + 1}"><img src="${u || ''}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
-        }},
+        { key: 'images', label: '图片', render: r => renderListImages(r.images) },
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
       ];
