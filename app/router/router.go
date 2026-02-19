@@ -10,8 +10,8 @@ import (
 // SetupRouter 设置路由，接收 gin.Engine 作为参数
 func SetupRouter(engine *gin.Engine) {
 	// 管理平台前端静态页（/admin 及子路径）
+	// 注：Static 通配符会与 /admin/login 冲突，登录页请直接访问 /admin/login.html
 	engine.GET("/admin", func(c *gin.Context) { c.Redirect(302, "/admin/") })
-	engine.GET("/admin/login", func(c *gin.Context) { c.Redirect(302, "/admin/login.html") })
 	engine.Static("/admin", "package/web/admin")
 
 	// API 路由组
