@@ -643,19 +643,19 @@
 
       renderImages(initialImgs);
 
-      const fileInput = ov.querySelector('#art-images-add');
-      if (fileInput) {
-        fileInput.addEventListener('change', async function () {
-          const files = this.files;
-          this.value = '';
-          if (!files || !files.length) return;
-          if (articleId != null) {
-            const progress = ensureUploadProgress(ov);
-            try {
-              for (let i = 0; i < files.length; i++) {
-                progress.show(`上传图片 ${i + 1}/${files.length}`);
-                const ext = getExt(files[i].name);
-                const path = `article/${articleId}/img_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      ov.addEventListener('change', async function (e) {
+        if (e.target.id !== 'art-images-add' || !e.target.files) return;
+        const fileInput = e.target;
+        const files = Array.from(fileInput.files || []);
+        fileInput.value = '';
+        if (!files.length) return;
+        if (articleId != null) {
+          const progress = ensureUploadProgress(ov);
+          try {
+            for (let i = 0; i < files.length; i++) {
+              progress.show(`上传图片 ${i + 1}/${files.length}`);
+              const ext = getExt(files[i].name);
+              const path = `article/${articleId}/img_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
               const url = await apiUpload(path, files[i], {onProgress: (p) => progress.update(p)});
               addImages([url]);
             }
@@ -665,14 +665,13 @@
             progress.hide();
           }
         } else {
-            if (row && (row.id ?? row.Id) != null) {
-              alert('上传失败：文章 ID 未正确传递，请关闭弹窗后重试');
-              return;
-            }
+          if (row && (row.id ?? row.Id) != null) {
+            alert('上传失败：文章 ID 未正确传递，请关闭弹窗后重试');
+            return;
+          }
           addPendingFiles(files);
         }
-        });
-      }
+      });
     });
   }
 
