@@ -2,6 +2,7 @@ package oss
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"os"
@@ -133,12 +134,15 @@ func Save(file *multipart.FileHeader, relPath string) (url string, err error) {
 		os.Remove(tmpPath)
 		return "", err
 	}
-	// 若启用压缩且为图片，生成 .small 版本
+	// 若启用压缩且为图片，生成 .small 版本；压缩失败则删除原图并返回错误，避免无效地址入库
 	if config.OSSSmallImageSize > 0 {
 		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(relPath), "."))
 		if imageExts[ext] {
 			smallPath := fullPath + image.SmallSuffix
-			_ = image.CompressToSmall(fullPath, smallPath, uint(config.OSSSmallImageSize), config.OSSSmallImageKB)
+			if err := image.CompressToSmall(fullPath, smallPath, uint(config.OSSSmallImageSize), config.OSSSmallImageKB); err != nil {
+				os.Remove(fullPath)
+				return "", fmt.Errorf("图片压缩失败: %w", err)
+			}
 		}
 	}
 	return GetRelPath(relPath), nil
