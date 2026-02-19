@@ -38,9 +38,39 @@ func SafePath(relPath string) (fullPath string, ok bool) {
 	return abs, true
 }
 
-// GetRelPath 获取相对路径对应的 API URL 路径
+// GetRelPath 获取相对路径对应的 API 路径。若配置了 OSS_HOST 则返回完整 URL 给前端
 func GetRelPath(relPath string) string {
-	return "/api/v1/oss/" + strings.TrimPrefix(relPath, "/")
+	path := "/api/v1/oss/" + strings.TrimPrefix(relPath, "/")
+	if config.OSSHost != "" {
+		return strings.TrimSuffix(config.OSSHost, "/") + path
+	}
+	return path
+}
+
+// ToFullURL 将存储的路径转为前端可用的完整 URL，存路径取 URL。若已是完整 URL 则原样返回
+func ToFullURL(path string) string {
+	if path == "" {
+		return ""
+	}
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return path
+	}
+	if config.OSSHost != "" {
+		return strings.TrimSuffix(config.OSSHost, "/") + "/" + strings.TrimPrefix(path, "/")
+	}
+	return path
+}
+
+// TransformImageURLs 将图片路径数组转为完整 URL 数组
+func TransformImageURLs(urls []string) []string {
+	if len(urls) == 0 {
+		return urls
+	}
+	out := make([]string, len(urls))
+	for i, p := range urls {
+		out[i] = ToFullURL(p)
+	}
+	return out
 }
 
 // Save 保存上传文件到指定相对路径，同路径无损覆盖（先写临时文件，成功后再原子替换）

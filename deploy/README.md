@@ -135,7 +135,7 @@ ssh root@47.94.197.213 '
 - `POST /api/v1/user/background`：上传背景图，存于 `user/{id}/background.{jpg|png}`，并更新 user 表 background 字段
 
 **示例**：
-- 访问图片：`<img src="https://域名/api/v1/oss/user/1/avatar.jpg" />`
+- 接口返回的 `url` 为完整地址，可直接用于 `<img src="{url}" />`。需配置 `OSS_HOST`（如 `http://api.xiaoen.xyz`）以返回完整 URL
 - 上传头像：`POST /api/v1/user/avatar`，Header `Authorization: Bearer <token>`，Body `multipart/form-data` 字段 `file`
 
 ---

@@ -33,6 +33,7 @@ var (
 	JWTExpireHour int
 
 	OSSRoot string // OSS 存储根路径，容器内 /oss，对应宿主机 /var/oss
+	OSSHost string // OSS 对外访问域名，如 http://api.xiaoen.xyz，用于返回完整 URL 给前端
 )
 
 // LoadConfig 从宿主机固定路径 /.env 或环境变量加载配置
@@ -65,6 +66,7 @@ func LoadConfig() error {
 	JWTSecret = getEnv("JWT_SECRET", "your-secret-key-change-in-production")
 	JWTExpireHour = getEnvInt("JWT_EXPIRE_HOUR", 24)
 	OSSRoot = getEnv("OSS_ROOT", "/oss")
+	OSSHost = getEnv("OSS_HOST", "")
 
 	return nil
 }

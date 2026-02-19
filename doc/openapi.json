@@ -2,7 +2,7 @@
   "swagger": "2.0",
   "info": {
     "title": "HFUT Graduation Project API",
-    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品",
+    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址，前端可直接使用\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）",
     "version": "1.0.0"
   },
   "basePath": "/",
@@ -74,7 +74,7 @@
       "properties": {
         "images": {"type": "array", "items": {"type": "string"}, "description": "图片URL数组"}
       },
-      "example": {"images": ["/oss/user/1/img1.jpg", "/oss/user/1/img2.jpg"]}
+      "example": {"images": ["http://api.example.com/api/v1/oss/article/1/image_1.jpg"]}
     },
     "Article": {
       "type": "object",
@@ -91,7 +91,7 @@
         "view_count": {"type": "integer"},
         "like_count": {"type": "integer"},
         "collect_count": {"type": "integer"},
-        "images": {"type": "array", "items": {"type": "string"}},
+        "images": {"type": "array", "items": {"type": "string"}, "description": "图片完整 URL 数组"},
         "created_at": {"type": "string", "format": "date-time"},
         "updated_at": {"type": "string", "format": "date-time"}
       }
@@ -139,11 +139,71 @@
         "id": {"type": "integer"},
         "username": {"type": "string"},
         "school_id": {"type": "integer"},
+        "avatar": {"type": "string", "description": "头像完整 URL"},
+        "background": {"type": "string", "description": "背景图完整 URL"},
         "status": {"type": "integer", "description": "1正常 2禁用"},
         "role": {"type": "integer", "description": "1普通 2管理员 3超管 4匿名"},
         "follow_count": {"type": "integer"},
         "fans_count": {"type": "integer"},
         "created_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "Comment": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "integer"},
+        "user_id": {"type": "integer"},
+        "ext_type": {"type": "integer"},
+        "ext_id": {"type": "integer"},
+        "parent_id": {"type": "integer"},
+        "reply_id": {"type": "integer"},
+        "content": {"type": "string"},
+        "images": {"type": "array", "items": {"type": "string"}, "description": "图片完整 URL 数组"},
+        "type": {"type": "integer", "description": "1顶层 2回复"},
+        "like_count": {"type": "integer"},
+        "created_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "CollectFolder": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "integer"},
+        "name": {"type": "string"},
+        "is_default": {"type": "boolean"},
+        "created_at": {"type": "string"}
+      }
+    },
+    "CollectItem": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "integer"},
+        "collect_id": {"type": "integer"},
+        "ext_id": {"type": "integer"},
+        "ext_type": {"type": "integer", "description": "1帖子 2提问 3回答 4商品"},
+        "created_at": {"type": "string"}
+      }
+    },
+    "AdminArticleCreate": {
+      "type": "object",
+      "required": ["title", "content"],
+      "properties": {
+        "title": {"type": "string"},
+        "content": {"type": "string"},
+        "user_id": {"type": "integer", "description": "可选"},
+        "school_id": {"type": "integer", "description": "可选"},
+        "publish_status": {"type": "integer", "description": "1私密 2公开"},
+        "parent_id": {"type": "integer", "description": "回答必传"}
+      }
+    },
+    "AdminArticleUpdate": {
+      "type": "object",
+      "properties": {
+        "title": {"type": "string"},
+        "content": {"type": "string"},
+        "user_id": {"type": "integer"},
+        "school_id": {"type": "integer"},
+        "publish_status": {"type": "integer"},
+        "images": {"type": "array", "items": {"type": "string"}, "description": "图片完整 URL 数组"}
       }
     },
     "School": {
@@ -322,7 +382,7 @@
         "consumes": ["multipart/form-data"],
         "parameters": [{"in": "formData", "name": "file", "type": "file", "required": true, "description": "图片文件"}],
         "responses": {
-          "200": {"description": "data.url 为图片地址", "schema": {"$ref": "#/definitions/Response"}, "examples": {"application/json": {"code": 200, "message": "成功", "data": {"url": "/oss/user/1/avatar.jpg"}}}},
+          "200": {"description": "data.url 为图片完整 URL（由 OSS_HOST 配置）", "schema": {"$ref": "#/definitions/Response"}, "examples": {"application/json": {"code": 200, "message": "成功", "data": {"url": "http://api.example.com/api/v1/oss/user/1/avatar.jpg", "path": "user/1/avatar.jpg"}}}},
           "401": {"schema": {"$ref": "#/definitions/Response"}}
         }
       }
@@ -335,7 +395,7 @@
         "consumes": ["multipart/form-data"],
         "parameters": [{"in": "formData", "name": "file", "type": "file", "required": true}],
         "responses": {
-          "200": {"schema": {"$ref": "#/definitions/Response"}, "examples": {"application/json": {"code": 200, "message": "成功", "data": {"url": "/oss/user/1/bg.jpg"}}}},
+          "200": {"schema": {"$ref": "#/definitions/Response"}, "examples": {"application/json": {"code": 200, "message": "成功", "data": {"url": "http://api.example.com/api/v1/oss/user/1/background.jpg", "path": "user/1/background.jpg"}}}},
           "401": {"schema": {"$ref": "#/definitions/Response"}}
         }
       }
@@ -350,7 +410,7 @@
           {"in": "query", "name": "pageSize", "type": "integer", "default": 20}
         ],
         "responses": {
-          "200": {"description": "分页列表", "schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]},
+          "200": {"description": "分页列表", "schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]}},
           "401": {"schema": {"$ref": "#/definitions/Response"}}
         }
       },
@@ -622,7 +682,7 @@
           {"in": "query", "name": "page", "type": "integer"},
           {"in": "query", "name": "pageSize", "type": "integer"}
         ],
-        "responses": {"200": {"description": "data 为评论列表"}, "401": {}, "404": {}}
+        "responses": {"200": {"description": "data: {list, total, page, page_size}，list 为 Comment 数组", "schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"type": "object", "properties": {"list": {"type": "array", "items": {"$ref": "#/definitions/Comment"}}, "total": {}, "page": {}, "page_size": {}}}}}]}}, "401": {}, "404": {}}
       },
       "post": {
         "tags": ["评论"],
@@ -649,7 +709,7 @@
           {"in": "query", "name": "page", "type": "integer"},
           {"in": "query", "name": "pageSize", "type": "integer"}
         ],
-        "responses": {"200": {}, "401": {}}
+        "responses": {"200": {"description": "data: {list, total, page, page_size}，list 为 Comment 数组"}, "401": {}}
       }
     },
     "/api/v1/collect/folders": {
@@ -669,7 +729,7 @@
         "tags": ["收藏"],
         "summary": "收藏夹列表",
         "security": [{"BearerAuth": []}],
-        "responses": {"200": {"description": "data 为收藏夹列表"}, "401": {}}
+        "responses": {"200": {"description": "data 为 CollectFolder 数组"}, "401": {}}
       }
     },
     "/api/v1/collect/folders/{id}/items": {
@@ -684,7 +744,7 @@
           {"in": "query", "name": "page", "type": "integer"},
           {"in": "query", "name": "pageSize", "type": "integer"}
         ],
-        "responses": {"200": {}, "401": {}}
+        "responses": {"200": {"description": "data: {list, total, page, page_size}，list 为 CollectItem 数组"}, "401": {}}
       }
     },
     "/api/v1/collect/{extType}/{id}": {
@@ -752,7 +812,7 @@
           {"in": "path", "name": "path", "type": "string", "required": true, "description": "存储路径，如 user/1/cover.jpg"},
           {"in": "formData", "name": "file", "type": "file", "required": true}
         ],
-        "responses": {"200": {"description": "data 含文件URL"}, "401": {}}
+        "responses": {"200": {"description": "data.url 为完整 URL（OSS_HOST 配置时），data.path 为存储路径"}, "401": {}}
       },
       "delete": {
         "tags": ["OSS"],
@@ -763,6 +823,28 @@
       }
     },
     "/api/v1/admin/users": {
+      "post": {
+        "tags": ["管理员"],
+        "summary": "新建用户",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{
+          "in": "body",
+          "name": "body",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "required": ["username", "password"],
+            "properties": {
+              "username": {"type": "string"},
+              "password": {"type": "string"},
+              "school_id": {"type": "integer", "description": "可选，0 表示不绑定"},
+              "role": {"type": "integer", "description": "1普通 2管理员 3超管 4匿名", "default": 1},
+              "status": {"type": "integer", "description": "1正常 2禁用", "default": 1}
+            }
+          }
+        }],
+        "responses": {"200": {"description": "data.id 为新建用户ID"}, "400": {"description": "用户名已存在"}, "403": {}}
+      },
       "get": {
         "tags": ["管理员"],
         "summary": "用户列表",
@@ -784,6 +866,17 @@
       }
     },
     "/api/v1/admin/users/{id}": {
+      "put": {
+        "tags": ["管理员"],
+        "summary": "修改用户基本信息",
+        "description": "可更新 school_id、avatar、background。role/status 请用专用接口",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"in": "path", "name": "id", "type": "integer", "required": true},
+          {"in": "body", "name": "body", "schema": {"type": "object", "properties": {"school_id": {"type": "integer"}, "avatar": {"type": "string"}, "background": {"type": "string"}}}}
+        ],
+        "responses": {"200": {}, "400": {"description": "学校不存在"}, "403": {}, "404": {}}
+      },
       "delete": {
         "tags": ["管理员"],
         "summary": "禁用用户",
@@ -826,6 +919,13 @@
       }
     },
     "/api/v1/admin/posts": {
+      "post": {
+        "tags": ["管理员"],
+        "summary": "新建帖子",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"in": "body", "name": "body", "required": true, "schema": {"$ref": "#/definitions/AdminArticleCreate"}}],
+        "responses": {"200": {"description": "data.id 为新建帖子ID"}, "400": {"description": "用户/学校不存在"}, "403": {}}
+      },
       "get": {
         "tags": ["管理员"],
         "summary": "帖子列表",
@@ -834,12 +934,22 @@
           {"in": "query", "name": "page", "type": "integer", "default": 1},
           {"in": "query", "name": "pageSize", "type": "integer", "default": 20},
           {"in": "query", "name": "school_id", "type": "integer", "description": "按学校筛选，0=全部"},
-          {"in": "query", "name": "include_invalid", "type": "string", "description": "1=含已删除"}
+          {"in": "query", "name": "include_invalid", "type": "string", "description": "0=不含已删除/下架 1=含（默认）"}
         ],
         "responses": {"200": {"description": "data 结构同 ArticleListResponse"}, "403": {}}
       }
     },
     "/api/v1/admin/posts/{id}": {
+      "put": {
+        "tags": ["管理员"],
+        "summary": "编辑帖子",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"in": "path", "name": "id", "type": "integer", "required": true},
+          {"in": "body", "name": "body", "schema": {"$ref": "#/definitions/AdminArticleUpdate"}}
+        ],
+        "responses": {"200": {}, "400": {"description": "用户/学校不存在"}, "403": {}, "404": {}}
+      },
       "delete": {
         "tags": ["管理员"],
         "summary": "禁用帖子",
@@ -858,6 +968,13 @@
       }
     },
     "/api/v1/admin/questions": {
+      "post": {
+        "tags": ["管理员"],
+        "summary": "新建提问",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"in": "body", "name": "body", "required": true, "schema": {"$ref": "#/definitions/AdminArticleCreate"}}],
+        "responses": {"200": {"description": "data.id 为新建提问ID"}, "400": {}, "403": {}}
+      },
       "get": {
         "tags": ["管理员"],
         "summary": "提问列表",
@@ -866,12 +983,22 @@
           {"in": "query", "name": "page", "type": "integer", "default": 1},
           {"in": "query", "name": "pageSize", "type": "integer", "default": 20},
           {"in": "query", "name": "school_id", "type": "integer"},
-          {"in": "query", "name": "include_invalid", "type": "string", "description": "1=含已删除"}
+          {"in": "query", "name": "include_invalid", "type": "string", "description": "0=不含已删除/下架 1=含（默认）"}
         ],
         "responses": {"200": {"description": "data 结构同 ArticleListResponse"}, "403": {}}
       }
     },
     "/api/v1/admin/questions/{id}": {
+      "put": {
+        "tags": ["管理员"],
+        "summary": "编辑提问",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"in": "path", "name": "id", "type": "integer", "required": true},
+          {"in": "body", "name": "body", "schema": {"$ref": "#/definitions/AdminArticleUpdate"}}
+        ],
+        "responses": {"200": {}, "400": {}, "403": {}, "404": {}}
+      },
       "delete": {
         "tags": ["管理员"],
         "summary": "禁用提问",
@@ -890,6 +1017,14 @@
       }
     },
     "/api/v1/admin/answers": {
+      "post": {
+        "tags": ["管理员"],
+        "summary": "新建回答",
+        "description": "body 必须包含 parent_id（提问ID）",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"in": "body", "name": "body", "required": true, "schema": {"allOf": [{"$ref": "#/definitions/AdminArticleCreate"}], "required": ["title", "content", "parent_id"]}}],
+        "responses": {"200": {"description": "data.id 为新建回答ID"}, "400": {"description": "缺少 parent_id 或父提问不存在"}, "403": {}}
+      },
       "get": {
         "tags": ["管理员"],
         "summary": "回答列表",
@@ -898,12 +1033,22 @@
           {"in": "query", "name": "page", "type": "integer", "default": 1},
           {"in": "query", "name": "pageSize", "type": "integer", "default": 20},
           {"in": "query", "name": "school_id", "type": "integer"},
-          {"in": "query", "name": "include_invalid", "type": "string", "description": "1=含已删除"}
+          {"in": "query", "name": "include_invalid", "type": "string", "description": "0=不含已删除/下架 1=含（默认）"}
         ],
         "responses": {"200": {"description": "data 结构同 ArticleListResponse"}, "403": {}}
       }
     },
     "/api/v1/admin/answers/{id}": {
+      "put": {
+        "tags": ["管理员"],
+        "summary": "编辑回答",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"in": "path", "name": "id", "type": "integer", "required": true},
+          {"in": "body", "name": "body", "schema": {"$ref": "#/definitions/AdminArticleUpdate"}}
+        ],
+        "responses": {"200": {}, "400": {}, "403": {}, "404": {}}
+      },
       "delete": {
         "tags": ["管理员"],
         "summary": "禁用回答",
@@ -929,7 +1074,7 @@
         "parameters": [
           {"in": "query", "name": "page", "type": "integer", "default": 1},
           {"in": "query", "name": "pageSize", "type": "integer", "default": 20},
-          {"in": "query", "name": "include_invalid", "type": "string", "description": "1=含已下架"}
+          {"in": "query", "name": "include_invalid", "type": "string", "description": "0=不含已下架 1=含（默认）"}
         ],
         "responses": {"200": {"description": "data: {list, total, page, page_size}"}, "403": {}}
       },
@@ -953,6 +1098,16 @@
       }
     },
     "/api/v1/admin/schools/{id}": {
+      "put": {
+        "tags": ["管理员"],
+        "summary": "编辑学校",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"in": "path", "name": "id", "type": "integer", "required": true},
+          {"in": "body", "name": "body", "schema": {"type": "object", "properties": {"name": {"type": "string"}, "login_url": {"type": "string"}}}}
+        ],
+        "responses": {"200": {}, "403": {}, "404": {}}
+      },
       "delete": {
         "tags": ["管理员"],
         "summary": "下架学校",
@@ -971,4 +1126,4 @@
       }
     }
   }
-}}
+}

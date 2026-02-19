@@ -201,8 +201,7 @@
         { key: 'images', label: '图片', render: r => {
           const imgs = r.images && Array.isArray(r.images) ? r.images : [];
           if (!imgs.length) return '-';
-          const base = u => (u && u.startsWith('/') ? location.origin : '') + (u || '');
-          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${base(u)}" target="_blank" title="图${i + 1}"><img src="${base(u)}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
+          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${u || ''}" target="_blank" title="图${i + 1}"><img src="${u || ''}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
         }},
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
@@ -234,8 +233,7 @@
         { key: 'images', label: '图片', render: r => {
           const imgs = r.images && Array.isArray(r.images) ? r.images : [];
           if (!imgs.length) return '-';
-          const base = u => (u && u.startsWith('/') ? location.origin : '') + (u || '');
-          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${base(u)}" target="_blank" title="图${i + 1}"><img src="${base(u)}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
+          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${u || ''}" target="_blank" title="图${i + 1}"><img src="${u || ''}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
         }},
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
@@ -273,8 +271,7 @@
         { key: 'images', label: '图片', render: r => {
           const imgs = r.images && Array.isArray(r.images) ? r.images : [];
           if (!imgs.length) return '-';
-          const base = u => (u && u.startsWith('/') ? location.origin : '') + (u || '');
-          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${base(u)}" target="_blank" title="图${i + 1}"><img src="${base(u)}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
+          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${u || ''}" target="_blank" title="图${i + 1}"><img src="${u || ''}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
         }},
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
@@ -295,18 +292,13 @@
 
   const TYPE_MAP = { posts: 'posts', questions: 'questions', answers: 'answers' };
 
-  function imgUrl(url) {
-    if (!url) return '';
-    return url.startsWith('/') ? (location.origin + url) : url;
-  }
-
   function showArticleModal(type, title, row) {
     const isAnswer = type === 'answers';
     const parentOpts = isAnswer ? questionListForAnswer.map(q => `<option value="${q.id}" ${row?.parent_id === q.id ? 'selected' : ''}>#${q.id} ${(q.title||'').slice(0,30)}</option>`).join('') : '';
     const parentDefault = isAnswer ? '<option value="">请选择提问</option>' : '';
     const parentHtml = isAnswer ? `<label>父提问ID <select id="art-parent_id" required>${parentDefault}${parentOpts}</select></label>` : '';
     const existingImgs = row?.images && Array.isArray(row.images) && row.images.length
-      ? `<div class="existing-images"><span class="label">已上传图片：</span>${row.images.map((u, i) => `<a href="${imgUrl(u)}" target="_blank" title="${u}"><img src="${imgUrl(u)}" alt="图${i + 1}" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`
+      ? `<div class="existing-images"><span class="label">已上传图片：</span>${row.images.map((u, i) => `<a href="${u || ''}" target="_blank" title="${u}"><img src="${u || ''}" alt="图${i + 1}" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`
       : '';
     showModal(title, `
       ${parentHtml}

@@ -9,6 +9,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
@@ -89,6 +90,9 @@ func CommentList(ctx *gin.Context) {
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
+	for _, c := range list {
+		c.Images = oss.TransformImageURLs(c.Images)
+	}
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
 }
 
@@ -132,6 +136,9 @@ func CommentListReplies(ctx *gin.Context) {
 		}
 		reply.ReplyInternalError(ctx, err)
 		return
+	}
+	for _, c := range list {
+		c.Images = oss.TransformImageURLs(c.Images)
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
 }

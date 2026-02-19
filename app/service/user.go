@@ -102,8 +102,8 @@ func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, e
 		SchoolID:    userDao.SchoolID,
 		Role:        userDao.Role,
 		Status:      userDao.Status,
-		Avatar:      userDao.Avatar,
-		Background:  userDao.Background,
+		Avatar:      oss.ToFullURL(userDao.Avatar),
+		Background:  oss.ToFullURL(userDao.Background),
 		FollowCount: userDao.FollowCount,
 		FansCount:   userDao.FansCount,
 	}

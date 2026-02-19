@@ -11,6 +11,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -155,10 +156,12 @@ func AdminUserList(ctx *gin.Context) {
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
-	// 不返回密码
+	// 不返回密码，将头像/背景转为完整 URL
 	for _, u := range list {
 		if u != nil {
 			u.Password = ""
+			u.Avatar = oss.ToFullURL(u.Avatar)
+			u.Background = oss.ToFullURL(u.Background)
 		}
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
@@ -458,6 +461,10 @@ func AdminArticleList(ctx *gin.Context, articleType int) {
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
 		return
+	}
+	// 将图片路径转为完整 URL 供前端使用
+	for _, a := range list {
+		a.Images = oss.TransformImageURLs(a.Images)
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 	"gorm.io/gorm"
 )
@@ -33,6 +34,9 @@ func ArticleHandlers(articleType int) struct {
 				reply.ReplyInternalError(ctx, err)
 				return
 			}
+			for _, a := range list {
+				a.Images = oss.TransformImageURLs(a.Images)
+			}
 			reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
 		},
 		Search: func(ctx *gin.Context) {
@@ -48,6 +52,9 @@ func ArticleHandlers(articleType int) struct {
 			if err != nil {
 				reply.ReplyInternalError(ctx, err)
 				return
+			}
+			for _, a := range list {
+				a.Images = oss.TransformImageURLs(a.Images)
 			}
 			reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
 		},
@@ -108,6 +115,7 @@ func ArticleHandlers(articleType int) struct {
 				reply.ReplyInternalError(ctx, err)
 				return
 			}
+			art.Images = oss.TransformImageURLs(art.Images)
 			reply.ReplyOKWithData(ctx, art)
 		},
 		Update: func(ctx *gin.Context) {
@@ -258,6 +266,9 @@ func QuestionListAnswers(ctx *gin.Context) {
 		}
 		reply.ReplyInternalError(ctx, err)
 		return
+	}
+	for _, a := range list {
+		a.Images = oss.TransformImageURLs(a.Images)
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
 }
