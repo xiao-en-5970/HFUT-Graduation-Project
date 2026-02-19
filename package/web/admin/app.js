@@ -51,11 +51,12 @@
     return i >= 0 ? filename.slice(i + 1) : 'jpg';
   }
 
-  function showModal(title, innerHTML, onConfirm, onCancel) {
+  function showModal(title, innerHTML, onConfirm, onCancel, onMount) {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `<div class="modal modal-wide"><h4>${title}</h4>${innerHTML}<div class="modal-actions"><button class="btn" id="modal-cancel">取消</button><button class="btn btn-primary" id="modal-confirm">确定</button></div></div>`;
     document.body.appendChild(overlay);
+    if (onMount) onMount(overlay);
     const close = () => overlay.remove();
     overlay.querySelector('#modal-cancel').onclick = () => { if (onCancel) onCancel(); close(); };
     overlay.querySelector('#modal-confirm').onclick = async () => {
@@ -197,6 +198,12 @@
       const columns = [
         { key: 'id', label: 'ID' },
         { key: 'title', label: '标题', render: r => (r.title || '').slice(0, 40) + (r.title?.length > 40 ? '...' : '') },
+        { key: 'images', label: '图片', render: r => {
+          const imgs = r.images && Array.isArray(r.images) ? r.images : [];
+          if (!imgs.length) return '-';
+          const base = u => (u && u.startsWith('/') ? location.origin : '') + (u || '');
+          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${base(u)}" target="_blank" title="图${i + 1}"><img src="${base(u)}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
+        }},
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
       ];
@@ -224,6 +231,12 @@
       const columns = [
         { key: 'id', label: 'ID' },
         { key: 'title', label: '标题', render: r => (r.title || '').slice(0, 40) + (r.title?.length > 40 ? '...' : '') },
+        { key: 'images', label: '图片', render: r => {
+          const imgs = r.images && Array.isArray(r.images) ? r.images : [];
+          if (!imgs.length) return '-';
+          const base = u => (u && u.startsWith('/') ? location.origin : '') + (u || '');
+          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${base(u)}" target="_blank" title="图${i + 1}"><img src="${base(u)}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
+        }},
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
       ];
@@ -257,6 +270,12 @@
         { key: 'id', label: 'ID' },
         { key: 'parent_id', label: '提问ID' },
         { key: 'title', label: '标题', render: r => (r.title || r.content || '').slice(0, 40) + (r.content?.length > 40 ? '...' : '') },
+        { key: 'images', label: '图片', render: r => {
+          const imgs = r.images && Array.isArray(r.images) ? r.images : [];
+          if (!imgs.length) return '-';
+          const base = u => (u && u.startsWith('/') ? location.origin : '') + (u || '');
+          return `<div class="list-images-wrap">${imgs.map((u, i) => `<a href="${base(u)}" target="_blank" title="图${i + 1}"><img src="${base(u)}" alt="图${i + 1}" class="list-thumb" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`;
+        }},
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
       ];
@@ -276,11 +295,19 @@
 
   const TYPE_MAP = { posts: 'posts', questions: 'questions', answers: 'answers' };
 
+  function imgUrl(url) {
+    if (!url) return '';
+    return url.startsWith('/') ? (location.origin + url) : url;
+  }
+
   function showArticleModal(type, title, row) {
     const isAnswer = type === 'answers';
     const parentOpts = isAnswer ? questionListForAnswer.map(q => `<option value="${q.id}" ${row?.parent_id === q.id ? 'selected' : ''}>#${q.id} ${(q.title||'').slice(0,30)}</option>`).join('') : '';
     const parentDefault = isAnswer ? '<option value="">请选择提问</option>' : '';
     const parentHtml = isAnswer ? `<label>父提问ID <select id="art-parent_id" required>${parentDefault}${parentOpts}</select></label>` : '';
+    const existingImgs = row?.images && Array.isArray(row.images) && row.images.length
+      ? `<div class="existing-images"><span class="label">已上传图片：</span>${row.images.map((u, i) => `<a href="${imgUrl(u)}" target="_blank" title="${u}"><img src="${imgUrl(u)}" alt="图${i + 1}" onerror="this.parentElement.style.display='none'"/></a>`).join('')}</div>`
+      : '';
     showModal(title, `
       ${parentHtml}
       <label>标题 <input type="text" id="art-title" value="${row ? (row.title || '') : ''}" placeholder="标题" required></label>
@@ -288,13 +315,15 @@
       <label>用户ID <input type="number" id="art-user_id" value="${row?.user_id || ''}" placeholder="0"></label>
       <label>学校ID <input type="number" id="art-school_id" value="${row?.school_id || ''}" placeholder="0"></label>
       <label>公开 <select id="art-publish_status"><option value="1" ${row?.publish_status === 1 ? 'selected' : ''}>私密</option><option value="2" ${!row || row.publish_status === 2 ? 'selected' : ''}>公开</option></select></label>
-      <label>图片 <input type="file" id="art-images" accept="image/*" multiple></label>
+      ${existingImgs}
+      <label>图片（可多选）<input type="file" id="art-images" accept="image/*" multiple></label>
+      <div id="art-file-preview" class="file-preview"></div>
     `, async (ov) => {
       const payload = {
         title: ov.querySelector('#art-title').value.trim(),
         content: ov.querySelector('#art-content').value.trim(),
-        user_id: parseInt(ov.querySelector('#art-user_id').value || '0', 10) || undefined,
-        school_id: parseInt(ov.querySelector('#art-school_id').value || '0', 10) || undefined,
+        user_id: parseInt(ov.querySelector('#art-user_id').value || '0', 10),
+        school_id: parseInt(ov.querySelector('#art-school_id').value || '0', 10),
         publish_status: parseInt(ov.querySelector('#art-publish_status').value, 10)
       };
       if (isAnswer) {
@@ -313,11 +342,9 @@
             images.push(url);
           }
         }
-        await api(`/admin/${type}/${row.id}`, { method: 'PUT', body: JSON.stringify({
-          title: payload.title, content: payload.content,
-          publish_status: payload.publish_status,
-          ...(images.length ? { images } : {})
-        })});
+        const putBody = { title: payload.title, content: payload.content, publish_status: payload.publish_status, user_id: payload.user_id, school_id: payload.school_id };
+        if (images.length) putBody.images = images;
+        await api(`/admin/${type}/${row.id}`, { method: 'PUT', body: JSON.stringify(putBody) });
       } else {
         const createPayload = { title: payload.title, content: payload.content };
         if (payload.user_id) createPayload.user_id = payload.user_id;
@@ -339,6 +366,19 @@
       if (type === 'posts') renderPosts();
       else if (type === 'questions') renderQuestions();
       else renderAnswers();
+    }, null, (ov) => {
+      ov.querySelector('#art-images')?.addEventListener('change', function() {
+        const preview = ov.querySelector('#art-file-preview');
+        if (!preview) return;
+        preview.innerHTML = '';
+        for (let i = 0; i < this.files.length; i++) {
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(this.files[i]);
+          img.alt = '预览' + (i + 1);
+          img.className = 'preview-thumb';
+          preview.appendChild(img);
+        }
+      });
     });
   }
 

@@ -110,8 +110,14 @@ func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, e
 	return userInfo, nil
 }
 
-func (s *userService) BindSchool(ctx *gin.Context, userID uint, schoolId uint) (err error) {
-	return dao.User().UpdateSchoolByID(ctx, userID, schoolId)
+func (s *userService) BindSchool(ctx *gin.Context, userID uint, schoolId uint) error {
+	if schoolId > 0 {
+		_, err := dao.School().GetByID(ctx.Request.Context(), schoolId)
+		if err != nil {
+			return errors.New("学校不存在")
+		}
+	}
+	return dao.User().UpdateSchoolByID(ctx.Request.Context(), userID, schoolId)
 }
 
 func (s *userService) Update(ctx *gin.Context, user *model.User) error {

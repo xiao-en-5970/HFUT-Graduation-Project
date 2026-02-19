@@ -11,11 +11,17 @@ type UserStore struct {
 }
 
 func (s *UserStore) Create(ctx context.Context, user *model.User) (uint, error) {
-	err := pgsql.DB.Create(user).Error
-	if err != nil {
-		return 0, err
+	return s.CreateWithOptionalSchool(ctx, user)
+}
+
+// CreateWithOptionalSchool 创建用户，school_id 为 0 时插入 NULL 避免 FK 约束
+func (s *UserStore) CreateWithOptionalSchool(ctx context.Context, user *model.User) (uint, error) {
+	if user.SchoolID > 0 {
+		err := pgsql.DB.WithContext(ctx).Create(user).Error
+		return user.ID, err
 	}
-	return user.ID, nil
+	err := pgsql.DB.WithContext(ctx).Omit("SchoolID").Create(user).Error
+	return user.ID, err
 }
 
 func (s *UserStore) Update(ctx context.Context, user *model.User) error {
@@ -62,7 +68,15 @@ func (s *UserStore) GetByUsername(ctx context.Context, username string) (*model.
 }
 
 func (s *UserStore) UpdateSchoolByID(ctx context.Context, userID uint, schoolID uint) error {
-	return pgsql.DB.Model(&model.User{}).Where("id = ?", userID).Update("school_id", schoolID).Error
+	if schoolID == 0 {
+		return pgsql.DB.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Update("school_id", nil).Error
+	}
+	return pgsql.DB.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Update("school_id", schoolID).Error
+}
+
+// UpdateColumns 部分字段更新
+func (s *UserStore) UpdateColumns(ctx context.Context, id uint, updates map[string]interface{}) error {
+	return pgsql.DB.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Updates(updates).Error
 }
 
 func (s *UserStore) UpdateAvatarByID(ctx context.Context, userID uint, avatar string) error {

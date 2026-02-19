@@ -70,6 +70,13 @@ func AdminUserCreate(ctx *gin.Context) {
 		reply.ReplyErrWithMessage(ctx, "状态值无效，1正常 2禁用")
 		return
 	}
+	if body.SchoolID > 0 {
+		_, err := dao.School().GetByID(ctx.Request.Context(), body.SchoolID)
+		if err != nil {
+			reply.ReplyErrWithMessage(ctx, "学校不存在")
+			return
+		}
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
@@ -110,21 +117,27 @@ func AdminUserUpdate(ctx *gin.Context) {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	needUpdate := false
+	updates := make(map[string]interface{})
 	if body.SchoolID != nil {
-		user.SchoolID = *body.SchoolID
-		needUpdate = true
+		if *body.SchoolID > 0 {
+			_, err := dao.School().GetByID(ctx.Request.Context(), *body.SchoolID)
+			if err != nil {
+				reply.ReplyErrWithMessage(ctx, "学校不存在")
+				return
+			}
+			updates["school_id"] = *body.SchoolID
+		} else {
+			updates["school_id"] = nil
+		}
 	}
 	if body.Avatar != nil {
-		user.Avatar = *body.Avatar
-		needUpdate = true
+		updates["avatar"] = *body.Avatar
 	}
 	if body.Background != nil {
-		user.Background = *body.Background
-		needUpdate = true
+		updates["background"] = *body.Background
 	}
-	if needUpdate {
-		if err := dao.User().Update(ctx.Request.Context(), user); err != nil {
+	if len(updates) > 0 {
+		if err := dao.User().UpdateColumns(ctx.Request.Context(), id, updates); err != nil {
 			reply.ReplyInternalError(ctx, err)
 			return
 		}
@@ -373,6 +386,8 @@ func AdminArticleUpdate(ctx *gin.Context, articleType int) {
 	var body struct {
 		Title         *string   `json:"title"`
 		Content       *string   `json:"content"`
+		UserID        *uint     `json:"user_id"`   // 可选，0 表示置空
+		SchoolID      *uint     `json:"school_id"` // 可选，0 表示置空
 		PublishStatus *int16    `json:"publish_status"`
 		Status        *int16    `json:"status"` // 1正常 2禁用，管理员可直改
 		Images        *[]string `json:"images"` // 图片 URL 列表，用于 OSS 上传后更新
@@ -387,6 +402,30 @@ func AdminArticleUpdate(ctx *gin.Context, articleType int) {
 	}
 	if body.Content != nil {
 		updates["content"] = *body.Content
+	}
+	if body.UserID != nil {
+		if *body.UserID > 0 {
+			_, err := dao.User().GetByID(ctx.Request.Context(), *body.UserID)
+			if err != nil {
+				reply.ReplyErrWithMessage(ctx, "用户不存在")
+				return
+			}
+			updates["user_id"] = int(*body.UserID)
+		} else {
+			updates["user_id"] = nil
+		}
+	}
+	if body.SchoolID != nil {
+		if *body.SchoolID > 0 {
+			_, err := dao.School().GetByID(ctx.Request.Context(), *body.SchoolID)
+			if err != nil {
+				reply.ReplyErrWithMessage(ctx, "学校不存在")
+				return
+			}
+			updates["school_id"] = int(*body.SchoolID)
+		} else {
+			updates["school_id"] = nil
+		}
 	}
 	if body.PublishStatus != nil {
 		updates["publish_status"] = *body.PublishStatus
