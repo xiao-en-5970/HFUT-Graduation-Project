@@ -198,11 +198,14 @@ func Stat(relPath string) (os.FileInfo, string, error) {
 // StatOrEnsureSmall 获取文件，若请求 .small 且不存在则从原图压缩生成后返回（兜底逻辑）
 func StatOrEnsureSmall(relPath string) (os.FileInfo, string, error) {
 	info, fullPath, err := Stat(relPath)
-	if err == nil || !os.IsNotExist(err) {
+	if err == nil {
+		return info, fullPath, err
+	}
+	if !os.IsNotExist(err) {
 		return info, fullPath, err
 	}
 	// .small 文件不存在，尝试从原图生成
-	if !strings.HasSuffix(relPath, image.SmallSuffix) || config.OSSSmallImageSize <= 0 {
+	if !strings.HasSuffix(relPath, image.SmallSuffix) {
 		return info, fullPath, err
 	}
 	origPath := image.StripSmallSuffix(relPath)
@@ -214,8 +217,16 @@ func StatOrEnsureSmall(relPath string) (os.FileInfo, string, error) {
 	if !imageExts[ext] {
 		return info, fullPath, err
 	}
-	if err := image.CompressToSmall(origFullPath, fullPath, uint(config.OSSSmallImageSize), config.OSSSmallImageKB); err != nil {
-		return info, fullPath, err
+	maxPx := config.OSSSmallImageSize
+	if maxPx <= 0 {
+		maxPx = 720
+	}
+	maxKB := config.OSSSmallImageKB
+	if maxKB <= 0 {
+		maxKB = 200
+	}
+	if compErr := image.CompressToSmall(origFullPath, fullPath, uint(maxPx), maxKB); compErr != nil {
+		return nil, fullPath, compErr
 	}
 	return Stat(relPath)
 }
@@ -247,9 +258,9 @@ func ArticleImagePath(articleID uint, index int, ext string) string {
 	return "article/" + strconv.FormatUint(uint64(articleID), 10) + "/image_" + strconv.Itoa(index) + "." + ext
 }
 
-// StripForStorage 去掉 .small 后缀，供数据库存储（数据库不存 .small）
-func StripForStorage(path string) string {
-	return image.StripSmallSuffix(path)
+// PathForStorage 统一存 .small（缩略图），供数据库存储；若已是 .small 或非图片则原样返回
+func PathForStorage(path string) string {
+	return pathForDisplay(path)
 }
 
 // ExtFromFilename 从文件名获取扩展名，如 "x.jpg" -> "jpg"

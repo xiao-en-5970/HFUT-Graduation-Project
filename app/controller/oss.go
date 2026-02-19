@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -24,11 +25,12 @@ func OSSGet(c *gin.Context) {
 			reply.ReplyErrWithMessage(c, "路径非法")
 			return
 		}
-		if info == nil {
-			c.Status(http.StatusNotFound)
+		if info == nil && !os.IsNotExist(err) {
+			// 非「文件不存在」的异常（如压缩失败）返回 500
+			reply.ReplyInternalError(c, err)
 			return
 		}
-		reply.ReplyInternalError(c, err)
+		c.Status(http.StatusNotFound)
 		return
 	}
 	if info.IsDir() {

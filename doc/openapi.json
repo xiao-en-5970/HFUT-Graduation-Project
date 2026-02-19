@@ -2,7 +2,7 @@
   "swagger": "2.0",
   "info": {
     "title": "HFUT Graduation Project API",
-    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址。配置 OSS_SMALL_IMAGE_SIZE 时，默认返回带 .small 的压缩图 URL，前端去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）",
+    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址。数据库统一存 .small 路径，默认返回缩略图；前端去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）",
     "version": "1.0.0"
   },
   "basePath": "/",

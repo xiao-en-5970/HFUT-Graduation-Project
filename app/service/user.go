@@ -131,7 +131,7 @@ func (s *userService) UploadAvatar(ctx *gin.Context, userID uint, file *multipar
 	if err != nil {
 		return "", err
 	}
-	if err := dao.User().UpdateAvatarByID(ctx, userID, oss.StripForStorage(url)); err != nil {
+	if err := dao.User().UpdateAvatarByID(ctx, userID, oss.PathForStorage(url)); err != nil {
 		return "", err
 	}
 	return url, nil
@@ -144,7 +144,7 @@ func (s *userService) UploadBackground(ctx *gin.Context, userID uint, file *mult
 	if err != nil {
 		return "", err
 	}
-	if err := dao.User().UpdateBackgroundByID(ctx, userID, oss.StripForStorage(url)); err != nil {
+	if err := dao.User().UpdateBackgroundByID(ctx, userID, oss.PathForStorage(url)); err != nil {
 		return "", err
 	}
 	return url, nil

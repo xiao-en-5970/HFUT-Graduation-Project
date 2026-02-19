@@ -136,7 +136,7 @@ ssh root@47.94.197.213 '
 
 **示例**：
 - 接口返回的 `url` 为完整地址，可直接用于 `<img src="{url}" />`。需配置 `OSS_HOST`（如 `http://api.xiaoen.xyz`）以返回完整 URL
-- 配置 `OSS_SMALL_IMAGE_SIZE`（如 720 或 540）时，上传图片会同步生成 `.small` 压缩版；接口默认返回带 `.small` 的 URL 以加速加载；前端去掉 `.small` 可获取原图
+- 配置 `OSS_SMALL_IMAGE_SIZE`（如 720 或 540）时，上传图片会同步生成 `.small` 压缩版；数据库及各处统一存 `.small` 路径，接口默认返回缩略图；前端去掉 `.small` 可获取原图
 - 上传头像：`POST /api/v1/user/avatar`，Header `Authorization: Bearer <token>`，Body `multipart/form-data` 字段 `file`
 
 ---
