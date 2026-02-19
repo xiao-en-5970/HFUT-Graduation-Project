@@ -182,12 +182,12 @@ func adminArticleRestore(ctx *gin.Context, articleType int) {
 	reply.ReplyOK(ctx)
 }
 
-// AdminArticleList 管理员：文章列表（帖子/提问/回答），include_invalid=1 可含已删除
+// AdminArticleList 管理员：文章列表（帖子/提问/回答）。默认含已删除，可传 include_invalid=0 只看正常
 func AdminArticleList(ctx *gin.Context, articleType int) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
 	schoolID, _ := strconv.ParseUint(ctx.DefaultQuery("school_id", "0"), 10, 32)
-	includeInvalid := ctx.Query("include_invalid") == "1"
+	includeInvalid := ctx.Query("include_invalid") != "0" // 默认 true，管理端需看到已删除并可恢复
 	list, total, err := dao.Article().ListAdmin(ctx.Request.Context(), uint(schoolID), articleType, includeInvalid, page, pageSize)
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
@@ -196,11 +196,11 @@ func AdminArticleList(ctx *gin.Context, articleType int) {
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
 }
 
-// AdminSchoolList 管理员：学校列表
+// AdminSchoolList 管理员：学校列表。默认含已下架，可传 include_invalid=0 只看正常
 func AdminSchoolList(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
-	includeInvalid := ctx.Query("include_invalid") == "1"
+	includeInvalid := ctx.Query("include_invalid") != "0" // 默认 true
 	list, total, err := dao.School().List(ctx.Request.Context(), page, pageSize, includeInvalid)
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
