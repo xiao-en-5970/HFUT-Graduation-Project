@@ -6,10 +6,10 @@ toolchain go1.23.7
 
 require (
 	github.com/gin-gonic/gin v1.11.0
-	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
+	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/redis/go-redis/v9 v9.17.2
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.40.0
