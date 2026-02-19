@@ -1,24 +1,28 @@
 package image
 
 import (
+	"bytes"
 	"fmt"
 	"image"
+	"image/color"
 	"image/jpeg"
-	"image/png"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/nfnt/resize"
+	"golang.org/x/image/draw"
 )
 
 // SmallSuffix 压缩图后缀
 const SmallSuffix = ".small"
 
-// CompressToSmall 将图片压缩到指定最大边长（720p=1280x720 的短边为 720，这里用最大边长）
+// MaxSmallFileBytes 压缩图体积上限 200KB
+const MaxSmallFileBytes = 200 * 1024
+
+// CompressToSmall 将图片压缩到指定最大边长，体积尽量不超过 200KB
 // maxPx: 长边不超过此像素，如 720 或 540
-// 从 srcPath 读取，写入 dstPath
 func CompressToSmall(srcPath, dstPath string, maxPx uint) error {
 	if maxPx == 0 {
 		return fmt.Errorf("maxPx must be > 0")
@@ -29,40 +33,93 @@ func CompressToSmall(srcPath, dstPath string, maxPx uint) error {
 	}
 	defer f.Close()
 
-	img, format, err := image.Decode(f)
+	img, _, err := image.Decode(f)
 	if err != nil {
 		return fmt.Errorf("decode image: %w", err)
 	}
 
+	// 统一转为可 JPEG 编码的格式（处理透明通道）
+	img = flattenAlpha(img)
+
 	bounds := img.Bounds()
 	w, h := uint(bounds.Dx()), uint(bounds.Dy())
-	if w <= maxPx && h <= maxPx {
-		// 无需压缩，直接复制
-		return copyFile(srcPath, dstPath)
+	if w > maxPx || h > maxPx {
+		img = resize.Thumbnail(maxPx, maxPx, img, resize.Lanczos3)
 	}
 
-	resized := resize.Thumbnail(maxPx, maxPx, img, resize.Lanczos3)
+	// 迭代降质直至体积不超过 200KB
+	qualities := []int{78, 65, 52, 40, 30, 22}
+	var best []byte
+	var bestQ int
+	for _, q := range qualities {
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: q}); err != nil {
+			return err
+		}
+		if buf.Len() <= MaxSmallFileBytes {
+			best = buf.Bytes()
+			bestQ = q
+			break
+		}
+		best = buf.Bytes()
+		bestQ = q
+	}
+
+	// 若仍超限，缩小尺寸再压
+	if len(best) > MaxSmallFileBytes && (img.Bounds().Dx() > 200 || img.Bounds().Dy() > 200) {
+		sz := img.Bounds().Size()
+		nw, nh := sz.X*3/4, sz.Y*3/4
+		if nw < 200 {
+			nw = 200
+		}
+		if nh < 200 {
+			nh = 200
+		}
+		img = resize.Resize(uint(nw), uint(nh), img, resize.Lanczos3)
+		for _, q := range []int{65, 50, 35} {
+			var buf bytes.Buffer
+			if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: q}); err != nil {
+				return err
+			}
+			if buf.Len() <= MaxSmallFileBytes {
+				best = buf.Bytes()
+				break
+			}
+			best = buf.Bytes()
+		}
+	}
+
+	if best == nil {
+		best, _ = encodeJPEG(img, 35)
+	}
 
 	if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
 		return err
 	}
-	out, err := os.Create(dstPath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
+	_ = bestQ
+	return os.WriteFile(dstPath, best, 0644)
+}
 
-	switch strings.ToLower(format) {
-	case "jpeg", "jpg":
-		return jpeg.Encode(out, resized, &jpeg.Options{Quality: 85})
-	case "png":
-		return png.Encode(out, resized)
-	case "gif":
-		// GIF 需特殊处理，resize 后可能丢失调色板，转为 PNG 更稳妥
-		return png.Encode(out, resized)
-	default:
-		return jpeg.Encode(out, resized, &jpeg.Options{Quality: 85})
+func encodeJPEG(img image.Image, q int) ([]byte, error) {
+	var b bytes.Buffer
+	err := jpeg.Encode(&b, img, &jpeg.Options{Quality: q})
+	return b.Bytes(), err
+}
+
+// flattenAlpha 将带透明通道的图片绘制到白色底上，供 JPEG 编码（PNG/GIF 透明 → 白底）
+func flattenAlpha(img image.Image) image.Image {
+	// YCbCr 等无透明通道，直接返回
+	if _, ok := img.(*image.YCbCr); ok {
+		return img
 	}
+	if _, ok := img.(*image.Gray); ok {
+		return img
+	}
+	bounds := img.Bounds()
+	dst := image.NewRGBA(bounds)
+	draw.Draw(dst, bounds, &image.Uniform{C: color.White}, bounds.Min, draw.Src)
+	draw.Draw(dst, bounds, img, bounds.Min, draw.Over)
+	return dst
 }
 
 func copyFile(src, dst string) error {

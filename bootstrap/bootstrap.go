@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"os"
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/config"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/router"
@@ -19,6 +20,11 @@ func Boot() error {
 	if err := config.LoadConfig(); err != nil {
 		return err
 	}
+	// 可选：CONFIG_WATCH=1 启用 .env 文件监听热重载；SIGHUP 信号也可触发重载
+	if os.Getenv("CONFIG_WATCH") == "1" {
+		go config.WatchAndReload("/.env")
+	}
+	config.SetupReloadOnSIGHUP("/.env")
 
 	// Initialize logger first (needed for other components)
 	if err := logger.Init(); err != nil {
