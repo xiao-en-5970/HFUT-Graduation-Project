@@ -2,16 +2,12 @@
   const API = '/api/v1';
   const TOKEN_KEY = 'admin_token';
 
-  function getToken() {
-    return localStorage.getItem(TOKEN_KEY);
-  }
+  function getToken() { return localStorage.getItem(TOKEN_KEY); }
+  function clearToken() { localStorage.removeItem(TOKEN_KEY); }
 
-  function setToken(token) {
-    localStorage.setItem(TOKEN_KEY, token);
-  }
-
-  function clearToken() {
-    localStorage.removeItem(TOKEN_KEY);
+  function redirectToLogin() {
+    clearToken();
+    window.location.href = '/admin/login.html';
   }
 
   async function api(url, options = {}) {
@@ -24,8 +20,7 @@
     const res = await fetch(API + url, { ...options, headers });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401 || res.status === 403) {
-      clearToken();
-      showLogin();
+      redirectToLogin();
       throw new Error(data.message || '未授权');
     }
     if (data.code !== 0 && data.code !== 200) {
@@ -34,56 +29,10 @@
     return data;
   }
 
-  const loginScreen = document.getElementById('login-screen');
-  const dashboardScreen = document.getElementById('dashboard-screen');
-  const loginForm = document.getElementById('login-form');
-  const loginError = document.getElementById('login-error');
   const logoutBtn = document.getElementById('logout-btn');
   const moduleContent = document.getElementById('module-content');
 
-  function showLogin() {
-    loginScreen.classList.remove('hidden');
-    dashboardScreen.classList.add('hidden');
-    loginError.textContent = '';
-  }
-
-  function showDashboard() {
-    loginScreen.classList.add('hidden');
-    dashboardScreen.classList.remove('hidden');
-  }
-
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    loginError.textContent = '';
-    const username = loginForm.username.value.trim();
-    const password = loginForm.password.value;
-    try {
-      const data = await fetch(API + '/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      }).then(r => r.json());
-      if (data.code !== 0 && data.code !== 200) {
-        loginError.textContent = data.message || '登录失败';
-        return;
-      }
-      const token = data.data?.token || data.data;
-      if (!token) {
-        loginError.textContent = '登录响应异常';
-        return;
-      }
-      setToken(token);
-      showDashboard();
-      route();
-    } catch (err) {
-      loginError.textContent = err.message || '网络错误';
-    }
-  });
-
-  logoutBtn.addEventListener('click', () => {
-    clearToken();
-    showLogin();
-  });
+  logoutBtn.addEventListener('click', redirectToLogin);
 
   // 路由
   const routes = ['users', 'posts', 'questions', 'answers', 'schools'];
@@ -401,15 +350,14 @@
     };
   }
 
-  // 初始化
-  if (getToken()) {
-    api('/admin/users?page=1&pageSize=1').then(() => {
-      showDashboard();
-      route();
-    }).catch(() => {
-      showLogin();
-    });
-  } else {
-    showLogin();
+  // 初始化：未登录或 token 无效则跳转登录页
+  if (!getToken()) {
+    redirectToLogin();
+    return;
   }
+  api('/admin/users?page=1&pageSize=1').then(() => {
+    route();
+  }).catch(() => {
+    redirectToLogin();
+  });
 })();
