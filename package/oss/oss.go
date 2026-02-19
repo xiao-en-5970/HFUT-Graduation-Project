@@ -195,6 +195,31 @@ func Stat(relPath string) (os.FileInfo, string, error) {
 	return info, fullPath, err
 }
 
+// StatOrEnsureSmall 获取文件，若请求 .small 且不存在则从原图压缩生成后返回（兜底逻辑）
+func StatOrEnsureSmall(relPath string) (os.FileInfo, string, error) {
+	info, fullPath, err := Stat(relPath)
+	if err == nil || !os.IsNotExist(err) {
+		return info, fullPath, err
+	}
+	// .small 文件不存在，尝试从原图生成
+	if !strings.HasSuffix(relPath, image.SmallSuffix) || config.OSSSmallImageSize <= 0 {
+		return info, fullPath, err
+	}
+	origPath := image.StripSmallSuffix(relPath)
+	origInfo, origFullPath, origErr := Stat(origPath)
+	if origErr != nil || origInfo == nil || origInfo.IsDir() {
+		return info, fullPath, err
+	}
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(origPath), "."))
+	if !imageExts[ext] {
+		return info, fullPath, err
+	}
+	if err := image.CompressToSmall(origFullPath, fullPath, uint(config.OSSSmallImageSize)); err != nil {
+		return info, fullPath, err
+	}
+	return Stat(relPath)
+}
+
 // UserAvatarPath 用户头像存储路径 user/{id}/avatar.{ext}
 func UserAvatarPath(userID uint, ext string) string {
 	ext = strings.TrimPrefix(ext, ".")

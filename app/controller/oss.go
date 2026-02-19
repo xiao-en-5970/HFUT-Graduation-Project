@@ -18,7 +18,7 @@ func OSSGet(c *gin.Context) {
 		reply.ReplyErrWithMessage(c, "路径无效")
 		return
 	}
-	info, fullPath, err := oss.Stat(path)
+	info, fullPath, err := oss.StatOrEnsureSmall(path)
 	if err != nil {
 		if errors.Is(err, oss.ErrInvalidPath) {
 			reply.ReplyErrWithMessage(c, "路径非法")
