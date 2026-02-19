@@ -48,25 +48,21 @@ func PrivateRouter(api *gin.RouterGroup) {
 	}
 	// 帖子（type=1）、提问（type=2）、回答（type=3），三类接口数据隔离+学校隔离
 	api.Use(middleware.LoadUserSchool())
-	// 草稿：汇总帖子/提问/回答，可列出发布删除
-	draftGroup := api.Group("/drafts")
-	{
-		draftGroup.GET("", controller.DraftList)
-		draftGroup.POST("/:id/publish", controller.DraftPublish)
-		draftGroup.DELETE("/:id", controller.DraftDelete)
-	}
 	postGroup := api.Group("/post")
 	{
+		postGroup.GET("/drafts", controller.PostHandlers.ListDrafts)
 		postGroup.GET("", controller.PostHandlers.List)
 		postGroup.GET("/search", controller.PostHandlers.Search)
 		postGroup.POST("", controller.PostHandlers.Create)
 		postGroup.GET("/:id", controller.PostHandlers.Get)
 		postGroup.PUT("/:id", controller.PostHandlers.Update)
 		postGroup.POST("/:id/images", controller.PostHandlers.UploadImages)
+		postGroup.POST("/:id/publish", controller.PostHandlers.Publish)
 		postGroup.DELETE("/:id", controller.PostHandlers.Delete)
 	}
 	questionGroup := api.Group("/question")
 	{
+		questionGroup.GET("/drafts", controller.QuestionHandlers.ListDrafts)
 		questionGroup.GET("", controller.QuestionHandlers.List)
 		questionGroup.GET("/search", controller.QuestionHandlers.Search)
 		questionGroup.POST("", controller.QuestionHandlers.Create)
@@ -74,16 +70,19 @@ func PrivateRouter(api *gin.RouterGroup) {
 		questionGroup.GET("/:id", controller.QuestionHandlers.Get)
 		questionGroup.PUT("/:id", controller.QuestionHandlers.Update)
 		questionGroup.POST("/:id/images", controller.QuestionHandlers.UploadImages)
+		questionGroup.POST("/:id/publish", controller.QuestionHandlers.Publish)
 		questionGroup.DELETE("/:id", controller.QuestionHandlers.Delete)
 	}
 	answerGroup := api.Group("/answer")
 	{
+		answerGroup.GET("/drafts", controller.AnswerHandlers.ListDrafts)
 		answerGroup.GET("", controller.AnswerHandlers.List)
 		answerGroup.GET("/search", controller.AnswerHandlers.Search)
 		answerGroup.POST("", controller.AnswerHandlers.Create)
 		answerGroup.GET("/:id", controller.AnswerHandlers.Get)
 		answerGroup.PUT("/:id", controller.AnswerHandlers.Update)
 		answerGroup.POST("/:id/images", controller.AnswerHandlers.UploadImages)
+		answerGroup.POST("/:id/publish", controller.AnswerHandlers.Publish)
 		answerGroup.DELETE("/:id", controller.AnswerHandlers.Delete)
 	}
 	// 共通模块：评论、收藏、点赞，由前端传 extType 区分

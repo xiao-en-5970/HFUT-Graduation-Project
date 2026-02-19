@@ -223,18 +223,3 @@ func (s *articleService) PublishDraft(ctx *gin.Context, id uint, userID uint) er
 	}
 	return nil
 }
-
-// DeleteDraft 删除草稿（软删除，复用现有逻辑）
-func (s *articleService) DeleteDraft(ctx *gin.Context, id uint, userID uint) error {
-	art, err := dao.Article().GetByIDIncludeDeleted(ctx.Request.Context(), id)
-	if err != nil || art == nil {
-		return ErrDraftNotFoundOrNoPermission
-	}
-	if art.Status != constant.StatusDraft {
-		return ErrDraftNotFoundOrNoPermission
-	}
-	if art.UserID == nil || uint(*art.UserID) != userID {
-		return ErrDraftNotFoundOrNoPermission
-	}
-	return dao.Article().SoftDelete(ctx.Request.Context(), id)
-}

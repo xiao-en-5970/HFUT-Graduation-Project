@@ -16,11 +16,30 @@ import (
 
 // ArticleHandlers 返回指定类型的文章 CRUD 处理器（帖子1/提问2/回答3），学校+类型隔离
 func ArticleHandlers(articleType int) struct {
-	List, Search, Create, Get, Update, UploadImages, Delete gin.HandlerFunc
+	ListDrafts, List, Search, Create, Get, Update, UploadImages, Publish, Delete gin.HandlerFunc
 } {
 	return struct {
-		List, Search, Create, Get, Update, UploadImages, Delete gin.HandlerFunc
+		ListDrafts, List, Search, Create, Get, Update, UploadImages, Publish, Delete gin.HandlerFunc
 	}{
+		ListDrafts: func(ctx *gin.Context) {
+			userID := middleware.GetUserID(ctx)
+			if userID == 0 {
+				reply.ReplyUnauthorized(ctx)
+				return
+			}
+			schoolID := middleware.GetSchoolID(ctx)
+			page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+			pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
+			list, total, err := service.Article().ListDrafts(ctx, userID, schoolID, articleType, page, pageSize)
+			if err != nil {
+				reply.ReplyInternalError(ctx, err)
+				return
+			}
+			for _, a := range list {
+				a.Images = oss.TransformImageURLs(a.Images)
+			}
+			reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
+		},
 		List: func(ctx *gin.Context) {
 			schoolID := middleware.GetSchoolID(ctx)
 			if schoolID == 0 {
@@ -179,6 +198,28 @@ func ArticleHandlers(articleType int) struct {
 				return
 			}
 			reply.ReplyOKWithData(ctx, gin.H{"urls": urls})
+		},
+		Publish: func(ctx *gin.Context) {
+			userID := middleware.GetUserID(ctx)
+			if userID == 0 {
+				reply.ReplyUnauthorized(ctx)
+				return
+			}
+			idStr := ctx.Param("id")
+			id, err := strconv.ParseUint(idStr, 10, 32)
+			if err != nil {
+				reply.ReplyInvalidParams(ctx, err)
+				return
+			}
+			if err := service.Article().PublishDraft(ctx, uint(id), userID); err != nil {
+				if errors.Is(err, service.ErrDraftNotFoundOrNoPermission) {
+					reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
+					return
+				}
+				reply.ReplyInternalError(ctx, err)
+				return
+			}
+			reply.ReplyOK(ctx)
 		},
 		Delete: func(ctx *gin.Context) {
 			userID := middleware.GetUserID(ctx)

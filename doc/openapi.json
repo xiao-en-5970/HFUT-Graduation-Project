@@ -2,7 +2,7 @@
   "swagger": "2.0",
   "info": {
     "title": "HFUT Graduation Project API",
-    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址。数据库统一存 .small 路径，默认返回缩略图；前端去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）",
+    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址。数据库统一存 .small 路径，默认返回缩略图；前端去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）\n\n**创建流程（帖子/提问/回答）：** 1 创建草稿 POST 获取 id 2 POST /:id/images 上传图片（雪花算法）3 PUT 调整顺序与内容 4 POST /:id/publish 发布。**已弃用：** 一次性提交完整文章创建",
     "version": "1.0.0"
   },
   "basePath": "/",
@@ -17,10 +17,6 @@
   },
   "tags": [
     {"name": "系统", "description": "健康检查"},
-    {
-      "name": "草稿",
-      "description": "帖子/提问/回答草稿汇总"
-    },
     {"name": "用户", "description": "注册、登录、个人信息"},
     {"name": "帖子", "description": "type=1 普通文章"},
     {"name": "提问", "description": "type=2 问答"},
@@ -446,6 +442,53 @@
         }
       }
     },
+    "/api/v1/post/drafts": {
+      "get": {
+        "tags": [
+          "帖子"
+        ],
+        "summary": "帖子草稿列表",
+        "description": "当前用户的帖子草稿，草稿不可见。流程：创建草稿→上传图片→调整顺序和信息→发布",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Response"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/definitions/ArticleListResponse"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "401": {}
+        }
+      }
+    },
     "/api/v1/post": {
       "get": {
         "tags": ["帖子"],
@@ -462,7 +505,8 @@
       },
       "post": {
         "tags": ["帖子"],
-        "summary": "创建帖子",
+        "summary": "创建帖子草稿",
+        "description": "创建草稿获取 id，流程：1 创建草稿 2 POST /post/:id/images 上传图片（雪花算法路径）3 PUT 调整顺序 4 POST /post/:id/publish 发布",
         "security": [{"BearerAuth": []}],
         "parameters": [{"in": "body", "name": "body", "schema": {"$ref": "#/definitions/ArticleCreate"}}],
         "responses": {
@@ -505,10 +549,41 @@
       },
       "delete": {
         "tags": ["帖子"],
-        "summary": "删除帖子（软删除）",
+        "summary": "删除帖子（软删除，草稿也可删除）",
         "security": [{"BearerAuth": []}],
         "parameters": [{"in": "path", "name": "id", "type": "integer", "required": true}],
         "responses": {"200": {"schema": {"$ref": "#/definitions/Response"}}, "401": {}, "404": {"schema": {"$ref": "#/definitions/Response"}}}
+      }
+    },
+    "/api/v1/post/{id}/publish": {
+      "post": {
+        "tags": [
+          "帖子"
+        ],
+        "summary": "草稿发布",
+        "description": "将帖子草稿发布为正式文章",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {},
+          "404": {}
+        }
       }
     },
     "/api/v1/post/{id}/images": {
@@ -540,6 +615,53 @@
         }
       }
     },
+    "/api/v1/question/drafts": {
+      "get": {
+        "tags": [
+          "提问"
+        ],
+        "summary": "提问草稿列表",
+        "description": "当前用户的提问草稿。流程同帖子",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Response"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/definitions/ArticleListResponse"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "401": {}
+        }
+      }
+    },
     "/api/v1/question": {
       "get": {
         "tags": ["提问"],
@@ -553,7 +675,8 @@
       },
       "post": {
         "tags": ["提问"],
-        "summary": "创建提问",
+        "summary": "创建提问草稿",
+        "description": "流程同帖子。parent_id 仅回答必传",
         "security": [{"BearerAuth": []}],
         "parameters": [{"in": "body", "name": "body", "schema": {"$ref": "#/definitions/ArticleCreate"}}],
         "responses": {"200": {"schema": {"$ref": "#/definitions/Response"}}, "401": {}}
@@ -593,7 +716,33 @@
       },
       "delete": {
         "tags": ["提问"],
-        "summary": "删除提问",
+        "summary": "删除提问（草稿也可删除）",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {},
+          "401": {},
+          "404": {}
+        }
+      }
+    },
+    "/api/v1/question/{id}/publish": {
+      "post": {
+        "tags": [
+          "提问"
+        ],
+        "summary": "草稿发布",
         "security": [{"BearerAuth": []}],
         "parameters": [{"in": "path", "name": "id", "type": "integer", "required": true}],
         "responses": {"200": {}, "401": {}, "404": {}}
@@ -632,6 +781,53 @@
         }
       }
     },
+    "/api/v1/answer/drafts": {
+      "get": {
+        "tags": [
+          "回答"
+        ],
+        "summary": "回答草稿列表",
+        "description": "当前用户的回答草稿。创建时需指定 parent_id（在哪个提问下回答）",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Response"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/definitions/ArticleListResponse"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "401": {}
+        }
+      }
+    },
     "/api/v1/answer": {
       "get": {
         "tags": ["回答"],
@@ -645,15 +841,17 @@
       },
       "post": {
         "tags": ["回答"],
-        "summary": "创建回答",
-        "description": "body 必须包含 parent_id（提问ID）",
+        "summary": "创建回答草稿",
+        "description": "必须在哪个提问下回答：body 必传 parent_id（提问ID）。流程同帖子",
         "security": [{"BearerAuth": []}],
         "parameters": [{
           "in": "body",
           "name": "body",
           "schema": {
             "allOf": [{"$ref": "#/definitions/ArticleCreate"}],
-            "required": ["title", "content", "parent_id"]
+            "required": [
+              "parent_id"
+            ]
           }
         }],
         "responses": {"200": {}, "400": {"description": "缺少 parent_id"}, "401": {}}
@@ -693,7 +891,33 @@
       },
       "delete": {
         "tags": ["回答"],
-        "summary": "删除回答",
+        "summary": "删除回答（草稿也可删除）",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "type": "integer",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {},
+          "401": {},
+          "404": {}
+        }
+      }
+    },
+    "/api/v1/answer/{id}/publish": {
+      "post": {
+        "tags": [
+          "回答"
+        ],
+        "summary": "草稿发布",
         "security": [{"BearerAuth": []}],
         "parameters": [{"in": "path", "name": "id", "type": "integer", "required": true}],
         "responses": {"200": {}, "401": {}, "404": {}}
@@ -713,118 +937,6 @@
         "responses": {
           "200": {
             "description": "data.urls"
-          },
-          "401": {},
-          "404": {}
-        }
-      }
-    },
-    "/api/v1/drafts": {
-      "get": {
-        "tags": [
-          "草稿"
-        ],
-        "summary": "草稿列表",
-        "description": "汇总当前用户的帖子/提问/回答草稿，草稿不可见，可发布为正式文章",
-        "security": [{"BearerAuth": []}],
-        "parameters": [
-          {
-            "in": "query",
-            "name": "type",
-            "type": "integer",
-            "description": "0=全部 1=帖子 2=提问 3=回答",
-            "default": 0
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "type": "integer",
-            "default": 1
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "type": "integer",
-            "default": 20
-          }
-        ],
-        "responses": {
-          "200": {
-            "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Response"
-                },
-                {
-                  "properties": {
-                    "data": {
-                      "$ref": "#/definitions/ArticleListResponse"
-                    }
-                  }
-                }
-              ]
-            }
-          },
-          "401": {}
-        }
-      }
-    },
-    "/api/v1/drafts/{id}/publish": {
-      "post": {
-        "tags": [
-          "草稿"
-        ],
-        "summary": "草稿发布",
-        "description": "将草稿发布为正式文章（status 3→1）",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "type": "integer",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "schema": {
-              "$ref": "#/definitions/Response"
-            }
-          },
-          "401": {},
-          "404": {}
-        }
-      }
-    },
-    "/api/v1/drafts/{id}": {
-      "delete": {
-        "tags": [
-          "草稿"
-        ],
-        "summary": "删除草稿",
-        "description": "软删除草稿，复用现有删除逻辑",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "type": "integer",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "schema": {
-              "$ref": "#/definitions/Response"
-            }
           },
           "401": {},
           "404": {}
