@@ -12,6 +12,9 @@ WORKDIR /app
 # 复制 CI 中已编译的 Linux 二进制（go build -o build/app）
 COPY build/app ./
 
+# 复制管理平台前端静态文件（/admin 路由）
+COPY package/web/admin ./package/web/admin
+
 # 环境变量由运行时 --env-file /opt/app/.env 或宿主环境传入
 EXPOSE 8081
 
