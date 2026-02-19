@@ -26,24 +26,63 @@
     return data;
   }
 
-  async function apiUpload(relPath, file) {
-    const token = getToken();
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch(API + '/oss/' + relPath, {
-      method: 'POST',
-      headers: token ? { 'Authorization': 'Bearer ' + token } : {},
-      body: fd
+  async function apiUpload(relPath, file, options = {}) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const fd = new FormData();
+      fd.append('file', file);
+      const token = getToken();
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && options.onProgress) {
+          options.onProgress(Math.round((e.loaded / e.total) * 100), e.loaded, e.total);
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status === 401 || xhr.status === 403) {
+          redirectToLogin();
+          reject(new Error('未授权'));
+          return;
+        }
+        let data = {};
+        try { data = JSON.parse(xhr.responseText); } catch (_) {}
+        if (data.code !== 0 && data.code !== 200) {
+          reject(new Error(data.message || '上传失败'));
+          return;
+        }
+        resolve(data.data?.url || (API + '/oss/' + relPath));
+      };
+      xhr.onerror = () => reject(new Error('上传失败'));
+
+      xhr.open('POST', API + '/oss/' + relPath);
+      if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+      xhr.send(fd);
     });
-    const data = await res.json().catch(() => ({}));
-    if (res.status === 401 || res.status === 403) {
-      redirectToLogin();
-      throw new Error(data.message || '未授权');
+  }
+
+  function ensureUploadProgress(overlay) {
+    let wrap = overlay.querySelector('.upload-progress-wrap');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'upload-progress-wrap';
+      wrap.innerHTML = '<div class="upload-progress-label">上传中...</div><div class="upload-progress-bar"><div class="upload-progress-fill"></div></div>';
+      const modal = overlay.querySelector('.modal');
+      const actions = overlay.querySelector('.modal-actions');
+      modal.insertBefore(wrap, actions);
     }
-    if (data.code !== 0 && data.code !== 200) {
-      throw new Error(data.message || '上传失败');
-    }
-    return data.data?.url || (API + '/oss/' + relPath);
+    return {
+      show(label) {
+        wrap.style.display = 'block';
+        wrap.querySelector('.upload-progress-label').textContent = label || '上传中...';
+        wrap.querySelector('.upload-progress-fill').style.width = '0%';
+      },
+      update(pct, label) {
+        wrap.querySelector('.upload-progress-fill').style.width = pct + '%';
+        if (label != null) wrap.querySelector('.upload-progress-label').textContent = label;
+      },
+      hide() { wrap.style.display = 'none'; }
+    };
   }
 
   function getExt(filename) {
@@ -195,16 +234,34 @@
       const updates = { school_id: parseInt(ov.querySelector('#ue-school_id').value || '0', 10) || 0 };
       const avatarFile = ov.querySelector('#ue-avatar').files[0];
       const bgFile = ov.querySelector('#ue-background').files[0];
-      if (avatarFile) {
-        const ext = getExt(avatarFile.name);
-        updates.avatar = await apiUpload('user/' + id + '/avatar.' + ext, avatarFile);
+      const progress = ensureUploadProgress(ov);
+      const confirmBtn = ov.querySelector('#modal-confirm');
+      try {
+        if (avatarFile || bgFile) {
+          confirmBtn.disabled = true;
+          if (avatarFile) {
+            progress.show('上传头像...');
+            const ext = getExt(avatarFile.name);
+            updates.avatar = await apiUpload('user/' + id + '/avatar.' + ext, avatarFile, {
+              onProgress: (p) => progress.update(p, `上传头像 ${p}%`)
+            });
+            progress.update(100);
+          }
+          if (bgFile) {
+            progress.show('上传背景图...');
+            const ext = getExt(bgFile.name);
+            updates.background = await apiUpload('user/' + id + '/background.' + ext, bgFile, {
+              onProgress: (p) => progress.update(p, `上传背景图 ${p}%`)
+            });
+            progress.update(100);
+          }
+        }
+        await api('/admin/users/' + id, { method: 'PUT', body: JSON.stringify(updates) });
+        renderUsers();
+      } finally {
+        progress.hide();
+        confirmBtn.disabled = false;
       }
-      if (bgFile) {
-        const ext = getExt(bgFile.name);
-        updates.background = await apiUpload('user/' + id + '/background.' + ext, bgFile);
-      }
-      await api('/admin/users/' + id, { method: 'PUT', body: JSON.stringify(updates) });
-      renderUsers();
     }, null, (ov) => {
       ov.querySelector('#ue-avatar')?.addEventListener('change', function() {
         const preview = ov.querySelector('#ue-avatar-preview');
@@ -358,35 +415,53 @@
       }
       const files = ov.querySelector('#art-images').files;
 
-      if (row) {
-        let images = row.images && Array.isArray(row.images) ? [...row.images] : [];
-        if (files && files.length) {
-          for (let i = 0; i < files.length; i++) {
-            const ext = getExt(files[i].name);
-            const url = await apiUpload(`article/${row.id}/image_${images.length + i + 1}.${ext}`, files[i]);
-            images.push(url);
+      const progress = ensureUploadProgress(ov);
+      const confirmBtn = ov.querySelector('#modal-confirm');
+      const totalFiles = files && files.length ? files.length : 0;
+      try {
+        if (row) {
+          let images = row.images && Array.isArray(row.images) ? [...row.images] : [];
+          if (files && files.length) {
+            confirmBtn.disabled = true;
+            for (let i = 0; i < files.length; i++) {
+              progress.show(`上传图片 ${i + 1}/${totalFiles}`);
+              const ext = getExt(files[i].name);
+              const url = await apiUpload(`article/${row.id}/image_${images.length + i + 1}.${ext}`, files[i], {
+                onProgress: (p) => progress.update(p, `上传图片 ${i + 1}/${totalFiles} ${p}%`)
+              });
+              images.push(url);
+              progress.update(100);
+            }
+          }
+          const putBody = { title: payload.title, content: payload.content, publish_status: payload.publish_status, user_id: payload.user_id, school_id: payload.school_id };
+          if (images.length) putBody.images = images;
+          await api(`/admin/${type}/${row.id}`, { method: 'PUT', body: JSON.stringify(putBody) });
+        } else {
+          const createPayload = { title: payload.title, content: payload.content };
+          if (payload.user_id) createPayload.user_id = payload.user_id;
+          if (payload.school_id) createPayload.school_id = payload.school_id;
+          createPayload.publish_status = payload.publish_status;
+          if (isAnswer) createPayload.parent_id = payload.parent_id;
+          const d = await api(`/admin/${type}`, { method: 'POST', body: JSON.stringify(createPayload) });
+          const newId = d.data?.id;
+          if (newId && files && files.length) {
+            confirmBtn.disabled = true;
+            const images = [];
+            for (let i = 0; i < files.length; i++) {
+              progress.show(`上传图片 ${i + 1}/${totalFiles}`);
+              const ext = getExt(files[i].name);
+              const url = await apiUpload(`article/${newId}/image_${i + 1}.${ext}`, files[i], {
+                onProgress: (p) => progress.update(p, `上传图片 ${i + 1}/${totalFiles} ${p}%`)
+              });
+              images.push(url);
+              progress.update(100);
+            }
+            await api(`/admin/${type}/${newId}`, { method: 'PUT', body: JSON.stringify({ images }) });
           }
         }
-        const putBody = { title: payload.title, content: payload.content, publish_status: payload.publish_status, user_id: payload.user_id, school_id: payload.school_id };
-        if (images.length) putBody.images = images;
-        await api(`/admin/${type}/${row.id}`, { method: 'PUT', body: JSON.stringify(putBody) });
-      } else {
-        const createPayload = { title: payload.title, content: payload.content };
-        if (payload.user_id) createPayload.user_id = payload.user_id;
-        if (payload.school_id) createPayload.school_id = payload.school_id;
-        createPayload.publish_status = payload.publish_status;
-        if (isAnswer) createPayload.parent_id = payload.parent_id;
-        const d = await api(`/admin/${type}`, { method: 'POST', body: JSON.stringify(createPayload) });
-        const newId = d.data?.id;
-        if (newId && files && files.length) {
-          const images = [];
-          for (let i = 0; i < files.length; i++) {
-            const ext = getExt(files[i].name);
-            const url = await apiUpload(`article/${newId}/image_${i + 1}.${ext}`, files[i]);
-            images.push(url);
-          }
-          await api(`/admin/${type}/${newId}`, { method: 'PUT', body: JSON.stringify({ images }) });
-        }
+      } finally {
+        progress.hide();
+        confirmBtn.disabled = false;
       }
       if (type === 'posts') renderPosts();
       else if (type === 'questions') renderQuestions();

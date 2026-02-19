@@ -2,7 +2,6 @@ package oss
 
 import (
 	"errors"
-
 	"io"
 	"mime/multipart"
 	"os"
@@ -11,7 +10,12 @@ import (
 	"strings"
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/config"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/image"
 )
+
+var imageExts = map[string]bool{
+	"jpg": true, "jpeg": true, "png": true, "gif": true, "webp": true,
+}
 
 var ErrInvalidPath = errors.New("invalid path")
 
@@ -38,27 +42,61 @@ func SafePath(relPath string) (fullPath string, ok bool) {
 	return abs, true
 }
 
-// GetRelPath 获取相对路径对应的 API 路径。若配置了 OSS_HOST 则返回完整 URL 给前端
+// GetRelPath 获取相对路径对应的 API 路径。若配置了 OSS_HOST 则返回完整 URL。图片默认带 .small 后缀返回压缩版
 func GetRelPath(relPath string) string {
-	path := "/api/v1/oss/" + strings.TrimPrefix(relPath, "/")
+	p := pathForDisplay(relPath)
+	path := "/api/v1/oss/" + strings.TrimPrefix(p, "/")
 	if config.OSSHost != "" {
 		return strings.TrimSuffix(config.OSSHost, "/") + path
 	}
 	return path
 }
 
-// ToFullURL 将存储的路径转为前端可用的完整 URL，存路径取 URL。若已是完整 URL 则原样返回
+// pathForDisplay 若为图片且启用了压缩，则路径加 .small，供前端默认加载压缩图
+func pathForDisplay(path string) string {
+	if path == "" || config.OSSSmallImageSize <= 0 {
+		return path
+	}
+	if strings.HasSuffix(path, image.SmallSuffix) {
+		return path
+	}
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
+	if imageExts[ext] {
+		return path + image.SmallSuffix
+	}
+	return path
+}
+
+// ToFullURL 将存储的路径转为前端可用的完整 URL。图片默认返回带 .small 的压缩版。若已是完整 URL 则在其路径加 .small
 func ToFullURL(path string) string {
 	if path == "" {
 		return ""
 	}
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		return path
+		// 完整 URL：在路径末尾（不含 query）加 .small
+		return urlAppendSmall(path)
 	}
+	p := pathForDisplay(path)
 	if config.OSSHost != "" {
-		return strings.TrimSuffix(config.OSSHost, "/") + "/" + strings.TrimPrefix(path, "/")
+		return strings.TrimSuffix(config.OSSHost, "/") + "/api/v1/oss/" + strings.TrimPrefix(p, "/")
 	}
-	return path
+	return "/api/v1/oss/" + strings.TrimPrefix(p, "/")
+}
+
+func urlAppendSmall(rawURL string) string {
+	if config.OSSSmallImageSize <= 0 || strings.Contains(rawURL, image.SmallSuffix) {
+		return rawURL
+	}
+	pathPart := rawURL
+	if i := strings.IndexAny(rawURL, "?#"); i >= 0 {
+		pathPart = rawURL[:i]
+	}
+	for _, ext := range []string{".jpg", ".jpeg", ".png", ".gif", ".webp"} {
+		if strings.HasSuffix(pathPart, ext) {
+			return pathPart + image.SmallSuffix + rawURL[len(pathPart):]
+		}
+	}
+	return rawURL
 }
 
 // TransformImageURLs 将图片路径数组转为完整 URL 数组
@@ -95,6 +133,14 @@ func Save(file *multipart.FileHeader, relPath string) (url string, err error) {
 		os.Remove(tmpPath)
 		return "", err
 	}
+	// 若启用压缩且为图片，生成 .small 版本
+	if config.OSSSmallImageSize > 0 {
+		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(relPath), "."))
+		if imageExts[ext] {
+			smallPath := fullPath + image.SmallSuffix
+			_ = image.CompressToSmall(fullPath, smallPath, uint(config.OSSSmallImageSize))
+		}
+	}
 	return GetRelPath(relPath), nil
 }
 
@@ -113,7 +159,7 @@ func saveUploadedFile(file *multipart.FileHeader, dst string) error {
 	return err
 }
 
-// Delete 删除指定相对路径的文件
+// Delete 删除指定相对路径的文件，若为图片则同时删除其 .small 版本
 func Delete(relPath string) error {
 	fullPath, ok := SafePath(relPath)
 	if !ok {
@@ -126,7 +172,17 @@ func Delete(relPath string) error {
 	if info.IsDir() {
 		return ErrInvalidPath
 	}
-	return os.Remove(fullPath)
+	if err := os.Remove(fullPath); err != nil {
+		return err
+	}
+	// 若为图片，删除 .small 版本
+	if !strings.HasSuffix(relPath, image.SmallSuffix) {
+		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(relPath), "."))
+		if imageExts[ext] {
+			os.Remove(fullPath + image.SmallSuffix)
+		}
+	}
+	return nil
 }
 
 // Stat 获取文件信息与绝对路径

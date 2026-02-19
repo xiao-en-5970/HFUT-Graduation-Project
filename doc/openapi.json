@@ -2,7 +2,7 @@
   "swagger": "2.0",
   "info": {
     "title": "HFUT Graduation Project API",
-    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址，前端可直接使用\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）",
+    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址。配置 OSS_SMALL_IMAGE_SIZE 时，默认返回带 .small 的压缩图 URL，前端去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）",
     "version": "1.0.0"
   },
   "basePath": "/",
@@ -74,7 +74,7 @@
       "properties": {
         "images": {"type": "array", "items": {"type": "string"}, "description": "图片URL数组"}
       },
-      "example": {"images": ["http://api.example.com/api/v1/oss/article/1/image_1.jpg"]}
+      "example": {"images": ["http://api.example.com/api/v1/oss/article/1/image_1.jpg.small"]}
     },
     "Article": {
       "type": "object",
@@ -382,7 +382,7 @@
         "consumes": ["multipart/form-data"],
         "parameters": [{"in": "formData", "name": "file", "type": "file", "required": true, "description": "图片文件"}],
         "responses": {
-          "200": {"description": "data.url 为图片完整 URL（由 OSS_HOST 配置）", "schema": {"$ref": "#/definitions/Response"}, "examples": {"application/json": {"code": 200, "message": "成功", "data": {"url": "http://api.example.com/api/v1/oss/user/1/avatar.jpg", "path": "user/1/avatar.jpg"}}}},
+          "200": {"description": "data.url 为图片完整 URL（由 OSS_HOST 配置）", "schema": {"$ref": "#/definitions/Response"}, "examples": {"application/json": {"code": 200, "message": "成功", "data": {"url": "http://api.example.com/api/v1/oss/user/1/avatar.jpg.small", "path": "user/1/avatar.jpg"}}}},
           "401": {"schema": {"$ref": "#/definitions/Response"}}
         }
       }
@@ -799,7 +799,7 @@
       "get": {
         "tags": ["OSS"],
         "summary": "访问文件",
-        "description": "公开接口，无需认证。path 如 user/1/avatar.jpg",
+        "description": "公开接口，无需认证。path 如 user/1/avatar.jpg 或 user/1/avatar.jpg.small（压缩图）",
         "parameters": [{"in": "path", "name": "path", "type": "string", "required": true}],
         "responses": {"200": {"description": "文件流"}, "404": {"description": "文件不存在"}}
       },

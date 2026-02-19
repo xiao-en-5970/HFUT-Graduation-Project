@@ -32,8 +32,9 @@ var (
 	JWTSecret     string
 	JWTExpireHour int
 
-	OSSRoot string // OSS 存储根路径，容器内 /oss，对应宿主机 /var/oss
-	OSSHost string // OSS 对外访问域名，如 http://api.xiaoen.xyz，用于返回完整 URL 给前端
+	OSSRoot           string // OSS 存储根路径，容器内 /oss，对应宿主机 /var/oss
+	OSSHost           string // OSS 对外访问域名，如 http://api.xiaoen.xyz，用于返回完整 URL 给前端
+	OSSSmallImageSize int    // 压缩图最大边长（像素），如 720 或 540，0 表示不生成压缩图
 )
 
 // LoadConfig 从宿主机固定路径 /.env 或环境变量加载配置
@@ -67,6 +68,7 @@ func LoadConfig() error {
 	JWTExpireHour = getEnvInt("JWT_EXPIRE_HOUR", 24)
 	OSSRoot = getEnv("OSS_ROOT", "/oss")
 	OSSHost = getEnv("OSS_HOST", "")
+	OSSSmallImageSize = getEnvInt("OSS_SMALL_IMAGE_SIZE", 720)
 
 	return nil
 }

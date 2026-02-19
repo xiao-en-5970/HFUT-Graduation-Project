@@ -148,6 +148,10 @@ td { font-size: 0.9rem; }
 .preview-thumb { max-width: 64px; max-height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid #3d424d; }
 .modal .actions, .modal .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #2d323c; }
 .modal .modal-actions .btn { margin-left: 0; }
+.upload-progress-wrap { display: none; margin-bottom: 1rem; }
+.upload-progress-label { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.35rem; }
+.upload-progress-bar { height: 6px; background: var(--bg-dark); border-radius: 3px; overflow: hidden; }
+.upload-progress-fill { height: 100%; background: var(--accent); border-radius: 3px; width: 0%; transition: width 0.2s ease; }
 .status-badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
 .status-valid { background: #14532d; color: #86efac; }
 .status-invalid { background: #7f1d1d; color: #fca5a5; }
