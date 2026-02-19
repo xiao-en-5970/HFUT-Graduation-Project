@@ -11,7 +11,7 @@ type Like struct {
 	ID        uint           `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID    *int           `gorm:"column:user_id;index" json:"user_id"`                             // 用户ID
 	ExtID     int            `gorm:"column:ext_id;type:integer;not null" json:"ext_id"`               // 关联ID
-	ExtType   int            `gorm:"column:ext_type;type:integer;not null;default:1" json:"ext_type"` // 关联类型 1:articles 2:comments 3:goods
+	ExtType   int            `gorm:"column:ext_type;type:integer;not null;default:1" json:"ext_type"` // 1:帖子 2:提问 3:回答 4:商品 5:评论
 	Images    pq.StringArray `gorm:"type:varchar(255)[]" json:"images"`                               // 图片数组
 	Status    int16          `gorm:"type:smallint;not null;default:1" json:"status"`                  // 1:正常 2:禁用
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`

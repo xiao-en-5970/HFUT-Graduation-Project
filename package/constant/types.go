@@ -12,11 +12,14 @@ const (
 	ArticleTypeAnswer   = 3 // 回答
 )
 
-// ExtType 关联类型（用于 likes, comments, collects, tags 等）
+// ExtTypeArticleGood 关联类型（用于 comments, collect_item, likes 等）
+// 1:帖子 2:提问 3:回答 4:商品 5:评论（likes 专用）
 const (
-	ExtTypeArticle = 1 // 文章
-	ExtTypeComment = 2 // 评论
-	ExtTypeGood    = 3 // 商品
+	ExtTypePost     = 1 // 帖子
+	ExtTypeQuestion = 2 // 提问
+	ExtTypeAnswer   = 3 // 回答
+	ExtTypeGoods    = 4 // 商品
+	ExtTypeComment  = 5 // 评论（仅 likes 表使用）
 )
 
 // CommentType 评论类型

@@ -71,6 +71,12 @@ func (s *ArticleStore) UpdateImages(ctx context.Context, id uint, images []strin
 		Updates(map[string]interface{}{"images": images, "image_count": len(images)}).Error
 }
 
+// UpdateCollectCount 增减 collect_count，delta 为 +1 或 -1
+func (s *ArticleStore) UpdateCollectCount(ctx context.Context, id uint, delta int) error {
+	return pgsql.DB.Model(&model.Article{}).Where("id = ?", id).
+		UpdateColumn("collect_count", gorm.Expr("GREATEST(0, collect_count + ?)", delta)).Error
+}
+
 // List 按学校+类型分页列出，类型隔离+学校隔离
 func (s *ArticleStore) List(ctx context.Context, schoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
 	if page < 1 {

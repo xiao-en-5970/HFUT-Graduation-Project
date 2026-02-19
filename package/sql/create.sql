@@ -95,7 +95,7 @@ create table comments (
 );
 
 comment on column comments.user_id is '用户ID';
-comment on column comments.ext_type is '关联类型 1:articles 2:goods';
+comment on column comments.ext_type is '关联类型 1:帖子 2:提问 3:回答 4:商品';
 comment on column comments.ext_id is '关联ID';
 comment on column comments.parent_id is '父评论ID';
 comment on column comments.reply_id is '回复评论ID';
@@ -118,7 +118,7 @@ create table likes (
 
 comment on column likes.user_id is '用户ID';
 comment on column likes.ext_id is '关联ID';
-comment on column likes.ext_type is '关联类型 1:articles 2:comments 3:goods';
+comment on column likes.ext_type is '关联类型 1:帖子 2:提问 3:回答 4:商品 5:评论';
 comment on column likes.images is '图片数组';
 comment on column likes.status is '1:正常 2:禁用';
 
@@ -178,15 +178,35 @@ comment on column tags.status is '1:正常 2:禁用';
 create table collect (
             id SERIAL PRIMARY KEY,
             user_id integer REFERENCES users(id),
-            ext_id integer not null,
-            ext_type integer not null DEFAULT 1,
+            name VARCHAR(100) NOT NULL DEFAULT '默认',
+            is_default boolean NOT NULL DEFAULT false,
+            status smallint NOT NULL DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+comment on table collect is '收藏夹表';
 comment on column collect.user_id is '用户ID';
-comment on column collect.ext_id is '关联ID';
-comment on column collect.ext_type is '关联类型 1:articles 2:goods';
+comment on column collect.name is '收藏夹名称';
+comment on column collect.is_default is '是否默认收藏夹，每用户一个';
+comment on column collect.status is '1:正常 2:禁用';
+
+create table collect_item (
+            id SERIAL PRIMARY KEY,
+            collect_id integer NOT NULL REFERENCES collect(id) ON DELETE CASCADE,
+            ext_id integer NOT NULL,
+            ext_type integer NOT NULL DEFAULT 1,
+            status smallint NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(collect_id, ext_id, ext_type)
+);
+
+comment on table collect_item is '收藏表，收藏夹中的具体收藏项';
+comment on column collect_item.collect_id is '收藏夹ID';
+comment on column collect_item.ext_id is '关联ID';
+comment on column collect_item.ext_type is '关联类型 1:帖子 2:提问 3:回答 4:商品';
+comment on column collect_item.status is '1:正常 2:禁用';
 
 create table follow (
             id SERIAL PRIMARY KEY,
@@ -218,8 +238,6 @@ comment on column orders.order_status is '1:待支付 2:已支付 3:已发货 4:
 ALTER TABLE schools ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;
 comment on column schools.status is '1:正常 2:禁用';
 
-ALTER TABLE collect ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;
-comment on column collect.status is '1:正常 2:禁用';
 
 ALTER TABLE follow ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;
 comment on column follow.status is '1:正常 2:禁用';

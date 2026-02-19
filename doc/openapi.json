@@ -32,6 +32,10 @@
       "description": "回答（type=3），创建必传 parent_id"
     },
     {
+      "name": "收藏",
+      "description": "收藏夹与收藏，按类型特化（帖子/提问/回答）"
+    },
+    {
       "name": "OSS",
       "description": "对象存储，文件访问与上传"
     }
@@ -324,6 +328,42 @@
           "type": "string",
           "format": "date-time"
         }
+      }
+    },
+    "CommentCreateRequest": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "content": {
+          "type": "string",
+          "description": "评论内容"
+        },
+        "parent_id": {
+          "type": "integer",
+          "description": "回复时传父评论ID，顶层评论不传"
+        },
+        "reply_id": {
+          "type": "integer",
+          "description": "回复某条回复时传被回复的评论ID"
+        }
+      }
+    },
+    "CommentResponse": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" },
+        "user_id": { "type": "integer" },
+        "ext_type": { "type": "integer" },
+        "ext_id": { "type": "integer" },
+        "parent_id": { "type": "integer", "description": "父评论ID" },
+        "reply_id": { "type": "integer", "description": "回复的评论ID" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "type": { "type": "integer", "description": "1:顶层 2:回复" },
+        "content": { "type": "string" },
+        "status": { "type": "integer" },
+        "like_count": { "type": "integer" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
       }
     }
   },
@@ -1212,6 +1252,63 @@
         ]
       }
     },
+    "/api/v1/question/{id}/comments": {
+      "get": {
+        "tags": ["提问"],
+        "summary": "评论列表",
+        "description": "某提问的顶层评论列表，分页",
+        "security": [{"BearerAuth": []}],
+        "produces": ["application/json"],
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "type": "integer", "description": "提问ID"},
+          {"in": "query", "name": "page", "type": "integer", "default": 1},
+          {"in": "query", "name": "pageSize", "type": "integer", "default": 20}
+        ],
+        "responses": {
+          "200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}},
+          "401": {"description": "未认证", "schema": {"$ref": "#/definitions/Response"}},
+          "404": {"description": "提问不存在", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      },
+      "post": {
+        "tags": ["提问"],
+        "summary": "发评论/回复",
+        "description": "不传 parent_id 为顶层评论；传 parent_id 为回复",
+        "security": [{"BearerAuth": []}],
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "type": "integer", "description": "提问ID"},
+          {"in": "body", "name": "body", "required": true, "schema": {"$ref": "#/definitions/CommentCreateRequest"}}
+        ],
+        "responses": {
+          "200": {"description": "创建成功", "schema": {"$ref": "#/definitions/Response"}},
+          "400": {"description": "参数错误", "schema": {"$ref": "#/definitions/Response"}},
+          "401": {"description": "未认证", "schema": {"$ref": "#/definitions/Response"}},
+          "404": {"description": "提问或父评论不存在", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      }
+    },
+    "/api/v1/question/{id}/comments/{commentId}/replies": {
+      "get": {
+        "tags": ["提问"],
+        "summary": "回复列表",
+        "description": "某评论下的回复列表，分页",
+        "security": [{"BearerAuth": []}],
+        "produces": ["application/json"],
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "type": "integer", "description": "提问ID"},
+          {"in": "path", "name": "commentId", "required": true, "type": "integer", "description": "评论ID"},
+          {"in": "query", "name": "page", "type": "integer", "default": 1},
+          {"in": "query", "name": "pageSize", "type": "integer", "default": 20}
+        ],
+        "responses": {
+          "200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}},
+          "401": {"description": "未认证", "schema": {"$ref": "#/definitions/Response"}},
+          "404": {"description": "提问或评论不存在", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      }
+    },
     "/api/v1/question/{id}/answers": {
       "get": {
         "tags": [
@@ -1655,6 +1752,63 @@
         ]
       }
     },
+    "/api/v1/answer/{id}/comments": {
+      "get": {
+        "tags": ["回答"],
+        "summary": "评论列表",
+        "description": "某回答的顶层评论列表，分页",
+        "security": [{"BearerAuth": []}],
+        "produces": ["application/json"],
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "type": "integer", "description": "回答ID"},
+          {"in": "query", "name": "page", "type": "integer", "default": 1},
+          {"in": "query", "name": "pageSize", "type": "integer", "default": 20}
+        ],
+        "responses": {
+          "200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}},
+          "401": {"description": "未认证", "schema": {"$ref": "#/definitions/Response"}},
+          "404": {"description": "回答不存在", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      },
+      "post": {
+        "tags": ["回答"],
+        "summary": "发评论/回复",
+        "description": "不传 parent_id 为顶层评论；传 parent_id 为回复",
+        "security": [{"BearerAuth": []}],
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "type": "integer", "description": "回答ID"},
+          {"in": "body", "name": "body", "required": true, "schema": {"$ref": "#/definitions/CommentCreateRequest"}}
+        ],
+        "responses": {
+          "200": {"description": "创建成功", "schema": {"$ref": "#/definitions/Response"}},
+          "400": {"description": "参数错误", "schema": {"$ref": "#/definitions/Response"}},
+          "401": {"description": "未认证", "schema": {"$ref": "#/definitions/Response"}},
+          "404": {"description": "回答或父评论不存在", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      }
+    },
+    "/api/v1/answer/{id}/comments/{commentId}/replies": {
+      "get": {
+        "tags": ["回答"],
+        "summary": "回复列表",
+        "description": "某评论下的回复列表，分页",
+        "security": [{"BearerAuth": []}],
+        "produces": ["application/json"],
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "type": "integer", "description": "回答ID"},
+          {"in": "path", "name": "commentId", "required": true, "type": "integer", "description": "评论ID"},
+          {"in": "query", "name": "page", "type": "integer", "default": 1},
+          {"in": "query", "name": "pageSize", "type": "integer", "default": 20}
+        ],
+        "responses": {
+          "200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}},
+          "401": {"description": "未认证", "schema": {"$ref": "#/definitions/Response"}},
+          "404": {"description": "回答或评论不存在", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      }
+    },
     "/api/v1/post/{id}": {
       "get": {
         "tags": [
@@ -1888,6 +2042,82 @@
           }
         }
       }
+    },
+    "/api/v1/post/{id}/comments": {
+      "get": {
+        "tags": ["帖子"],
+        "summary": "评论列表",
+        "description": "某帖子的顶层评论列表，分页",
+        "security": [{"BearerAuth": []}],
+        "produces": ["application/json"],
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID"},
+          {"in": "query", "name": "page", "type": "integer", "default": 1},
+          {"in": "query", "name": "pageSize", "type": "integer", "default": 20}
+        ],
+        "responses": {
+          "200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}},
+          "401": {"description": "未认证", "schema": {"$ref": "#/definitions/Response"}},
+          "404": {"description": "帖子不存在", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      },
+      "post": {
+        "tags": ["帖子"],
+        "summary": "发评论/回复",
+        "description": "不传 parent_id 为顶层评论；传 parent_id 为回复，可选 reply_id 表示回复某条回复",
+        "security": [{"BearerAuth": []}],
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID"},
+          {"in": "body", "name": "body", "required": true, "schema": {"$ref": "#/definitions/CommentCreateRequest"}}
+        ],
+        "responses": {
+          "200": {"description": "创建成功，data.id 为评论ID", "schema": {"$ref": "#/definitions/Response"}},
+          "400": {"description": "参数错误", "schema": {"$ref": "#/definitions/Response"}},
+          "401": {"description": "未认证", "schema": {"$ref": "#/definitions/Response"}},
+          "404": {"description": "帖子或父评论不存在", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      }
+    },
+    "/api/v1/post/{id}/comments/{commentId}/replies": {
+      "get": {
+        "tags": ["帖子"],
+        "summary": "回复列表",
+        "description": "某评论下的回复列表，分页",
+        "security": [{"BearerAuth": []}],
+        "produces": ["application/json"],
+        "parameters": [
+          {"in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID"},
+          {"in": "path", "name": "commentId", "required": true, "type": "integer", "description": "评论ID"},
+          {"in": "query", "name": "page", "type": "integer", "default": 1},
+          {"in": "query", "name": "pageSize", "type": "integer", "default": 20}
+        ],
+        "responses": {
+          "200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}},
+          "401": {"description": "未认证", "schema": {"$ref": "#/definitions/Response"}},
+          "404": {"description": "帖子或评论不存在", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      }
+    },
+    "/api/v1/post/{id}/collect": {
+      "post": {"tags": ["帖子"], "summary": "收藏帖子", "description": "收藏帖子到指定收藏夹，collect_id=0 为默认收藏夹", "security": [{"BearerAuth": []}], "consumes": ["application/json"], "produces": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID"}, {"in": "body", "name": "body", "required": true, "schema": {"type": "object", "properties": {"collect_id": {"type": "integer", "description": "收藏夹ID，0=默认"}}}}], "responses": {"200": {"description": "成功"}, "400": {"description": "已收藏"}, "404": {"description": "帖子不存在"}, "401": {"description": "未认证"}}},
+      "delete": {"tags": ["帖子"], "summary": "取消收藏帖子", "security": [{"BearerAuth": []}], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "collect_id", "type": "integer", "description": "收藏夹ID，0=默认"}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}}
+    },
+    "/api/v1/question/{id}/collect": {
+      "post": {"tags": ["提问"], "summary": "收藏提问", "description": "收藏提问到指定收藏夹", "security": [{"BearerAuth": []}], "consumes": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "body", "name": "body", "schema": {"type": "object", "properties": {"collect_id": {"type": "integer"}}}}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}},
+      "delete": {"tags": ["提问"], "summary": "取消收藏提问", "security": [{"BearerAuth": []}], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "collect_id", "type": "integer"}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}}
+    },
+    "/api/v1/answer/{id}/collect": {
+      "post": {"tags": ["回答"], "summary": "收藏回答", "description": "收藏回答到指定收藏夹", "security": [{"BearerAuth": []}], "consumes": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "body", "name": "body", "schema": {"type": "object", "properties": {"collect_id": {"type": "integer"}}}}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}},
+      "delete": {"tags": ["回答"], "summary": "取消收藏回答", "security": [{"BearerAuth": []}], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "collect_id", "type": "integer"}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}}
+    },
+    "/api/v1/collect/folders": {
+      "post": {"tags": ["收藏"], "summary": "创建收藏夹", "security": [{"BearerAuth": []}], "consumes": ["application/json"], "parameters": [{"in": "body", "name": "body", "required": true, "schema": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}}], "responses": {"200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}}, "401": {"description": "未认证"}}},
+      "get": {"tags": ["收藏"], "summary": "收藏夹列表", "security": [{"BearerAuth": []}], "produces": ["application/json"], "responses": {"200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}}, "401": {"description": "未认证"}}}
+    },
+    "/api/v1/collect/folders/{id}/items": {
+      "get": {"tags": ["收藏"], "summary": "收藏夹内容", "description": "ext_type: 1帖子 2提问 3回答 4商品，0=全部", "security": [{"BearerAuth": []}], "produces": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "ext_type", "type": "integer"}, {"in": "query", "name": "page", "type": "integer"}, {"in": "query", "name": "pageSize", "type": "integer"}], "responses": {"200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}}, "401": {"description": "未认证"}}}
     },
     "/api/v1/oss/{path}": {
       "get": {
