@@ -10,10 +10,6 @@ import (
 
 type CommentStore struct{}
 
-func Comment() *CommentStore {
-	return &CommentStore{}
-}
-
 func (s *CommentStore) Create(ctx context.Context, c *model.Comment) (uint, error) {
 	err := pgsql.DB.WithContext(ctx).Create(c).Error
 	if err != nil {

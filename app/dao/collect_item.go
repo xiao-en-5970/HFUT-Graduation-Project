@@ -10,10 +10,6 @@ import (
 
 type CollectItemStore struct{}
 
-func CollectItem() *CollectItemStore {
-	return &CollectItemStore{}
-}
-
 func (s *CollectItemStore) Create(ctx context.Context, item *model.CollectItem) (uint, error) {
 	err := pgsql.DB.WithContext(ctx).Create(item).Error
 	if err != nil {

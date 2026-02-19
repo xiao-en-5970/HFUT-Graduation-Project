@@ -17,10 +17,6 @@ var (
 
 type likeService struct{}
 
-func Like() *likeService {
-	return &likeService{}
-}
-
 // AddArticle 点赞文章
 // extType: 1帖子 2提问 3回答
 func (s *likeService) AddArticle(ctx *gin.Context, userID uint, schoolID uint, articleID uint, extType int) error {

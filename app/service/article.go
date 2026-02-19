@@ -20,10 +20,6 @@ var (
 
 type articleService struct{}
 
-func Article() *articleService {
-	return &articleService{}
-}
-
 // CreateArticleReq 创建请求（type 由接口路径决定）
 // 回答类型必须传 parent_id 指向提问
 type CreateArticleReq struct {

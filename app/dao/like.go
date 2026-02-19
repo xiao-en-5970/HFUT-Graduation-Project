@@ -10,10 +10,6 @@ import (
 
 type LikeStore struct{}
 
-func Like() *LikeStore {
-	return &LikeStore{}
-}
-
 func (s *LikeStore) Create(ctx context.Context, l *model.Like) (uint, error) {
 	err := pgsql.DB.WithContext(ctx).Create(l).Error
 	if err != nil {

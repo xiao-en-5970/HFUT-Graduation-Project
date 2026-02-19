@@ -17,12 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type userService struct {
-}
-
-func User() *userService {
-	return &userService{}
-}
+type userService struct{}
 
 func (s *userService) Register(ctx *gin.Context, username, password string) (uint, error) {
 	_, err := dao.User().GetByUsername(ctx, username)

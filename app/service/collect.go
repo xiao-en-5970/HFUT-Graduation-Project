@@ -18,10 +18,6 @@ var (
 
 type collectService struct{}
 
-func Collect() *collectService {
-	return &collectService{}
-}
-
 // GetOrCreateDefaultFolder 获取或创建用户的默认收藏夹
 // collectID=0 且 userID>0 表示使用默认收藏夹
 func (s *collectService) GetOrCreateDefaultFolder(ctx *gin.Context, userID uint) (uint, error) {

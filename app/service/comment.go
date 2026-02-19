@@ -17,10 +17,6 @@ var (
 
 type commentService struct{}
 
-func Comment() *commentService {
-	return &commentService{}
-}
-
 // CreateCommentReq 发评论/回复请求
 // 不传 parent_id 为顶层评论；传 parent_id 为回复某评论，可选 reply_id 表示回复某条回复
 type CreateCommentReq struct {
