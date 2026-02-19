@@ -2104,20 +2104,38 @@
       "post": {"tags": ["帖子"], "summary": "收藏帖子", "description": "收藏帖子到指定收藏夹，collect_id=0 为默认收藏夹", "security": [{"BearerAuth": []}], "consumes": ["application/json"], "produces": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID"}, {"in": "body", "name": "body", "required": true, "schema": {"type": "object", "properties": {"collect_id": {"type": "integer", "description": "收藏夹ID，0=默认"}}}}], "responses": {"200": {"description": "成功"}, "400": {"description": "已收藏"}, "404": {"description": "帖子不存在"}, "401": {"description": "未认证"}}},
       "delete": {"tags": ["帖子"], "summary": "取消收藏帖子", "security": [{"BearerAuth": []}], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "collect_id", "type": "integer", "description": "收藏夹ID，0=默认"}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}}
     },
+    "/api/v1/post/{id}/like": {
+      "post": {"tags": ["帖子"], "summary": "点赞帖子", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "成功"}, "400": {"description": "已点赞"}, "404": {"description": "帖子不存在"}, "401": {"description": "未认证"}}},
+      "delete": {"tags": ["帖子"], "summary": "取消点赞帖子", "security": [{"BearerAuth": []}], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}}
+    },
     "/api/v1/question/{id}/collect": {
       "post": {"tags": ["提问"], "summary": "收藏提问", "description": "收藏提问到指定收藏夹", "security": [{"BearerAuth": []}], "consumes": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "body", "name": "body", "schema": {"type": "object", "properties": {"collect_id": {"type": "integer"}}}}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}},
       "delete": {"tags": ["提问"], "summary": "取消收藏提问", "security": [{"BearerAuth": []}], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "collect_id", "type": "integer"}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}}
+    },
+    "/api/v1/question/{id}/like": {
+      "post": {"tags": ["提问"], "summary": "点赞提问", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "成功"}, "400": {"description": "已点赞"}, "404": {"description": "提问不存在"}, "401": {"description": "未认证"}}},
+      "delete": {"tags": ["提问"], "summary": "取消点赞提问", "security": [{"BearerAuth": []}], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}}
     },
     "/api/v1/answer/{id}/collect": {
       "post": {"tags": ["回答"], "summary": "收藏回答", "description": "收藏回答到指定收藏夹", "security": [{"BearerAuth": []}], "consumes": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "body", "name": "body", "schema": {"type": "object", "properties": {"collect_id": {"type": "integer"}}}}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}},
       "delete": {"tags": ["回答"], "summary": "取消收藏回答", "security": [{"BearerAuth": []}], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "collect_id", "type": "integer"}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}}
     },
+    "/api/v1/answer/{id}/like": {
+      "post": {"tags": ["回答"], "summary": "点赞回答", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "成功"}, "400": {"description": "已点赞"}, "404": {"description": "回答不存在"}, "401": {"description": "未认证"}}},
+      "delete": {"tags": ["回答"], "summary": "取消点赞回答", "security": [{"BearerAuth": []}], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}], "responses": {"200": {"description": "成功"}, "401": {"description": "未认证"}}}
+    },
     "/api/v1/collect/folders": {
       "post": {"tags": ["收藏"], "summary": "创建收藏夹", "security": [{"BearerAuth": []}], "consumes": ["application/json"], "parameters": [{"in": "body", "name": "body", "required": true, "schema": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}}], "responses": {"200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}}, "401": {"description": "未认证"}}},
       "get": {"tags": ["收藏"], "summary": "收藏夹列表", "security": [{"BearerAuth": []}], "produces": ["application/json"], "responses": {"200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}}, "401": {"description": "未认证"}}}
     },
-    "/api/v1/collect/folders/{id}/items": {
-      "get": {"tags": ["收藏"], "summary": "收藏夹内容", "description": "ext_type: 1帖子 2提问 3回答 4商品，0=全部", "security": [{"BearerAuth": []}], "produces": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "ext_type", "type": "integer"}, {"in": "query", "name": "page", "type": "integer"}, {"in": "query", "name": "pageSize", "type": "integer"}], "responses": {"200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}}, "401": {"description": "未认证"}}}
+    "/api/v1/collect/folders/{id}/posts": {
+      "get": {"tags": ["收藏"], "summary": "收藏夹中的帖子", "description": "前端无需传 extType，按路径特化", "security": [{"BearerAuth": []}], "produces": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "page", "type": "integer"}, {"in": "query", "name": "pageSize", "type": "integer"}], "responses": {"200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}}, "401": {"description": "未认证"}}}
+    },
+    "/api/v1/collect/folders/{id}/questions": {
+      "get": {"tags": ["收藏"], "summary": "收藏夹中的提问", "security": [{"BearerAuth": []}], "produces": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "page", "type": "integer"}, {"in": "query", "name": "pageSize", "type": "integer"}], "responses": {"200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}}, "401": {"description": "未认证"}}}
+    },
+    "/api/v1/collect/folders/{id}/answers": {
+      "get": {"tags": ["收藏"], "summary": "收藏夹中的回答", "security": [{"BearerAuth": []}], "produces": ["application/json"], "parameters": [{"in": "path", "name": "id", "required": true, "type": "integer"}, {"in": "query", "name": "page", "type": "integer"}, {"in": "query", "name": "pageSize", "type": "integer"}], "responses": {"200": {"description": "成功", "schema": {"$ref": "#/definitions/Response"}}, "401": {"description": "未认证"}}}
     },
     "/api/v1/oss/{path}": {
       "get": {

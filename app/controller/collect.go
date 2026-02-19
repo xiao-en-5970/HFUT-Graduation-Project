@@ -119,8 +119,8 @@ func ListCollectFolders(ctx *gin.Context) {
 	reply.ReplyOKWithData(ctx, gin.H{"list": list})
 }
 
-// ListCollectItems 列出收藏夹内容
-func ListCollectItems(ctx *gin.Context) {
+// listCollectItemsByType 按模块列出收藏夹内容，extType 由路径决定
+func listCollectItemsByType(ctx *gin.Context, extType int) {
 	userID := middleware.GetUserID(ctx)
 	if userID == 0 {
 		reply.ReplyUnauthorized(ctx)
@@ -132,8 +132,6 @@ func ListCollectItems(ctx *gin.Context) {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	extTypeStr := ctx.DefaultQuery("ext_type", "0")
-	extType, _ := strconv.Atoi(extTypeStr)
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
 	list, total, err := service.Collect().ListItems(ctx, userID, uint(folderID), extType, page, pageSize)
@@ -146,4 +144,19 @@ func ListCollectItems(ctx *gin.Context) {
 		return
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
+}
+
+// ListCollectPosts 收藏夹中的帖子列表
+func ListCollectPosts(ctx *gin.Context) {
+	listCollectItemsByType(ctx, constant.ExtTypePost)
+}
+
+// ListCollectQuestions 收藏夹中的提问列表
+func ListCollectQuestions(ctx *gin.Context) {
+	listCollectItemsByType(ctx, constant.ExtTypeQuestion)
+}
+
+// ListCollectAnswers 收藏夹中的回答列表
+func ListCollectAnswers(ctx *gin.Context) {
+	listCollectItemsByType(ctx, constant.ExtTypeAnswer)
 }

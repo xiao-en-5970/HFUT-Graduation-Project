@@ -55,6 +55,8 @@ func PrivateRouter(api *gin.RouterGroup) {
 		postGroup.POST("/:id/comments", controller.PostCommentHandlers.Create)
 		postGroup.POST("/:id/collect", controller.PostCollectHandlers.Add)
 		postGroup.DELETE("/:id/collect", controller.PostCollectHandlers.Remove)
+		postGroup.POST("/:id/like", controller.PostLikeHandlers.Add)
+		postGroup.DELETE("/:id/like", controller.PostLikeHandlers.Remove)
 	}
 	questionGroup := api.Group("/question")
 	{
@@ -72,6 +74,8 @@ func PrivateRouter(api *gin.RouterGroup) {
 		questionGroup.POST("/:id/comments", controller.QuestionCommentHandlers.Create)
 		questionGroup.POST("/:id/collect", controller.QuestionCollectHandlers.Add)
 		questionGroup.DELETE("/:id/collect", controller.QuestionCollectHandlers.Remove)
+		questionGroup.POST("/:id/like", controller.QuestionLikeHandlers.Add)
+		questionGroup.DELETE("/:id/like", controller.QuestionLikeHandlers.Remove)
 	}
 	answerGroup := api.Group("/answer")
 	{
@@ -88,12 +92,16 @@ func PrivateRouter(api *gin.RouterGroup) {
 		answerGroup.POST("/:id/comments", controller.AnswerCommentHandlers.Create)
 		answerGroup.POST("/:id/collect", controller.AnswerCollectHandlers.Add)
 		answerGroup.DELETE("/:id/collect", controller.AnswerCollectHandlers.Remove)
+		answerGroup.POST("/:id/like", controller.AnswerLikeHandlers.Add)
+		answerGroup.DELETE("/:id/like", controller.AnswerLikeHandlers.Remove)
 	}
 	collectGroup := api.Group("/collect")
 	{
 		collectGroup.POST("/folders", controller.CreateCollectFolder)
 		collectGroup.GET("/folders", controller.ListCollectFolders)
-		collectGroup.GET("/folders/:id/items", controller.ListCollectItems)
+		collectGroup.GET("/folders/:id/posts", controller.ListCollectPosts)
+		collectGroup.GET("/folders/:id/questions", controller.ListCollectQuestions)
+		collectGroup.GET("/folders/:id/answers", controller.ListCollectAnswers)
 	}
 	// OSS 上传、删除（需 JWT）
 	api.POST("/oss/*path", controller.OSSUpload)
