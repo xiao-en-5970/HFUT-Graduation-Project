@@ -90,21 +90,19 @@
       "type": "object",
       "required": ["title", "content"],
       "properties": {
-        "title": { "type": "string", "description": "文章标题" },
-        "content": { "type": "string", "description": "文章内容" },
-        "type": { "type": "integer", "description": "1:普通 2:提问 3:回答", "default": 1 },
+        "title": { "type": "string", "description": "标题" },
+        "content": { "type": "string", "description": "内容" },
         "publish_status": { "type": "integer", "description": "1:私密 2:公开", "default": 1 },
-        "school_id": { "type": "integer", "description": "学校ID" }
-      }
+        "parent_id": { "type": "integer", "description": "回答必传，指向提问ID" }
+      },
+      "description": "回答必须传 parent_id"
     },
     "ArticleUpdateRequest": {
       "type": "object",
       "properties": {
         "title": { "type": "string" },
         "content": { "type": "string" },
-        "type": { "type": "integer" },
-        "publish_status": { "type": "integer" },
-        "school_id": { "type": "integer" }
+        "publish_status": { "type": "integer" }
       }
     },
     "ArticleUpdateImagesRequest": {
@@ -120,6 +118,7 @@
         "id": { "type": "integer" },
         "user_id": { "type": "integer" },
         "school_id": { "type": "integer" },
+        "parent_id": { "type": "integer", "description": "父文章ID" },
         "title": { "type": "string" },
         "content": { "type": "string" },
         "status": { "type": "integer" },
@@ -264,7 +263,7 @@
         }
       }
     },
-    "/api/v1/article": {
+    "/api/v1/post": {
       "get": {
         "tags": ["帖子"],
         "summary": "帖子列表",
@@ -294,7 +293,7 @@
         }
       }
     },
-    "/api/v1/article/search": {
+    "/api/v1/post/search": {
       "get": {
         "tags": ["帖子"],
         "summary": "帖子搜索",
@@ -311,7 +310,23 @@
         }
       }
     },
-    "/api/v1/article/{id}": {
+    "/api/v1/question/{id}/answers": {
+      "get": {
+        "tags": ["提问"],
+        "summary": "列出提问下的回答",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "type": "integer", "description": "提问ID" },
+          { "in": "query", "name": "page", "type": "integer", "default": 1 },
+          { "in": "query", "name": "pageSize", "type": "integer", "default": 20 }
+        ],
+        "responses": {
+          "200": { "description": "成功", "schema": { "$ref": "#/definitions/Response" } },
+          "401": { "description": "未认证" }
+        }
+      }
+    },
+    "/api/v1/post/{id}": {
       "get": {
         "tags": ["帖子"],
         "summary": "获取帖子详情",
@@ -352,7 +367,7 @@
         }
       }
     },
-    "/api/v1/article/{id}/images": {
+    "/api/v1/post/{id}/images": {
       "post": {
         "tags": ["帖子"],
         "summary": "批量上传帖子图片",

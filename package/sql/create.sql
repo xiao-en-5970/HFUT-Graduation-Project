@@ -230,6 +230,9 @@ comment on column goods.school_id is '学校ID';
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS school_id integer REFERENCES schools(id);
 comment on column articles.school_id is '学校ID';
 
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS parent_id integer REFERENCES articles(id);
+comment on column articles.parent_id is '父文章ID，仅回答类型(type=3)使用，指向提问';
+
 -- 全文检索：tsvector 倒排索引，用于标题、正文搜索
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS search_vector tsvector
   GENERATED ALWAYS AS (setweight(to_tsvector('simple', coalesce(title,'')), 'A') ||

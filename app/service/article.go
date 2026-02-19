@@ -14,6 +14,8 @@ import (
 var (
 	ErrArticleNotFoundOrNoPermission = errors.New("帖子不存在或无权限")
 	ErrSchoolNotBound                = errors.New("请先绑定学校")
+	ErrParentQuestionRequired        = errors.New("回答必须指定父提问 parent_id")
+	ErrParentQuestionNotFound        = errors.New("父提问不存在或非本校")
 )
 
 type articleService struct{}
@@ -22,60 +24,69 @@ func Article() *articleService {
 	return &articleService{}
 }
 
-// CreateArticleReq 创建帖子请求
+// CreateArticleReq 创建请求（type 由接口路径决定）
+// 回答类型必须传 parent_id 指向提问
 type CreateArticleReq struct {
 	Title         string `json:"title" binding:"required"`
 	Content       string `json:"content" binding:"required"`
-	Type          int    `json:"type"`           // 1:普通 2:提问 3:回答
 	PublishStatus int16  `json:"publish_status"` // 1:私密 2:公开
-	SchoolID      *int   `json:"school_id"`
+	ParentID      *uint  `json:"parent_id"`      // 仅回答必传，指向提问ID
 }
 
-// UpdateArticleReq 更新帖子请求
+// UpdateArticleReq 更新请求（type 不可修改，由接口隔离）
 type UpdateArticleReq struct {
 	Title         *string `json:"title"`
 	Content       *string `json:"content"`
-	Type          *int    `json:"type"`
 	PublishStatus *int16  `json:"publish_status"`
-	SchoolID      *int    `json:"school_id"`
 }
 
-func (s *articleService) Create(ctx *gin.Context, userID uint, schoolID uint, req CreateArticleReq) (uint, error) {
+// Create 创建，articleType 由调用方传入（1帖子 2提问 3回答），学校强制隔离
+// 回答必须指定 parent_id 且父文章为提问、同校
+func (s *articleService) Create(ctx *gin.Context, userID uint, schoolID uint, articleType int, req CreateArticleReq) (uint, error) {
 	if schoolID == 0 {
 		return 0, ErrSchoolNotBound
+	}
+	if articleType == constant.ArticleTypeAnswer {
+		if req.ParentID == nil || *req.ParentID == 0 {
+			return 0, ErrParentQuestionRequired
+		}
+		parent, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), *req.ParentID, schoolID, constant.ArticleTypeQuestion)
+		if err != nil || parent == nil {
+			return 0, ErrParentQuestionNotFound
+		}
 	}
 	uid := int(userID)
 	sid := int(schoolID)
 	a := &model.Article{
 		UserID:        &uid,
-		SchoolID:      &sid, // 强制使用用户学校，不得跨校
+		SchoolID:      &sid,
 		Title:         req.Title,
 		Content:       req.Content,
 		Status:        constant.StatusValid,
 		PublishStatus: req.PublishStatus,
-		Type:          req.Type,
+		Type:          articleType,
 	}
 	if a.PublishStatus == 0 {
 		a.PublishStatus = 1
 	}
-	if a.Type == 0 {
-		a.Type = constant.ArticleTypeNormal
+	if articleType == constant.ArticleTypeAnswer && req.ParentID != nil {
+		pid := int(*req.ParentID)
+		a.ParentID = &pid
 	}
 	return dao.Article().Create(ctx.Request.Context(), a)
 }
 
-func (s *articleService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID uint) (*model.Article, error) {
+// Get 获取详情，学校+类型隔离
+func (s *articleService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID uint, articleType int) (*model.Article, error) {
 	if schoolID == 0 {
 		return nil, ErrSchoolNotBound
 	}
-	// 学校隔离：仅能查看本校帖子
-	art, err := dao.Article().GetByIDWithSchool(ctx.Request.Context(), id, schoolID)
+	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), id, schoolID, articleType)
 	if err != nil {
 		return nil, err
 	}
-	// 私密帖子仅作者可见
 	if art.PublishStatus == 1 {
-		ok, _ := dao.Article().ExistsAndOwnedByWithSchool(ctx.Request.Context(), id, viewerID, schoolID)
+		ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), id, viewerID, schoolID, articleType)
 		if !ok {
 			return nil, ErrArticleNotFoundOrNoPermission
 		}
@@ -83,8 +94,9 @@ func (s *articleService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID 
 	return art, nil
 }
 
-func (s *articleService) Update(ctx *gin.Context, id uint, userID uint, schoolID uint, req UpdateArticleReq) error {
-	ok, err := dao.Article().ExistsAndOwnedByWithSchool(ctx.Request.Context(), id, userID, schoolID)
+// Update 更新，类型不可修改
+func (s *articleService) Update(ctx *gin.Context, id uint, userID uint, schoolID uint, articleType int, req UpdateArticleReq) error {
+	ok, err := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), id, userID, schoolID, articleType)
 	if err != nil {
 		return err
 	}
@@ -98,15 +110,8 @@ func (s *articleService) Update(ctx *gin.Context, id uint, userID uint, schoolID
 	if req.Content != nil {
 		updates["content"] = *req.Content
 	}
-	if req.Type != nil {
-		updates["type"] = *req.Type
-	}
 	if req.PublishStatus != nil {
 		updates["publish_status"] = *req.PublishStatus
-	}
-	// 禁止跨校修改 school_id
-	if req.SchoolID != nil && schoolID > 0 && uint(*req.SchoolID) == schoolID {
-		updates["school_id"] = *req.SchoolID
 	}
 	if len(updates) == 0 {
 		return nil
@@ -114,9 +119,9 @@ func (s *articleService) Update(ctx *gin.Context, id uint, userID uint, schoolID
 	return dao.Article().UpdateColumns(ctx.Request.Context(), id, updates)
 }
 
-// UploadImages 批量上传帖子图片，按顺序保存为 image_1, image_2, ...
-func (s *articleService) UploadImages(ctx *gin.Context, id uint, userID uint, schoolID uint, files []*multipart.FileHeader) ([]string, error) {
-	ok, err := dao.Article().ExistsAndOwnedByWithSchool(ctx.Request.Context(), id, userID, schoolID)
+// UploadImages 批量上传图片，类型隔离
+func (s *articleService) UploadImages(ctx *gin.Context, id uint, userID uint, schoolID uint, articleType int, files []*multipart.FileHeader) ([]string, error) {
+	ok, err := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), id, userID, schoolID, articleType)
 	if err != nil {
 		return nil, err
 	}
@@ -142,8 +147,9 @@ func (s *articleService) UploadImages(ctx *gin.Context, id uint, userID uint, sc
 	return urls, nil
 }
 
-func (s *articleService) UpdateImages(ctx *gin.Context, id uint, userID uint, schoolID uint, images []string) error {
-	ok, err := dao.Article().ExistsAndOwnedByWithSchool(ctx.Request.Context(), id, userID, schoolID)
+// UpdateImages 更新图片URL元数据，类型隔离
+func (s *articleService) UpdateImages(ctx *gin.Context, id uint, userID uint, schoolID uint, articleType int, images []string) error {
+	ok, err := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), id, userID, schoolID, articleType)
 	if err != nil {
 		return err
 	}
@@ -153,8 +159,9 @@ func (s *articleService) UpdateImages(ctx *gin.Context, id uint, userID uint, sc
 	return dao.Article().UpdateImages(ctx.Request.Context(), id, images)
 }
 
-func (s *articleService) Delete(ctx *gin.Context, id uint, userID uint, schoolID uint) error {
-	ok, err := dao.Article().ExistsAndOwnedByWithSchool(ctx.Request.Context(), id, userID, schoolID)
+// Delete 软删除，类型隔离
+func (s *articleService) Delete(ctx *gin.Context, id uint, userID uint, schoolID uint, articleType int) error {
+	ok, err := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), id, userID, schoolID, articleType)
 	if err != nil {
 		return err
 	}
@@ -164,16 +171,31 @@ func (s *articleService) Delete(ctx *gin.Context, id uint, userID uint, schoolID
 	return dao.Article().SoftDelete(ctx.Request.Context(), id)
 }
 
-func (s *articleService) List(ctx *gin.Context, schoolID uint, page, pageSize int) ([]*model.Article, int64, error) {
+// List 分页列表，学校+类型隔离
+func (s *articleService) List(ctx *gin.Context, schoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
 	if schoolID == 0 {
 		return nil, 0, ErrSchoolNotBound
 	}
-	return dao.Article().List(ctx.Request.Context(), schoolID, page, pageSize)
+	return dao.Article().List(ctx.Request.Context(), schoolID, articleType, page, pageSize)
 }
 
-func (s *articleService) Search(ctx *gin.Context, schoolID uint, keyword string, page, pageSize int) ([]*model.Article, int64, error) {
+// Search 全文检索，学校+类型隔离
+func (s *articleService) Search(ctx *gin.Context, schoolID uint, articleType int, keyword string, page, pageSize int) ([]*model.Article, int64, error) {
 	if schoolID == 0 {
 		return nil, 0, ErrSchoolNotBound
 	}
-	return dao.Article().Search(ctx.Request.Context(), schoolID, keyword, page, pageSize)
+	return dao.Article().Search(ctx.Request.Context(), schoolID, articleType, keyword, page, pageSize)
+}
+
+// ListAnswersByQuestionID 列出某提问下的回答，学校隔离
+func (s *articleService) ListAnswersByQuestionID(ctx *gin.Context, questionID uint, schoolID uint, page, pageSize int) ([]*model.Article, int64, error) {
+	if schoolID == 0 {
+		return nil, 0, ErrSchoolNotBound
+	}
+	// 校验提问存在且为提问类型
+	_, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), questionID, schoolID, constant.ArticleTypeQuestion)
+	if err != nil {
+		return nil, 0, ErrParentQuestionNotFound
+	}
+	return dao.Article().ListByParentID(ctx.Request.Context(), questionID, schoolID, constant.ArticleTypeAnswer, page, pageSize)
 }

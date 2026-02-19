@@ -11,6 +11,7 @@ type Article struct {
 	ID            uint           `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID        *int           `gorm:"column:user_id;index" json:"user_id"`                                          // 用户ID
 	SchoolID      *int           `gorm:"column:school_id;index" json:"school_id"`                                      // 学校ID
+	ParentID      *int           `gorm:"column:parent_id;index" json:"parent_id"`                                      // 父文章ID，仅回答指向提问
 	Title         string         `gorm:"type:varchar(255);not null" json:"title"`                                      // 文章标题
 	Content       string         `gorm:"type:text;not null" json:"content"`                                            // 文章内容
 	Status        int16          `gorm:"type:smallint;not null;default:1" json:"status"`                               // 1:正常 2:禁用

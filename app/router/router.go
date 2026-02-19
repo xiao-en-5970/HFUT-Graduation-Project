@@ -38,17 +38,41 @@ func PrivateRouter(api *gin.RouterGroup) {
 		userGroup.POST("/avatar", controller.UserUploadAvatar)
 		userGroup.POST("/background", controller.UserUploadBackground)
 	}
-	articleGroup := api.Group("/article")
-	articleGroup.Use(middleware.LoadUserSchool())
+	// 帖子（type=1）、提问（type=2）、回答（type=3），三类接口数据隔离+学校隔离
+	api.Use(middleware.LoadUserSchool())
+	postGroup := api.Group("/post")
 	{
-		articleGroup.GET("", controller.ArticleList)
-		articleGroup.GET("/search", controller.ArticleSearch)
-		articleGroup.GET("/:id", controller.ArticleGet)
-		articleGroup.POST("", controller.ArticleCreate)
-		articleGroup.PUT("/:id", controller.ArticleUpdate)
-		articleGroup.POST("/:id/images", controller.ArticleUploadImages)
-		articleGroup.PUT("/:id/images", controller.ArticleUpdateImages)
-		articleGroup.DELETE("/:id", controller.ArticleDelete)
+		postGroup.GET("", controller.PostHandlers.List)
+		postGroup.GET("/search", controller.PostHandlers.Search)
+		postGroup.POST("", controller.PostHandlers.Create)
+		postGroup.GET("/:id", controller.PostHandlers.Get)
+		postGroup.PUT("/:id", controller.PostHandlers.Update)
+		postGroup.POST("/:id/images", controller.PostHandlers.UploadImages)
+		postGroup.PUT("/:id/images", controller.PostHandlers.UpdateImages)
+		postGroup.DELETE("/:id", controller.PostHandlers.Delete)
+	}
+	questionGroup := api.Group("/question")
+	{
+		questionGroup.GET("", controller.QuestionHandlers.List)
+		questionGroup.GET("/search", controller.QuestionHandlers.Search)
+		questionGroup.POST("", controller.QuestionHandlers.Create)
+		questionGroup.GET("/:id/answers", controller.QuestionListAnswers) // 须在 /:id 之前
+		questionGroup.GET("/:id", controller.QuestionHandlers.Get)
+		questionGroup.PUT("/:id", controller.QuestionHandlers.Update)
+		questionGroup.POST("/:id/images", controller.QuestionHandlers.UploadImages)
+		questionGroup.PUT("/:id/images", controller.QuestionHandlers.UpdateImages)
+		questionGroup.DELETE("/:id", controller.QuestionHandlers.Delete)
+	}
+	answerGroup := api.Group("/answer")
+	{
+		answerGroup.GET("", controller.AnswerHandlers.List)
+		answerGroup.GET("/search", controller.AnswerHandlers.Search)
+		answerGroup.POST("", controller.AnswerHandlers.Create)
+		answerGroup.GET("/:id", controller.AnswerHandlers.Get)
+		answerGroup.PUT("/:id", controller.AnswerHandlers.Update)
+		answerGroup.POST("/:id/images", controller.AnswerHandlers.UploadImages)
+		answerGroup.PUT("/:id/images", controller.AnswerHandlers.UpdateImages)
+		answerGroup.DELETE("/:id", controller.AnswerHandlers.Delete)
 	}
 	// OSS 上传、删除（需 JWT）
 	api.POST("/oss/*path", controller.OSSUpload)
