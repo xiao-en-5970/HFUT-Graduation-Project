@@ -73,13 +73,25 @@ func (s *ArticleStore) UpdateImages(ctx context.Context, id uint, images []strin
 
 // UpdateCollectCount 增减 collect_count，delta 为 +1 或 -1
 func (s *ArticleStore) UpdateCollectCount(ctx context.Context, id uint, delta int) error {
-	return pgsql.DB.Model(&model.Article{}).Where("id = ?", id).
+	return pgsql.DB.WithContext(ctx).Model(&model.Article{}).Where("id = ?", id).
 		UpdateColumn("collect_count", gorm.Expr("GREATEST(0, collect_count + ?)", delta)).Error
 }
 
 // UpdateLikeCount 增减 like_count，delta 为 +1 或 -1
 func (s *ArticleStore) UpdateLikeCount(ctx context.Context, id uint, delta int) error {
-	return pgsql.DB.Model(&model.Article{}).Where("id = ?", id).
+	return pgsql.DB.WithContext(ctx).Model(&model.Article{}).Where("id = ?", id).
+		UpdateColumn("like_count", gorm.Expr("GREATEST(0, like_count + ?)", delta)).Error
+}
+
+// UpdateCollectCountDB 事务内增减 collect_count
+func (s *ArticleStore) UpdateCollectCountDB(db *gorm.DB, id uint, delta int) error {
+	return db.Model(&model.Article{}).Where("id = ?", id).
+		UpdateColumn("collect_count", gorm.Expr("GREATEST(0, collect_count + ?)", delta)).Error
+}
+
+// UpdateLikeCountDB 事务内增减 like_count
+func (s *ArticleStore) UpdateLikeCountDB(db *gorm.DB, id uint, delta int) error {
+	return db.Model(&model.Article{}).Where("id = ?", id).
 		UpdateColumn("like_count", gorm.Expr("GREATEST(0, like_count + ?)", delta)).Error
 }
 
@@ -133,14 +145,14 @@ func (s *ArticleStore) Search(ctx context.Context, schoolID uint, articleType in
 
 func (s *ArticleStore) ExistsAndOwnedBy(ctx context.Context, id uint, userID uint) (bool, error) {
 	var count int64
-	err := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ?", id, int(userID)).Count(&count).Error
+	err := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ? AND status = ?", id, int(userID), constant.StatusValid).Count(&count).Error
 	return count > 0, err
 }
 
 // ExistsAndOwnedByWithSchool 校验存在、归属用户且同校
 func (s *ArticleStore) ExistsAndOwnedByWithSchool(ctx context.Context, id uint, userID uint, schoolID uint) (bool, error) {
 	var count int64
-	q := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ?", id, int(userID))
+	q := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ? AND status = ?", id, int(userID), constant.StatusValid)
 	if schoolID > 0 {
 		q = q.Where("school_id = ?", schoolID)
 	}
@@ -151,7 +163,7 @@ func (s *ArticleStore) ExistsAndOwnedByWithSchool(ctx context.Context, id uint, 
 // ExistsAndOwnedByWithSchoolAndType 校验存在、归属用户、同校且类型匹配
 func (s *ArticleStore) ExistsAndOwnedByWithSchoolAndType(ctx context.Context, id uint, userID uint, schoolID uint, articleType int) (bool, error) {
 	var count int64
-	q := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ? AND type = ?", id, int(userID), articleType)
+	q := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ? AND type = ? AND status = ?", id, int(userID), articleType, constant.StatusValid)
 	if schoolID > 0 {
 		q = q.Where("school_id = ?", schoolID)
 	}

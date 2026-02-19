@@ -6,7 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
+	"gorm.io/gorm"
 )
 
 var (
@@ -14,6 +16,7 @@ var (
 	ErrCollectFolderNotOwned   = errors.New("无权限操作该收藏夹")
 	ErrCollectArticleNotFound  = errors.New("文章不存在")
 	ErrCollectAlreadyCollected = errors.New("已收藏")
+	ErrCollectNotCollected     = errors.New("未收藏")
 )
 
 type collectService struct{}
@@ -84,22 +87,45 @@ func (s *collectService) AddArticle(ctx *gin.Context, userID uint, schoolID uint
 			return ErrCollectArticleNotFound
 		}
 	}
-	ok, _ := dao.CollectItem().Exists(ctx.Request.Context(), cid, int(articleID), extType)
-	if ok {
-		return ErrCollectAlreadyCollected
+	// 惰性新建：若存在 status=2 的记录则恢复，否则新建；已收藏则幂等返回成功
+	exist, getErr := dao.CollectItem().GetByCollectExt(ctx.Request.Context(), cid, int(articleID), extType)
+	if getErr == nil {
+		if exist.Status == constant.StatusValid {
+			return nil // 幂等：已收藏，多次收藏视为成功
+		}
+		// status=2，恢复并更新计数
+		return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			if err := dao.CollectItem().RestoreWithDB(tx, cid, int(articleID), extType); err != nil {
+				return err
+			}
+			return dao.Article().UpdateCollectCountDB(tx, articleID, 1)
+		})
 	}
+	if getErr != gorm.ErrRecordNotFound {
+		return getErr
+	}
+	// 记录不存在，新建（唯一约束防止并发重复，若冲突则幂等返回）
 	item := &model.CollectItem{
 		CollectID: cid,
 		ExtID:     int(articleID),
 		ExtType:   extType,
 		Status:    constant.StatusValid,
 	}
-	_, err = dao.CollectItem().Create(ctx.Request.Context(), item)
+	err = pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := dao.CollectItem().CreateWithDB(tx, item); err != nil {
+			return err
+		}
+		return dao.Article().UpdateCollectCountDB(tx, articleID, 1)
+	})
 	if err != nil {
+		// 并发时可能触发唯一约束冲突，此时记录已存在，视为幂等成功
+		exist2, _ := dao.CollectItem().GetByCollectExt(ctx.Request.Context(), cid, int(articleID), extType)
+		if exist2 != nil && exist2.Status == constant.StatusValid {
+			return nil
+		}
 		return err
 	}
-	// 更新文章 collect_count
-	return dao.Article().UpdateCollectCount(ctx.Request.Context(), articleID, 1)
+	return nil
 }
 
 // RemoveArticle 取消收藏文章
@@ -108,11 +134,17 @@ func (s *collectService) RemoveArticle(ctx *gin.Context, userID uint, collectID 
 	if err != nil {
 		return err
 	}
-	err = dao.CollectItem().Delete(ctx.Request.Context(), cid, int(articleID), extType)
-	if err != nil {
-		return err
+	ok, _ := dao.CollectItem().Exists(ctx.Request.Context(), cid, int(articleID), extType)
+	if !ok {
+		return nil // 幂等：未收藏，多次取消视为成功
 	}
-	return dao.Article().UpdateCollectCount(ctx.Request.Context(), articleID, -1)
+	// 惰性删除
+	return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := dao.CollectItem().SoftDeleteWithDB(tx, cid, int(articleID), extType); err != nil {
+			return err
+		}
+		return dao.Article().UpdateCollectCountDB(tx, articleID, -1)
+	})
 }
 
 // ListItems 列出收藏夹中的收藏项

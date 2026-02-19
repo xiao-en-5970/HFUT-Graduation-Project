@@ -46,10 +46,6 @@ func CollectAdd(ctx *gin.Context) {
 			reply.ReplyErrWithMessage(ctx, "内容不存在")
 			return
 		}
-		if errors.Is(err, service.ErrCollectAlreadyCollected) {
-			reply.ReplyErrWithMessage(ctx, "已收藏")
-			return
-		}
 		reply.ReplyInternalError(ctx, err)
 		return
 	}

@@ -70,3 +70,12 @@ func (s *CommentStore) ExistsByExtAndID(ctx context.Context, extType int, extID 
 		Count(&count).Error
 	return count > 0, err
 }
+
+// CountByExt 按 ext 统计评论数量（仅 status=1 的顶层评论）
+func (s *CommentStore) CountByExt(ctx context.Context, extType int, extID int) (int64, error) {
+	var count int64
+	err := pgsql.DB.WithContext(ctx).Model(&model.Comment{}).
+		Where("ext_type = ? AND ext_id = ? AND parent_id IS NULL AND status = ?", extType, extID, constant.StatusValid).
+		Count(&count).Error
+	return count, err
+}

@@ -113,7 +113,8 @@ create table likes (
             images varchar(255)[],
             status smallint not null DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, ext_id, ext_type)
 );
 
 comment on column likes.user_id is '用户ID';

@@ -42,10 +42,6 @@ func LikeAdd(ctx *gin.Context) {
 			reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 			return
 		}
-		if errors.Is(err, service.ErrLikeAlreadyLiked) {
-			reply.ReplyErrWithMessage(ctx, "已点赞")
-			return
-		}
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
@@ -75,10 +71,6 @@ func LikeRemove(ctx *gin.Context) {
 	if err := service.Like().RemoveArticle(ctx, userID, schoolID, extID, extType); err != nil {
 		if errors.Is(err, service.ErrLikeArticleNotFound) {
 			reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
-			return
-		}
-		if errors.Is(err, service.ErrLikeNotLiked) {
-			reply.ReplyErrWithMessage(ctx, "未点赞")
 			return
 		}
 		reply.ReplyInternalError(ctx, err)
