@@ -132,10 +132,10 @@ func AdminUserUpdate(ctx *gin.Context) {
 		}
 	}
 	if body.Avatar != nil {
-		updates["avatar"] = *body.Avatar
+		updates["avatar"] = oss.StripForStorage(*body.Avatar)
 	}
 	if body.Background != nil {
-		updates["background"] = *body.Background
+		updates["background"] = oss.StripForStorage(*body.Background)
 	}
 	if len(updates) > 0 {
 		if err := dao.User().UpdateColumns(ctx.Request.Context(), id, updates); err != nil {
@@ -437,8 +437,12 @@ func AdminArticleUpdate(ctx *gin.Context, articleType int) {
 		updates["status"] = *body.Status
 	}
 	if body.Images != nil {
-		updates["images"] = pq.StringArray(*body.Images)
-		updates["image_count"] = len(*body.Images)
+		stripped := make([]string, len(*body.Images))
+		for i, p := range *body.Images {
+			stripped[i] = oss.StripForStorage(p)
+		}
+		updates["images"] = pq.StringArray(stripped)
+		updates["image_count"] = len(stripped)
 	}
 	if len(updates) == 0 {
 		reply.ReplyOK(ctx)

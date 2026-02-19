@@ -18,15 +18,16 @@ import (
 // SmallSuffix 压缩图后缀
 const SmallSuffix = ".small"
 
-// MaxSmallFileBytes 压缩图体积上限 200KB
-const MaxSmallFileBytes = 200 * 1024
-
-// CompressToSmall 将图片压缩到指定最大边长，体积尽量不超过 200KB
-// maxPx: 长边不超过此像素，如 720 或 540
-func CompressToSmall(srcPath, dstPath string, maxPx uint) error {
+// CompressToSmall 将图片压缩到指定最大边长，体积尽量不超过 maxKB
+// maxPx: 长边不超过此像素；maxKB: 体积上限（KB），如 200
+func CompressToSmall(srcPath, dstPath string, maxPx uint, maxKB int) error {
 	if maxPx == 0 {
 		return fmt.Errorf("maxPx must be > 0")
 	}
+	if maxKB <= 0 {
+		maxKB = 200
+	}
+	maxBytes := maxKB * 1024
 	f, err := os.Open(srcPath)
 	if err != nil {
 		return err
@@ -56,7 +57,7 @@ func CompressToSmall(srcPath, dstPath string, maxPx uint) error {
 		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: q}); err != nil {
 			return err
 		}
-		if buf.Len() <= MaxSmallFileBytes {
+		if buf.Len() <= maxBytes {
 			best = buf.Bytes()
 			bestQ = q
 			break
@@ -66,7 +67,7 @@ func CompressToSmall(srcPath, dstPath string, maxPx uint) error {
 	}
 
 	// 若仍超限，缩小尺寸再压
-	if len(best) > MaxSmallFileBytes && (img.Bounds().Dx() > 200 || img.Bounds().Dy() > 200) {
+	if len(best) > maxBytes && (img.Bounds().Dx() > 200 || img.Bounds().Dy() > 200) {
 		sz := img.Bounds().Size()
 		nw, nh := sz.X*3/4, sz.Y*3/4
 		if nw < 200 {
@@ -81,7 +82,7 @@ func CompressToSmall(srcPath, dstPath string, maxPx uint) error {
 			if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: q}); err != nil {
 				return err
 			}
-			if buf.Len() <= MaxSmallFileBytes {
+			if buf.Len() <= maxBytes {
 				best = buf.Bytes()
 				break
 			}

@@ -40,6 +40,7 @@ var (
 	OSSRoot           string // OSS 存储根路径，容器内 /oss，对应宿主机 /var/oss
 	OSSHost           string // OSS 对外访问域名，如 http://api.xiaoen.xyz，用于返回完整 URL 给前端
 	OSSSmallImageSize int    // 压缩图最大边长（像素），如 720 或 540，0 表示不生成压缩图
+	OSSSmallImageKB   int    // 压缩图体积上限（KB），如 200，0 表示 200
 )
 
 const defaultEnvPath = "/.env"
@@ -84,6 +85,10 @@ func LoadConfigFrom(path string) error {
 	OSSRoot = getEnv("OSS_ROOT", "/oss")
 	OSSHost = getEnv("OSS_HOST", "")
 	OSSSmallImageSize = getEnvInt("OSS_SMALL_IMAGE_SIZE", 720)
+	OSSSmallImageKB = getEnvInt("OSS_SMALL_IMAGE_KB", 200)
+	if OSSSmallImageKB <= 0 {
+		OSSSmallImageKB = 200
+	}
 
 	return nil
 }

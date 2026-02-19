@@ -137,7 +137,11 @@ func (s *articleService) UploadImages(ctx *gin.Context, id uint, userID uint, sc
 		}
 		urls = append(urls, url)
 	}
-	if err := dao.Article().UpdateImages(ctx.Request.Context(), id, urls); err != nil {
+	stripped := make([]string, len(urls))
+	for i, u := range urls {
+		stripped[i] = oss.StripForStorage(u)
+	}
+	if err := dao.Article().UpdateImages(ctx.Request.Context(), id, stripped); err != nil {
 		return nil, err
 	}
 	return urls, nil
@@ -152,7 +156,11 @@ func (s *articleService) UpdateImages(ctx *gin.Context, id uint, userID uint, sc
 	if !ok {
 		return ErrArticleNotFoundOrNoPermission
 	}
-	return dao.Article().UpdateImages(ctx.Request.Context(), id, images)
+	stripped := make([]string, len(images))
+	for i, p := range images {
+		stripped[i] = oss.StripForStorage(p)
+	}
+	return dao.Article().UpdateImages(ctx.Request.Context(), id, stripped)
 }
 
 // Delete 软删除，类型隔离

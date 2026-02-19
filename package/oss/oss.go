@@ -138,7 +138,7 @@ func Save(file *multipart.FileHeader, relPath string) (url string, err error) {
 		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(relPath), "."))
 		if imageExts[ext] {
 			smallPath := fullPath + image.SmallSuffix
-			_ = image.CompressToSmall(fullPath, smallPath, uint(config.OSSSmallImageSize))
+			_ = image.CompressToSmall(fullPath, smallPath, uint(config.OSSSmallImageSize), config.OSSSmallImageKB)
 		}
 	}
 	return GetRelPath(relPath), nil
@@ -214,7 +214,7 @@ func StatOrEnsureSmall(relPath string) (os.FileInfo, string, error) {
 	if !imageExts[ext] {
 		return info, fullPath, err
 	}
-	if err := image.CompressToSmall(origFullPath, fullPath, uint(config.OSSSmallImageSize)); err != nil {
+	if err := image.CompressToSmall(origFullPath, fullPath, uint(config.OSSSmallImageSize), config.OSSSmallImageKB); err != nil {
 		return info, fullPath, err
 	}
 	return Stat(relPath)
@@ -245,6 +245,11 @@ func ArticleImagePath(articleID uint, index int, ext string) string {
 		ext = "jpg"
 	}
 	return "article/" + strconv.FormatUint(uint64(articleID), 10) + "/image_" + strconv.Itoa(index) + "." + ext
+}
+
+// StripForStorage 去掉 .small 后缀，供数据库存储（数据库不存 .small）
+func StripForStorage(path string) string {
+	return image.StripSmallSuffix(path)
 }
 
 // ExtFromFilename 从文件名获取扩展名，如 "x.jpg" -> "jpg"
