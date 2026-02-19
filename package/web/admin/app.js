@@ -32,6 +32,7 @@
       const fd = new FormData();
       fd.append('file', file);
       const token = getToken();
+      const uploadUrl = API + '/oss/' + String(relPath).replace(/^\//, '');
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable && options.onProgress) {
@@ -51,11 +52,11 @@
           reject(new Error(data.message || '上传失败'));
           return;
         }
-        resolve(data.data?.url || (API + '/oss/' + relPath));
+        resolve(data.data?.url || uploadUrl);
       };
-      xhr.onerror = () => reject(new Error('上传失败'));
+      xhr.onerror = () => reject(new Error('上传失败，请检查网络或 API 地址'));
 
-      xhr.open('POST', API + '/oss/' + relPath);
+      xhr.open('POST', uploadUrl);
       if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
       xhr.send(fd);
     });
@@ -191,7 +192,14 @@
       document.getElementById('add-user-btn')?.addEventListener('click', showCreateUserModal);
       moduleContent.querySelectorAll('[data-disable]').forEach(btn => btn.addEventListener('click', () => disableUser(parseInt(btn.dataset.disable, 10))));
       moduleContent.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', () => restoreUser(parseInt(btn.dataset.restore, 10))));
-      moduleContent.querySelectorAll('[data-edit-user]').forEach(btn => btn.addEventListener('click', () => showEditUserModal(parseInt(btn.dataset.editUser, 10), list.find(u => u.id === parseInt(btn.dataset.editUser, 10)))));
+      moduleContent.querySelectorAll('[data-edit-user]').forEach(btn => btn.addEventListener('click', () => {
+        const user = list.find(u => u.id == btn.dataset.editUser || Number(u.id) === parseInt(btn.dataset.editUser, 10));
+        if (!user) {
+          alert('未找到对应用户');
+          return;
+        }
+        showEditUserModal(Number(user.id) || parseInt(btn.dataset.editUser, 10), user);
+      }));
       moduleContent.querySelectorAll('.role-select').forEach(sel => sel.addEventListener('change', () => updateUserRole(parseInt(sel.dataset.id, 10), parseInt(sel.value, 10))));
     } catch (e) { moduleContent.innerHTML = '<p class="error">' + e.message + '</p>'; }
   }
@@ -325,7 +333,14 @@
       moduleContent.querySelectorAll('[data-disable]').forEach(btn => btn.addEventListener('click', () => articleAction('posts', parseInt(btn.dataset.disable, 10), 'disable')));
       moduleContent.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', () => articleAction('posts', parseInt(btn.dataset.restore, 10), 'restore')));
       moduleContent.querySelectorAll('[data-publish]').forEach(btn => btn.addEventListener('click', () => articleAction('posts', parseInt(btn.dataset.publish, 10), 'publish')));
-      moduleContent.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => showArticleModal('posts', '编辑帖子', list.find(x => x.id === parseInt(btn.dataset.edit, 10)))));
+      moduleContent.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => {
+        const row = list.find(x => x.id == btn.dataset.edit || Number(x.id) === parseInt(btn.dataset.edit, 10));
+        if (!row) {
+          alert('未找到对应记录');
+          return;
+        }
+        showArticleModal('posts', '编辑帖子', row);
+      }));
     } catch (e) { moduleContent.innerHTML = '<p class="error">' + e.message + '</p>'; }
   }
 
@@ -363,7 +378,14 @@
       moduleContent.querySelectorAll('[data-disable]').forEach(btn => btn.addEventListener('click', () => articleAction('questions', parseInt(btn.dataset.disable, 10), 'disable')));
       moduleContent.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', () => articleAction('questions', parseInt(btn.dataset.restore, 10), 'restore')));
       moduleContent.querySelectorAll('[data-publish]').forEach(btn => btn.addEventListener('click', () => articleAction('questions', parseInt(btn.dataset.publish, 10), 'publish')));
-      moduleContent.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => showArticleModal('questions', '编辑提问', list.find(x => x.id === parseInt(btn.dataset.edit, 10)))));
+      moduleContent.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => {
+        const row = list.find(x => x.id == btn.dataset.edit || Number(x.id) === parseInt(btn.dataset.edit, 10));
+        if (!row) {
+          alert('未找到对应记录');
+          return;
+        }
+        showArticleModal('questions', '编辑提问', row);
+      }));
     } catch (e) { moduleContent.innerHTML = '<p class="error">' + e.message + '</p>'; }
   }
 
@@ -407,7 +429,14 @@
       moduleContent.querySelectorAll('[data-disable]').forEach(btn => btn.addEventListener('click', () => articleAction('answers', parseInt(btn.dataset.disable, 10), 'disable')));
       moduleContent.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', () => articleAction('answers', parseInt(btn.dataset.restore, 10), 'restore')));
       moduleContent.querySelectorAll('[data-publish]').forEach(btn => btn.addEventListener('click', () => articleAction('answers', parseInt(btn.dataset.publish, 10), 'publish')));
-      moduleContent.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => showArticleModal('answers', '编辑回答', list.find(x => x.id === parseInt(btn.dataset.edit, 10)))));
+      moduleContent.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => {
+        const row = list.find(x => x.id == btn.dataset.edit || Number(x.id) === parseInt(btn.dataset.edit, 10));
+        if (!row) {
+          alert('未找到对应记录');
+          return;
+        }
+        showArticleModal('answers', '编辑回答', row);
+      }));
     } catch (e) { moduleContent.innerHTML = '<p class="error">' + e.message + '</p>'; }
   }
 
@@ -417,8 +446,8 @@
   async function createDraftThenShowModal(type, title) {
     try {
       const d = await api(`/admin/${type}`, {method: 'POST', body: JSON.stringify({publish_status: 2})});
-      const newId = d.data?.id;
-      if (!newId) throw new Error('创建草稿失败');
+      const newId = d.data?.id ?? d.data?.Id;
+      if (newId == null || newId === '') throw new Error('创建草稿失败：未返回 id');
       const row = {id: newId, status: 3, title: '', content: '', images: [], publish_status: 2};
       showArticleModal(type, title, row);
     } catch (e) {
@@ -486,10 +515,14 @@
       const confirmBtn = ov.querySelector('#modal-confirm');
       try {
         if (row) {
+          const rowId = row.id ?? row.ID;
+          if (!rowId) {
+            throw new Error('文章 ID 缺失');
+          }
           const putBody = { title: payload.title, content: payload.content, publish_status: payload.publish_status, user_id: payload.user_id, school_id: payload.school_id };
           putBody.images = images;
           if (row.status === 3) putBody.status = 1;
-          await api(`/admin/${type}/${row.id}`, { method: 'PUT', body: JSON.stringify(putBody) });
+          await api(`/admin/${type}/${rowId}`, {method: 'PUT', body: JSON.stringify(putBody)});
         } else {
           // 先创建草稿获取 id，再上传图片，最后 PUT 发布
           const createPayload = { title: payload.title, content: payload.content };
@@ -529,7 +562,8 @@
       else renderAnswers();
     }, null, (ov) => {
       const listEl = ov.querySelector('#art-images-list');
-      const articleId = row?.id;
+      const rawId = row != null ? (row.id ?? row.ID) : undefined;
+      const articleId = (rawId !== undefined && rawId !== null && rawId !== '') ? (Number(rawId) || rawId) : null;
 
       function renderImages(urls) {
         listEl.innerHTML = urls.map((url, i) => `
@@ -609,17 +643,19 @@
 
       renderImages(initialImgs);
 
-      ov.querySelector('#art-images-add')?.addEventListener('change', async function () {
-        const files = this.files;
-        this.value = '';
-        if (!files || !files.length) return;
-        if (articleId) {
-          const progress = ensureUploadProgress(ov);
-          try {
-            for (let i = 0; i < files.length; i++) {
-              progress.show(`上传图片 ${i + 1}/${files.length}`);
-              const ext = getExt(files[i].name);
-              const path = `article/${articleId}/img_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const fileInput = ov.querySelector('#art-images-add');
+      if (fileInput) {
+        fileInput.addEventListener('change', async function () {
+          const files = this.files;
+          this.value = '';
+          if (!files || !files.length) return;
+          if (articleId != null) {
+            const progress = ensureUploadProgress(ov);
+            try {
+              for (let i = 0; i < files.length; i++) {
+                progress.show(`上传图片 ${i + 1}/${files.length}`);
+                const ext = getExt(files[i].name);
+                const path = `article/${articleId}/img_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
               const url = await apiUpload(path, files[i], {onProgress: (p) => progress.update(p)});
               addImages([url]);
             }
@@ -629,9 +665,14 @@
             progress.hide();
           }
         } else {
+            if (row && (row.id ?? row.Id) != null) {
+              alert('上传失败：文章 ID 未正确传递，请关闭弹窗后重试');
+              return;
+            }
           addPendingFiles(files);
         }
-      });
+        });
+      }
     });
   }
 
@@ -673,7 +714,14 @@
       document.getElementById('add-school-btn')?.addEventListener('click', showCreateSchoolModal);
       moduleContent.querySelectorAll('[data-disable]').forEach(btn => btn.addEventListener('click', () => schoolAction(parseInt(btn.dataset.disable, 10), 'disable')));
       moduleContent.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', () => schoolAction(parseInt(btn.dataset.restore, 10), 'restore')));
-      moduleContent.querySelectorAll('[data-edit-school]').forEach(btn => btn.addEventListener('click', () => showEditSchoolModal(list.find(s => s.id === parseInt(btn.dataset.editSchool, 10)))));
+      moduleContent.querySelectorAll('[data-edit-school]').forEach(btn => btn.addEventListener('click', () => {
+        const school = list.find(s => s.id == btn.dataset.editSchool || Number(s.id) === parseInt(btn.dataset.editSchool, 10));
+        if (!school) {
+          alert('未找到对应学校');
+          return;
+        }
+        showEditSchoolModal(school);
+      }));
     } catch (e) { moduleContent.innerHTML = '<p class="error">' + e.message + '</p>'; }
   }
 
