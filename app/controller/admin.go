@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lib/pq"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
@@ -312,10 +313,20 @@ func AdminArticleCreate(ctx *gin.Context, articleType int) {
 	}
 	var uid, sid, pid *int
 	if body.UserID != nil && *body.UserID > 0 {
+		_, err := dao.User().GetByID(ctx.Request.Context(), *body.UserID)
+		if err != nil {
+			reply.ReplyErrWithMessage(ctx, "用户不存在")
+			return
+		}
 		u := int(*body.UserID)
 		uid = &u
 	}
 	if body.SchoolID != nil && *body.SchoolID > 0 {
+		_, err := dao.School().GetByID(ctx.Request.Context(), *body.SchoolID)
+		if err != nil {
+			reply.ReplyErrWithMessage(ctx, "学校不存在")
+			return
+		}
 		s := int(*body.SchoolID)
 		sid = &s
 	}
@@ -384,7 +395,7 @@ func AdminArticleUpdate(ctx *gin.Context, articleType int) {
 		updates["status"] = *body.Status
 	}
 	if body.Images != nil {
-		updates["images"] = *body.Images
+		updates["images"] = pq.StringArray(*body.Images)
 		updates["image_count"] = len(*body.Images)
 	}
 	if len(updates) == 0 {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lib/pq"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
@@ -72,7 +73,7 @@ func (s *ArticleStore) Restore(ctx context.Context, id uint) error {
 
 func (s *ArticleStore) UpdateImages(ctx context.Context, id uint, images []string) error {
 	return pgsql.DB.Model(&model.Article{}).Where("id = ?", id).
-		Updates(map[string]interface{}{"images": images, "image_count": len(images)}).Error
+		Updates(map[string]interface{}{"images": pq.StringArray(images), "image_count": len(images)}).Error
 }
 
 // UpdateCollectCount 增减 collect_count，delta 为 +1 或 -1
