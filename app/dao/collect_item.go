@@ -35,7 +35,7 @@ func (s *CollectItemStore) Delete(ctx context.Context, collectID uint, extID int
 		Delete(&model.CollectItem{}).Error
 }
 
-// ListByCollect 按收藏夹分页列出收藏项
+// ListByCollect 按收藏夹分页列出收藏项，extType=0 全部，>0 按类型筛选
 func (s *CollectItemStore) ListByCollect(ctx context.Context, collectID uint, extType int, page, pageSize int) ([]*model.CollectItem, int64, error) {
 	if page < 1 {
 		page = 1

@@ -175,6 +175,7 @@ comment on column tags.ext_type is '关联类型 1:articles 2:goods';
 comment on column tags.status is '1:正常 2:禁用';
 
 
+-- 收藏夹：不区分类型，可混合收藏帖子/提问/回答/商品
 create table collect (
             id SERIAL PRIMARY KEY,
             user_id integer REFERENCES users(id),
@@ -185,12 +186,13 @@ create table collect (
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-comment on table collect is '收藏夹表';
+comment on table collect is '收藏夹表，不区分类型，一个收藏夹可混合收藏多种内容';
 comment on column collect.user_id is '用户ID';
 comment on column collect.name is '收藏夹名称';
 comment on column collect.is_default is '是否默认收藏夹，每用户一个';
 comment on column collect.status is '1:正常 2:禁用';
 
+-- 收藏表：关联收藏夹，每条收藏需标明类型（帖子/提问/回答/商品）
 create table collect_item (
             id SERIAL PRIMARY KEY,
             collect_id integer NOT NULL REFERENCES collect(id) ON DELETE CASCADE,
@@ -202,11 +204,13 @@ create table collect_item (
             UNIQUE(collect_id, ext_id, ext_type)
 );
 
-comment on table collect_item is '收藏表，收藏夹中的具体收藏项';
+comment on table collect_item is '收藏表，关联收藏夹，每条收藏标明类型便于筛选展示';
 comment on column collect_item.collect_id is '收藏夹ID';
-comment on column collect_item.ext_id is '关联ID';
-comment on column collect_item.ext_type is '关联类型 1:帖子 2:提问 3:回答 4:商品';
+comment on column collect_item.ext_id is '关联目标ID（如文章ID、商品ID）';
+comment on column collect_item.ext_type is '类型 1:帖子 2:提问 3:回答 4:商品';
 comment on column collect_item.status is '1:正常 2:禁用';
+
+CREATE INDEX IF NOT EXISTS idx_collect_item_collect_ext ON collect_item(collect_id, ext_type);
 
 create table follow (
             id SERIAL PRIMARY KEY,

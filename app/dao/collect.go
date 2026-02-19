@@ -26,7 +26,7 @@ func (s *CollectStore) GetByID(ctx context.Context, id uint) (*model.Collect, er
 	return c, err
 }
 
-// GetDefaultByUserID 获取用户的默认收藏夹，不存在则返回 nil
+// GetDefaultByUserID 获取用户默认收藏夹，不存在则返回 nil
 func (s *CollectStore) GetDefaultByUserID(ctx context.Context, userID uint) (*model.Collect, error) {
 	c := &model.Collect{}
 	uid := int(userID)

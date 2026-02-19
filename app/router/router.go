@@ -50,13 +50,6 @@ func PrivateRouter(api *gin.RouterGroup) {
 		postGroup.POST("/:id/images", controller.PostHandlers.UploadImages)
 		postGroup.PUT("/:id/images", controller.PostHandlers.UpdateImages)
 		postGroup.DELETE("/:id", controller.PostHandlers.Delete)
-		postGroup.GET("/:id/comments/:commentId/replies", controller.PostCommentHandlers.ListReplies)
-		postGroup.GET("/:id/comments", controller.PostCommentHandlers.ListComments)
-		postGroup.POST("/:id/comments", controller.PostCommentHandlers.Create)
-		postGroup.POST("/:id/collect", controller.PostCollectHandlers.Add)
-		postGroup.DELETE("/:id/collect", controller.PostCollectHandlers.Remove)
-		postGroup.POST("/:id/like", controller.PostLikeHandlers.Add)
-		postGroup.DELETE("/:id/like", controller.PostLikeHandlers.Remove)
 	}
 	questionGroup := api.Group("/question")
 	{
@@ -69,13 +62,6 @@ func PrivateRouter(api *gin.RouterGroup) {
 		questionGroup.POST("/:id/images", controller.QuestionHandlers.UploadImages)
 		questionGroup.PUT("/:id/images", controller.QuestionHandlers.UpdateImages)
 		questionGroup.DELETE("/:id", controller.QuestionHandlers.Delete)
-		questionGroup.GET("/:id/comments/:commentId/replies", controller.QuestionCommentHandlers.ListReplies)
-		questionGroup.GET("/:id/comments", controller.QuestionCommentHandlers.ListComments)
-		questionGroup.POST("/:id/comments", controller.QuestionCommentHandlers.Create)
-		questionGroup.POST("/:id/collect", controller.QuestionCollectHandlers.Add)
-		questionGroup.DELETE("/:id/collect", controller.QuestionCollectHandlers.Remove)
-		questionGroup.POST("/:id/like", controller.QuestionLikeHandlers.Add)
-		questionGroup.DELETE("/:id/like", controller.QuestionLikeHandlers.Remove)
 	}
 	answerGroup := api.Group("/answer")
 	{
@@ -87,21 +73,27 @@ func PrivateRouter(api *gin.RouterGroup) {
 		answerGroup.POST("/:id/images", controller.AnswerHandlers.UploadImages)
 		answerGroup.PUT("/:id/images", controller.AnswerHandlers.UpdateImages)
 		answerGroup.DELETE("/:id", controller.AnswerHandlers.Delete)
-		answerGroup.GET("/:id/comments/:commentId/replies", controller.AnswerCommentHandlers.ListReplies)
-		answerGroup.GET("/:id/comments", controller.AnswerCommentHandlers.ListComments)
-		answerGroup.POST("/:id/comments", controller.AnswerCommentHandlers.Create)
-		answerGroup.POST("/:id/collect", controller.AnswerCollectHandlers.Add)
-		answerGroup.DELETE("/:id/collect", controller.AnswerCollectHandlers.Remove)
-		answerGroup.POST("/:id/like", controller.AnswerLikeHandlers.Add)
-		answerGroup.DELETE("/:id/like", controller.AnswerLikeHandlers.Remove)
+	}
+	// 共通模块：评论、收藏、点赞，由前端传 extType 区分
+	// extType: 1帖子 2提问 3回答 4商品(仅收藏)
+	commentGroup := api.Group("/comments")
+	{
+		commentGroup.GET("/:extType/:id", controller.CommentList)
+		commentGroup.POST("/:extType/:id", controller.CommentCreate)
+		commentGroup.GET("/:extType/:id/:commentId/replies", controller.CommentListReplies)
 	}
 	collectGroup := api.Group("/collect")
 	{
 		collectGroup.POST("/folders", controller.CreateCollectFolder)
 		collectGroup.GET("/folders", controller.ListCollectFolders)
-		collectGroup.GET("/folders/:id/posts", controller.ListCollectPosts)
-		collectGroup.GET("/folders/:id/questions", controller.ListCollectQuestions)
-		collectGroup.GET("/folders/:id/answers", controller.ListCollectAnswers)
+		collectGroup.GET("/folders/:id/items", controller.ListCollectItems)
+		collectGroup.POST("/:extType/:id", controller.CollectAdd)
+		collectGroup.DELETE("/:extType/:id", controller.CollectRemove)
+	}
+	likeGroup := api.Group("/like")
+	{
+		likeGroup.POST("/:extType/:id", controller.LikeAdd)
+		likeGroup.DELETE("/:extType/:id", controller.LikeRemove)
 	}
 	// OSS 上传、删除（需 JWT）
 	api.POST("/oss/*path", controller.OSSUpload)

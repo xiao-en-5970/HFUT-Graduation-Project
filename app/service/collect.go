@@ -19,7 +19,7 @@ var (
 type collectService struct{}
 
 // GetOrCreateDefaultFolder 获取或创建用户的默认收藏夹
-// collectID=0 且 userID>0 表示使用默认收藏夹
+// collectID=0 表示使用默认收藏夹
 func (s *collectService) GetOrCreateDefaultFolder(ctx *gin.Context, userID uint) (uint, error) {
 	folder, err := dao.Collect().GetDefaultByUserID(ctx.Request.Context(), userID)
 	if err != nil {
@@ -68,8 +68,7 @@ func (s *collectService) resolveCollectID(ctx *gin.Context, userID uint, collect
 }
 
 // AddArticle 收藏文章到收藏夹
-// collectID=0 表示默认收藏夹
-// extType: 1帖子 2提问 3回答
+// collectID=0 表示默认收藏夹；extType 标明收藏类型（1帖子 2提问 3回答），便于筛选展示
 func (s *collectService) AddArticle(ctx *gin.Context, userID uint, schoolID uint, collectID uint, articleID uint, extType int) error {
 	cid, err := s.resolveCollectID(ctx, userID, collectID)
 	if err != nil {
@@ -117,7 +116,7 @@ func (s *collectService) RemoveArticle(ctx *gin.Context, userID uint, collectID 
 }
 
 // ListItems 列出收藏夹中的收藏项
-// extType=0 表示全部
+// extType=0 全部混合展示；>0 按类型筛选（1帖子 2提问 3回答 4商品）
 func (s *collectService) ListItems(ctx *gin.Context, userID uint, collectID uint, extType int, page, pageSize int) ([]*model.CollectItem, int64, error) {
 	cid, err := s.resolveCollectID(ctx, userID, collectID)
 	if err != nil {
