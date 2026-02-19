@@ -2,17 +2,39 @@
   "swagger": "2.0",
   "info": {
     "title": "HFUT Graduation Project API",
-    "description": "合肥工业大学毕业设计项目 API 接口文档（已实现接口）",
+    "description": "合肥工业大学毕业设计项目 API。帖子/提问/回答统一为文章；回答创建必传 parent_id；需 JWT 且学校隔离",
     "version": "1.0.0"
   },
   "host": "api.xiaoen.xyz",
   "basePath": "/",
-  "schemes": ["https"],
+  "schemes": [
+    "https"
+  ],
   "tags": [
-    { "name": "健康检查", "description": "服务健康检查" },
-    { "name": "用户", "description": "用户相关接口" },
-    { "name": "帖子", "description": "帖子/文章相关接口" },
-    { "name": "OSS", "description": "对象存储，文件访问与上传，持久化到宿主机 /var/oss" }
+    {
+      "name": "健康检查",
+      "description": "服务健康检查"
+    },
+    {
+      "name": "用户",
+      "description": "用户相关接口"
+    },
+    {
+      "name": "帖子",
+      "description": "帖子（type=1）"
+    },
+    {
+      "name": "提问",
+      "description": "提问（type=2），特有列出回答"
+    },
+    {
+      "name": "回答",
+      "description": "回答（type=3），创建必传 parent_id"
+    },
+    {
+      "name": "OSS",
+      "description": "对象存储，文件访问与上传"
+    }
   ],
   "securityDefinitions": {
     "BearerAuth": {
@@ -26,420 +48,1950 @@
     "Response": {
       "type": "object",
       "properties": {
-        "code": { "type": "integer", "description": "状态码，200 表示成功", "example": 200 },
-        "message": { "type": "string", "description": "响应消息", "example": "操作成功" },
-        "data": { "description": "响应数据（可选）" }
+        "code": {
+          "type": "integer",
+          "description": "状态码，200 表示成功",
+          "example": 200
+        },
+        "message": {
+          "type": "string",
+          "description": "响应消息",
+          "example": "操作成功"
+        },
+        "data": {
+          "description": "响应数据（可选）"
+        }
       }
     },
     "UserRegisterRequest": {
       "type": "object",
-      "required": ["username", "password", "re_password"],
+      "required": [
+        "username",
+        "password",
+        "re_password"
+      ],
       "properties": {
-        "username": { "type": "string", "description": "用户名", "example": "testuser" },
-        "password": { "type": "string", "description": "密码", "example": "password123" },
-        "re_password": { "type": "string", "description": "确认密码", "example": "password123" }
+        "username": {
+          "type": "string",
+          "description": "用户名",
+          "example": "testuser"
+        },
+        "password": {
+          "type": "string",
+          "description": "密码",
+          "example": "password123"
+        },
+        "re_password": {
+          "type": "string",
+          "description": "确认密码",
+          "example": "password123"
+        }
       }
     },
     "UserLoginRequest": {
       "type": "object",
-      "required": ["username", "password"],
+      "required": [
+        "username",
+        "password"
+      ],
       "properties": {
-        "username": { "type": "string", "description": "用户名", "example": "testuser" },
-        "password": { "type": "string", "description": "密码", "example": "password123" }
+        "username": {
+          "type": "string",
+          "description": "用户名",
+          "example": "testuser"
+        },
+        "password": {
+          "type": "string",
+          "description": "密码",
+          "example": "password123"
+        }
       }
     },
     "UserUpdateRequest": {
       "type": "object",
       "properties": {
-        "id": { "type": "integer", "format": "int64", "description": "用户ID" },
-        "avatar": { "type": "string", "description": "用户头像 URL" },
-        "background": { "type": "string", "description": "用户背景图 URL" },
-        "bind_qq": { "type": "string", "description": "绑定的 QQ 号" },
-        "bind_wx": { "type": "string", "description": "绑定的微信号" },
-        "bind_phone": { "type": "string", "description": "绑定的手机号" },
-        "school_id": { "type": "integer", "format": "int64", "description": "学校 ID" }
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "description": "用户ID"
+        },
+        "avatar": {
+          "type": "string",
+          "description": "用户头像 URL"
+        },
+        "background": {
+          "type": "string",
+          "description": "用户背景图 URL"
+        },
+        "bind_qq": {
+          "type": "string",
+          "description": "绑定的 QQ 号"
+        },
+        "bind_wx": {
+          "type": "string",
+          "description": "绑定的微信号"
+        },
+        "bind_phone": {
+          "type": "string",
+          "description": "绑定的手机号"
+        },
+        "school_id": {
+          "type": "integer",
+          "format": "int64",
+          "description": "学校 ID"
+        }
       }
     },
     "UserBindSchoolRequest": {
       "type": "object",
-      "required": ["school_id"],
+      "required": [
+        "school_id"
+      ],
       "properties": {
-        "school_id": { "type": "integer", "format": "int64", "description": "学校 ID", "example": 1 }
+        "school_id": {
+          "type": "integer",
+          "format": "int64",
+          "description": "学校 ID",
+          "example": 1
+        }
       }
     },
     "UserResponse": {
       "type": "object",
       "properties": {
-        "id": { "type": "integer", "format": "int64" },
-        "username": { "type": "string" },
-        "school_id": { "type": "integer", "format": "int64" },
-        "bind_qq": { "type": "string" },
-        "bind_wx": { "type": "string" },
-        "bind_phone": { "type": "string" },
-        "status": { "type": "integer", "description": "1:正常 2:禁用" },
-        "role": { "type": "integer", "description": "1:普通用户 2:管理员 3:超级管理员 4:匿名用户" },
-        "avatar": { "type": "string" },
-        "background": { "type": "string" },
-        "follow_count": { "type": "integer" },
-        "fans_count": { "type": "integer" },
-        "created_at": { "type": "string", "format": "date-time" },
-        "updated_at": { "type": "string", "format": "date-time" }
+        "id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "username": {
+          "type": "string"
+        },
+        "school_id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "bind_qq": {
+          "type": "string"
+        },
+        "bind_wx": {
+          "type": "string"
+        },
+        "bind_phone": {
+          "type": "string"
+        },
+        "status": {
+          "type": "integer",
+          "description": "1:正常 2:禁用"
+        },
+        "role": {
+          "type": "integer",
+          "description": "1:普通用户 2:管理员 3:超级管理员 4:匿名用户"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "background": {
+          "type": "string"
+        },
+        "follow_count": {
+          "type": "integer"
+        },
+        "fans_count": {
+          "type": "integer"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "ArticleCreateRequest": {
       "type": "object",
-      "required": ["title", "content"],
+      "required": [
+        "title",
+        "content"
+      ],
       "properties": {
-        "title": { "type": "string", "description": "标题" },
-        "content": { "type": "string", "description": "内容" },
-        "publish_status": { "type": "integer", "description": "1:私密 2:公开", "default": 1 },
-        "parent_id": { "type": "integer", "description": "回答必传，指向提问ID" }
+        "title": {
+          "type": "string",
+          "description": "标题"
+        },
+        "content": {
+          "type": "string",
+          "description": "内容"
+        },
+        "publish_status": {
+          "type": "integer",
+          "description": "1:私密 2:公开",
+          "default": 1
+        },
+        "parent_id": {
+          "type": "integer",
+          "description": "回答必传，指向提问ID"
+        }
       },
       "description": "回答必须传 parent_id"
     },
     "ArticleUpdateRequest": {
       "type": "object",
       "properties": {
-        "title": { "type": "string" },
-        "content": { "type": "string" },
-        "publish_status": { "type": "integer" }
-      }
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "publish_status": {
+          "type": "integer",
+          "description": "1:私密 2:公开"
+        }
+      },
+      "description": "更新，只传需修改字段，type 不可修改"
     },
     "ArticleUpdateImagesRequest": {
       "type": "object",
-      "required": ["images"],
+      "required": [
+        "images"
+      ],
       "properties": {
-        "images": { "type": "array", "items": { "type": "string" }, "description": "图片URL数组" }
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "图片URL数组"
+        }
       }
     },
     "ArticleResponse": {
       "type": "object",
       "properties": {
-        "id": { "type": "integer" },
-        "user_id": { "type": "integer" },
-        "school_id": { "type": "integer" },
-        "parent_id": { "type": "integer", "description": "父文章ID" },
-        "title": { "type": "string" },
-        "content": { "type": "string" },
-        "status": { "type": "integer" },
-        "publish_status": { "type": "integer" },
-        "type": { "type": "integer" },
-        "view_count": { "type": "integer" },
-        "like_count": { "type": "integer" },
-        "collect_count": { "type": "integer" },
-        "images": { "type": "array", "items": { "type": "string" } },
-        "image_count": { "type": "integer" },
-        "created_at": { "type": "string", "format": "date-time" },
-        "updated_at": { "type": "string", "format": "date-time" }
+        "id": {
+          "type": "integer"
+        },
+        "user_id": {
+          "type": "integer"
+        },
+        "school_id": {
+          "type": "integer"
+        },
+        "parent_id": {
+          "type": "integer",
+          "description": "父文章ID"
+        },
+        "title": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "status": {
+          "type": "integer"
+        },
+        "publish_status": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "integer"
+        },
+        "view_count": {
+          "type": "integer"
+        },
+        "like_count": {
+          "type": "integer"
+        },
+        "collect_count": {
+          "type": "integer"
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "image_count": {
+          "type": "integer"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     }
   },
   "paths": {
     "/health": {
       "get": {
-        "tags": ["健康检查"],
+        "tags": [
+          "健康检查"
+        ],
         "summary": "健康检查",
         "description": "检查服务是否正常运行",
         "operationId": "healthCheck",
-        "produces": ["application/json"],
+        "produces": [
+          "application/json"
+        ],
         "responses": {
           "200": {
             "description": "服务正常",
-            "schema": { "type": "object", "properties": { "status": { "type": "string", "example": "ok" } } }
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "example": "ok"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/user/register": {
       "post": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "用户注册",
         "operationId": "userRegister",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UserRegisterRequest" } }],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UserRegisterRequest"
+            }
+          }
+        ],
         "responses": {
-          "200": { "description": "注册成功", "schema": { "$ref": "#/definitions/Response" } },
-          "400": { "description": "参数错误", "schema": { "$ref": "#/definitions/Response" } }
+          "200": {
+            "description": "注册成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       }
     },
     "/api/v1/user/login": {
       "post": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "用户登录",
         "description": "用户登录，成功后返回 JWT Token",
         "operationId": "userLogin",
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UserLoginRequest" } }],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UserLoginRequest"
+            }
+          }
+        ],
         "responses": {
-          "200": { "description": "登录成功，data 为 JWT Token", "schema": { "$ref": "#/definitions/Response" } },
-          "400": { "description": "用户名或密码错误", "schema": { "$ref": "#/definitions/Response" } },
-          "401": { "description": "账户已被禁用", "schema": { "$ref": "#/definitions/Response" } }
+          "200": {
+            "description": "登录成功，data 为 JWT Token",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "400": {
+            "description": "用户名或密码错误",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "账户已被禁用",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       }
     },
     "/api/v1/user/info": {
       "get": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "获取当前用户信息",
-        "security": [{ "BearerAuth": [] }],
-        "produces": ["application/json"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "produces": [
+          "application/json"
+        ],
         "responses": {
-          "200": { "description": "获取成功", "schema": { "$ref": "#/definitions/Response" } },
-          "401": { "description": "未认证或 Token 无效", "schema": { "$ref": "#/definitions/Response" } }
+          "200": {
+            "description": "获取成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证或 Token 无效",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       }
     },
     "/api/v1/user/logout": {
       "get": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "用户登出",
         "description": "客户端需自行清除 Token",
-        "security": [{ "BearerAuth": [] }],
-        "responses": { "200": { "description": "成功" } }
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "produces": [
+          "application/json"
+        ]
       }
     },
     "/api/v1/user/update": {
       "post": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "更新用户信息",
-        "security": [{ "BearerAuth": [] }],
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UserUpdateRequest" } }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UserUpdateRequest"
+            }
+          }
+        ],
         "responses": {
-          "200": { "description": "更新成功", "schema": { "$ref": "#/definitions/Response" } },
-          "400": { "description": "参数错误", "schema": { "$ref": "#/definitions/Response" } },
-          "401": { "description": "未认证", "schema": { "$ref": "#/definitions/Response" } }
+          "200": {
+            "description": "更新成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       }
     },
     "/api/v1/user/bind/school": {
       "post": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "绑定学校",
-        "security": [{ "BearerAuth": [] }],
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/UserBindSchoolRequest" } }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/UserBindSchoolRequest"
+            }
+          }
+        ],
         "responses": {
-          "200": { "description": "绑定成功", "schema": { "$ref": "#/definitions/Response" } },
-          "400": { "description": "参数错误", "schema": { "$ref": "#/definitions/Response" } },
-          "401": { "description": "未认证", "schema": { "$ref": "#/definitions/Response" } }
+          "200": {
+            "description": "绑定成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       }
     },
     "/api/v1/user/avatar": {
       "post": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "上传头像",
         "description": "存储于 user/{id}/avatar.{jpg|png}，并更新 user.avatar",
-        "security": [{ "BearerAuth": [] }],
-        "consumes": ["multipart/form-data"],
-        "produces": ["application/json"],
-        "parameters": [{ "in": "formData", "name": "file", "type": "file", "required": true, "description": "图片文件" }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "formData",
+            "name": "file",
+            "type": "file",
+            "required": true,
+            "description": "图片文件"
+          }
+        ],
         "responses": {
-          "200": { "description": "上传成功，data.url 为头像地址", "schema": { "$ref": "#/definitions/Response" } },
-          "400": { "description": "参数错误" },
-          "401": { "description": "未认证" }
+          "200": {
+            "description": "上传成功，data.url 为头像地址",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          }
         }
       }
     },
     "/api/v1/user/background": {
       "post": {
-        "tags": ["用户"],
+        "tags": [
+          "用户"
+        ],
         "summary": "上传背景图",
         "description": "存储于 user/{id}/background.{jpg|png}，并更新 user.background",
-        "security": [{ "BearerAuth": [] }],
-        "consumes": ["multipart/form-data"],
-        "produces": ["application/json"],
-        "parameters": [{ "in": "formData", "name": "file", "type": "file", "required": true, "description": "图片文件" }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "formData",
+            "name": "file",
+            "type": "file",
+            "required": true,
+            "description": "图片文件"
+          }
+        ],
         "responses": {
-          "200": { "description": "上传成功", "schema": { "$ref": "#/definitions/Response" } },
-          "400": { "description": "参数错误" },
-          "401": { "description": "未认证" }
+          "200": {
+            "description": "上传成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          }
         }
       }
     },
     "/api/v1/post": {
       "get": {
-        "tags": ["帖子"],
+        "tags": [
+          "帖子"
+        ],
         "summary": "帖子列表",
         "description": "按学校分页列出公开帖子，需 JWT 且已绑定学校",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          { "in": "query", "name": "page", "type": "integer", "description": "页码", "default": 1 },
-          { "in": "query", "name": "pageSize", "type": "integer", "description": "每页条数", "default": 20 }
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "description": "页码",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "description": "每页条数",
+            "default": 20
+          }
         ],
         "responses": {
-          "200": { "description": "成功", "schema": { "$ref": "#/definitions/Response" } },
-          "401": { "description": "未认证" }
-        }
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证"
+          }
+        },
+        "produces": [
+          "application/json"
+        ]
       },
       "post": {
-        "tags": ["帖子"],
+        "tags": [
+          "帖子"
+        ],
         "summary": "创建帖子",
         "description": "创建帖子，需 JWT 认证",
-        "security": [{ "BearerAuth": [] }],
-        "consumes": ["application/json"],
-        "produces": ["application/json"],
-        "parameters": [{ "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/ArticleCreateRequest" } }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArticleCreateRequest"
+            }
+          }
+        ],
         "responses": {
-          "200": { "description": "创建成功", "schema": { "$ref": "#/definitions/Response" } },
-          "400": { "description": "参数错误" },
-          "401": { "description": "未认证" }
+          "200": {
+            "description": "创建成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          }
         }
       }
     },
     "/api/v1/post/search": {
       "get": {
-        "tags": ["帖子"],
+        "tags": [
+          "帖子"
+        ],
         "summary": "帖子搜索",
         "description": "全文检索（标题、正文），按相关度+点赞量+收藏量排序",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          { "in": "query", "name": "q", "required": true, "type": "string", "description": "搜索关键词" },
-          { "in": "query", "name": "page", "type": "integer", "default": 1 },
-          { "in": "query", "name": "pageSize", "type": "integer", "default": 20 }
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "type": "string",
+            "description": "搜索关键词"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
         ],
         "responses": {
-          "200": { "description": "成功", "schema": { "$ref": "#/definitions/Response" } },
-          "401": { "description": "未认证" }
-        }
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证"
+          }
+        },
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/api/v1/question": {
+      "get": {
+        "tags": [
+          "提问"
+        ],
+        "summary": "提问列表",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1,
+            "description": "页码"
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20,
+            "description": "每页条数"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功，data.list 为文章数组，data.total 为总数",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "按学校分页列出公开提问，需 JWT 且已绑定学校",
+        "produces": [
+          "application/json"
+        ]
+      },
+      "post": {
+        "tags": [
+          "提问"
+        ],
+        "summary": "创建提问",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArticleCreateRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "创建成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "创建提问，不需 parent_id",
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/api/v1/question/search": {
+      "get": {
+        "tags": [
+          "提问"
+        ],
+        "summary": "提问搜索",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "type": "string",
+            "description": "搜索关键词"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1,
+            "description": "页码"
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20,
+            "description": "每页条数"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "全文检索（标题、正文），按相关度+点赞量+收藏量排序",
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/api/v1/question/{id}": {
+      "get": {
+        "tags": [
+          "提问"
+        ],
+        "summary": "获取提问详情",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "提问ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "需 JWT 且已绑定学校，学校隔离",
+        "produces": [
+          "application/json"
+        ]
+      },
+      "put": {
+        "tags": [
+          "提问"
+        ],
+        "summary": "更新提问",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "提问ID"
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArticleUpdateRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "produces": [
+          "application/json"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "提问"
+        ],
+        "summary": "删除提问（惰性）",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "提问ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "软删除，status 设为禁用",
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/api/v1/question/{id}/images": {
+      "post": {
+        "tags": [
+          "提问"
+        ],
+        "summary": "批量上传提问图片",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "提问ID"
+          },
+          {
+            "in": "formData",
+            "name": "files",
+            "type": "file",
+            "required": true,
+            "description": "图片文件，可同名传多张"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "上传成功，data.urls 为 URL 列表",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "form 字段 files，可传多张，按顺序存储",
+        "produces": [
+          "application/json"
+        ]
+      },
+      "put": {
+        "tags": [
+          "提问"
+        ],
+        "summary": "更新提问图片列表",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "提问ID"
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArticleUpdateImagesRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "替换提问的 images 数组",
+        "produces": [
+          "application/json"
+        ]
       }
     },
     "/api/v1/question/{id}/answers": {
       "get": {
-        "tags": ["提问"],
+        "tags": [
+          "提问"
+        ],
         "summary": "列出提问下的回答",
-        "security": [{ "BearerAuth": [] }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "parameters": [
-          { "in": "path", "name": "id", "required": true, "type": "integer", "description": "提问ID" },
-          { "in": "query", "name": "page", "type": "integer", "default": 1 },
-          { "in": "query", "name": "pageSize", "type": "integer", "default": 20 }
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "提问ID"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
         ],
         "responses": {
-          "200": { "description": "成功", "schema": { "$ref": "#/definitions/Response" } },
-          "401": { "description": "未认证" }
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证"
+          }
         }
+      }
+    },
+    "/api/v1/answer": {
+      "get": {
+        "tags": [
+          "回答"
+        ],
+        "summary": "回答列表",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1,
+            "description": "页码"
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20,
+            "description": "每页条数"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "按学校分页列出回答，需 JWT 且已绑定学校",
+        "produces": [
+          "application/json"
+        ]
+      },
+      "post": {
+        "tags": [
+          "回答"
+        ],
+        "summary": "创建回答",
+        "description": "必传 parent_id 指向提问ID，同学校",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArticleCreateRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "创建成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "400": {
+            "description": "参数错误或 parent_id 无效",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/api/v1/answer/search": {
+      "get": {
+        "tags": [
+          "回答"
+        ],
+        "summary": "回答搜索",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "type": "string",
+            "description": "搜索关键词"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1,
+            "description": "页码"
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20,
+            "description": "每页条数"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "全文检索（标题、正文）",
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/api/v1/answer/{id}": {
+      "get": {
+        "tags": [
+          "回答"
+        ],
+        "summary": "获取回答详情",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "回答ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "需 JWT 且已绑定学校，学校隔离",
+        "produces": [
+          "application/json"
+        ]
+      },
+      "put": {
+        "tags": [
+          "回答"
+        ],
+        "summary": "更新回答",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "回答ID"
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArticleUpdateRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "produces": [
+          "application/json"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "回答"
+        ],
+        "summary": "删除回答（惰性）",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "回答ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "软删除，status 设为禁用",
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/api/v1/answer/{id}/images": {
+      "post": {
+        "tags": [
+          "回答"
+        ],
+        "summary": "批量上传回答图片",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "回答ID"
+          },
+          {
+            "in": "formData",
+            "name": "files",
+            "type": "file",
+            "required": true,
+            "description": "图片文件，可同名传多张"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "上传成功，data.urls 为 URL 列表",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "form 字段 files，可传多张，按顺序存储",
+        "produces": [
+          "application/json"
+        ]
+      },
+      "put": {
+        "tags": [
+          "回答"
+        ],
+        "summary": "更新回答图片列表",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "回答ID"
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArticleUpdateImagesRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        },
+        "description": "替换回答的 images 数组",
+        "produces": [
+          "application/json"
+        ]
       }
     },
     "/api/v1/post/{id}": {
       "get": {
-        "tags": ["帖子"],
+        "tags": [
+          "帖子"
+        ],
         "summary": "获取帖子详情",
         "description": "需 JWT 且已绑定学校，学校隔离",
-        "security": [{ "BearerAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID" }],
-        "produces": ["application/json"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "帖子ID"
+          }
+        ],
+        "produces": [
+          "application/json"
+        ],
         "responses": {
-          "200": { "description": "获取成功", "schema": { "$ref": "#/definitions/Response" } },
-          "404": { "description": "帖子不存在或无权限" }
+          "200": {
+            "description": "获取成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "帖子不存在或无权限"
+          }
         }
       },
       "put": {
-        "tags": ["帖子"],
+        "tags": [
+          "帖子"
+        ],
         "summary": "更新帖子",
-        "security": [{ "BearerAuth": [] }],
-        "consumes": ["application/json"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
         "parameters": [
-          { "in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID" },
-          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/ArticleUpdateRequest" } }
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "帖子ID"
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArticleUpdateRequest"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "更新成功" },
-          "404": { "description": "帖子不存在或无权限" },
-          "401": { "description": "未认证" }
+          "200": {
+            "description": "更新成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "帖子不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       },
       "delete": {
-        "tags": ["帖子"],
+        "tags": [
+          "帖子"
+        ],
         "summary": "删除帖子（惰性）",
         "description": "软删除，status 设为禁用",
-        "security": [{ "BearerAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID" }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "帖子ID"
+          }
+        ],
         "responses": {
-          "200": { "description": "删除成功" },
-          "404": { "description": "帖子不存在或无权限" },
-          "401": { "description": "未认证" }
+          "200": {
+            "description": "删除成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "帖子不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       }
     },
     "/api/v1/post/{id}/images": {
       "post": {
-        "tags": ["帖子"],
+        "tags": [
+          "帖子"
+        ],
         "summary": "批量上传帖子图片",
         "description": "form 字段 files，按顺序存储为 image_1、image_2...",
-        "security": [{ "BearerAuth": [] }],
-        "consumes": ["multipart/form-data"],
-        "produces": ["application/json"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "produces": [
+          "application/json"
+        ],
         "parameters": [
-          { "in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID" },
-          { "in": "formData", "name": "files", "type": "array", "items": { "type": "file" }, "required": true, "description": "多张图片" }
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "帖子ID"
+          },
+          {
+            "in": "formData",
+            "name": "files",
+            "type": "array",
+            "items": {
+              "type": "file"
+            },
+            "required": true,
+            "description": "多张图片"
+          }
         ],
         "responses": {
-          "200": { "description": "上传成功，data.urls 为 URL 列表", "schema": { "$ref": "#/definitions/Response" } },
-          "404": { "description": "帖子不存在或无权限" },
-          "401": { "description": "未认证" }
+          "200": {
+            "description": "上传成功，data.urls 为 URL 列表",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "帖子不存在或无权限"
+          },
+          "401": {
+            "description": "未认证"
+          }
         }
       },
       "put": {
-        "tags": ["帖子"],
+        "tags": [
+          "帖子"
+        ],
         "summary": "更新帖子图片列表",
         "description": "替换帖子的 images 数组",
-        "security": [{ "BearerAuth": [] }],
-        "consumes": ["application/json"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "application/json"
+        ],
         "parameters": [
-          { "in": "path", "name": "id", "required": true, "type": "integer", "description": "帖子ID" },
-          { "in": "body", "name": "body", "required": true, "schema": { "$ref": "#/definitions/ArticleUpdateImagesRequest" } }
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "type": "integer",
+            "description": "帖子ID"
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArticleUpdateImagesRequest"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "更新成功" },
-          "404": { "description": "帖子不存在或无权限" },
-          "401": { "description": "未认证" }
+          "200": {
+            "description": "更新成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "帖子不存在或无权限",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       }
     },
     "/api/v1/oss/{path}": {
       "get": {
-        "tags": ["OSS"],
+        "tags": [
+          "OSS"
+        ],
         "summary": "访问/下载文件",
         "description": "公开接口，如 user/1/avatar.jpg。用于 img src 等",
-        "parameters": [{ "in": "path", "name": "path", "required": true, "type": "string", "description": "相对路径" }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "type": "string",
+            "description": "相对路径"
+          }
+        ],
         "responses": {
-          "200": { "description": "文件内容" },
-          "404": { "description": "文件不存在" },
-          "400": { "description": "路径非法" }
+          "200": {
+            "description": "文件内容"
+          },
+          "404": {
+            "description": "文件不存在"
+          },
+          "400": {
+            "description": "路径非法"
+          }
         }
       },
       "post": {
-        "tags": ["OSS"],
+        "tags": [
+          "OSS"
+        ],
         "summary": "上传文件（通用）",
         "description": "同路径覆盖，需 JWT",
-        "security": [{ "BearerAuth": [] }],
-        "consumes": ["multipart/form-data"],
-        "produces": ["application/json"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "consumes": [
+          "multipart/form-data"
+        ],
+        "produces": [
+          "application/json"
+        ],
         "parameters": [
-          { "in": "path", "name": "path", "required": true, "type": "string", "description": "存储路径" },
-          { "in": "formData", "name": "file", "type": "file", "required": true }
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "type": "string",
+            "description": "存储路径"
+          },
+          {
+            "in": "formData",
+            "name": "file",
+            "type": "file",
+            "required": true
+          }
         ],
         "responses": {
-          "200": { "description": "上传成功", "schema": { "$ref": "#/definitions/Response" } },
-          "400": { "description": "参数错误" },
-          "401": { "description": "未认证" }
+          "200": {
+            "description": "上传成功",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "400": {
+            "description": "参数错误"
+          },
+          "401": {
+            "description": "未认证"
+          }
         }
       },
       "delete": {
-        "tags": ["OSS"],
+        "tags": [
+          "OSS"
+        ],
         "summary": "删除文件（通用）",
-        "security": [{ "BearerAuth": [] }],
-        "parameters": [{ "in": "path", "name": "path", "required": true, "type": "string" }],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
         "responses": {
-          "200": { "description": "删除成功" },
-          "400": { "description": "路径非法或文件不存在" },
-          "401": { "description": "未认证" }
+          "200": {
+            "description": "删除成功"
+          },
+          "400": {
+            "description": "路径非法或文件不存在"
+          },
+          "401": {
+            "description": "未认证"
+          }
         }
       }
     }

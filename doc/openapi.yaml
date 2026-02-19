@@ -1,7 +1,16 @@
 openapi: 3.0.0
 info:
   title: HFUT Graduation Project API
-  description: 合肥工业大学毕业设计项目 API 接口文档（已实现接口）
+  description: |
+    合肥工业大学毕业设计项目 API 接口文档。
+    
+    ## 文章功能（帖子/提问/回答）
+    帖子、提问、回答统一为文章（articles 表），按 type 区分：1 帖子 2 提问 3 回答。
+    三者接口结构一致，各有特化：
+    - **帖子** `/post`：普通文章
+    - **提问** `/question`：可挂回答，特有 `GET /question/:id/answers`
+    - **回答** `/answer`：创建必传 `parent_id` 指向提问
+    所有接口需 JWT 且学校隔离。
   version: 1.0.0
 
 servers:
@@ -14,11 +23,11 @@ tags:
   - name: 用户
     description: 用户相关接口
   - name: 帖子
-    description: 帖子（type=1），数据+学校隔离，同结构适用于 /question、/answer
+    description: 帖子（type=1），路径 /api/v1/post
   - name: 提问
-    description: 提问（type=2），数据+学校隔离，路径 /api/v1/question
+    description: 提问（type=2），路径 /api/v1/question，特有列出回答
   - name: 回答
-    description: 回答（type=3），数据+学校隔离，路径 /api/v1/answer
+    description: 回答（type=3），路径 /api/v1/answer，创建必传 parent_id
   - name: OSS
     description: 对象存储，文件访问与上传，持久化到宿主机 /var/oss
 
@@ -204,7 +213,7 @@ components:
           type: array
           items:
             type: string
-          description: 图片URL数组，如 ["/api/v1/oss/article/1/image_1.jpg"]
+          description: 图片URL数组，如 ["/api/v1/oss/post/1/image_1.jpg"]
 
     ArticleResponse:
       type: object
@@ -673,6 +682,77 @@ paths:
         '401':
           description: 未认证
 
+  /api/v1/question:
+    get:
+      tags:
+        - 提问
+      summary: 提问列表
+      description: 按学校分页列出公开提问
+      operationId: questionList
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Response'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list: { type: array, items: { $ref: '#/components/schemas/ArticleResponse' } }
+                          total: { type: integer }
+                          page: { type: integer }
+                          page_size: { type: integer }
+        '401': { description: 未认证 }
+    post:
+      tags:
+        - 提问
+      summary: 创建提问
+      operationId: questionCreate
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArticleCreateRequest' }
+      responses:
+        '200': { description: 创建成功 }
+        '400': { description: 参数错误 }
+        '401': { description: 未认证 }
+  /api/v1/question/search:
+    get:
+      tags:
+        - 提问
+      summary: 提问搜索
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: 成功 }
+        '401': { description: 未认证 }
   /api/v1/question/{id}/answers:
     get:
       tags:
@@ -724,6 +804,257 @@ paths:
                             type: integer
         '401':
           description: 未认证
+
+  /api/v1/question/{id}:
+    get:
+      tags:
+        - 提问
+      summary: 获取提问详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 成功 }
+        '404': { description: 不存在或无权限 }
+      security:
+        - BearerAuth: []
+    put:
+      tags:
+        - 提问
+      summary: 更新提问
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArticleUpdateRequest' }
+      responses:
+        '200': { description: 成功 }
+        '401': { description: 未认证 }
+        '404': { description: 不存在或无权限 }
+      security:
+        - BearerAuth: []
+    delete:
+      tags:
+        - 提问
+      summary: 删除提问（惰性）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 成功 }
+        '401': { description: 未认证 }
+        '404': { description: 不存在或无权限 }
+      security:
+        - BearerAuth: []
+  /api/v1/question/{id}/images:
+    post:
+      tags:
+        - 提问
+      summary: 批量上传提问图片
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [ files ]
+              properties:
+                files:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        '200': { description: 成功，data.urls 为 URL 列表 }
+        '401': { description: 未认证 }
+        '404': { description: 不存在或无权限 }
+      security:
+        - BearerAuth: []
+    put:
+      tags:
+        - 提问
+      summary: 更新提问图片列表
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArticleUpdateImagesRequest' }
+      responses:
+        '200': { description: 成功 }
+        '401': { description: 未认证 }
+        '404': { description: 不存在或无权限 }
+      security:
+        - BearerAuth: []
+
+  /api/v1/answer:
+    get:
+      tags:
+        - 回答
+      summary: 回答列表
+      description: 按学校分页列出所有回答
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: 成功 }
+        '401': { description: 未认证 }
+      security:
+        - BearerAuth: []
+    post:
+      tags:
+        - 回答
+      summary: 创建回答
+      description: 必传 parent_id 指向提问
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArticleCreateRequest' }
+      responses:
+        '200': { description: 创建成功 }
+        '400': { description: 参数错误或 parent_id 无效 }
+        '401': { description: 未认证 }
+      security:
+        - BearerAuth: []
+  /api/v1/answer/search:
+    get:
+      tags:
+        - 回答
+      summary: 回答搜索
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: 成功 }
+        '401': { description: 未认证 }
+      security:
+        - BearerAuth: []
+  /api/v1/answer/{id}:
+    get:
+      tags:
+        - 回答
+      summary: 获取回答详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 成功 }
+        '404': { description: 不存在或无权限 }
+      security:
+        - BearerAuth: []
+    put:
+      tags:
+        - 回答
+      summary: 更新回答
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArticleUpdateRequest' }
+      responses:
+        '200': { description: 成功 }
+        '401': { description: 未认证 }
+        '404': { description: 不存在或无权限 }
+      security:
+        - BearerAuth: []
+    delete:
+      tags:
+        - 回答
+      summary: 删除回答（惰性）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: 成功 }
+        '401': { description: 未认证 }
+        '404': { description: 不存在或无权限 }
+      security:
+        - BearerAuth: []
+  /api/v1/answer/{id}/images:
+    post:
+      tags:
+        - 回答
+      summary: 批量上传回答图片
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [ files ]
+              properties:
+                files:
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        '200': { description: 成功 }
+        '401': { description: 未认证 }
+        '404': { description: 不存在或无权限 }
+      security:
+        - BearerAuth: []
+    put:
+      tags:
+        - 回答
+      summary: 更新回答图片列表
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArticleUpdateImagesRequest' }
+      responses:
+        '200': { description: 成功 }
+        '401': { description: 未认证 }
+        '404': { description: 不存在或无权限 }
+      security:
+        - BearerAuth: []
 
   /api/v1/post/{id}:
     get:
