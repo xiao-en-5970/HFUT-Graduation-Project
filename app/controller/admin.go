@@ -101,14 +101,28 @@ func AdminUserUpdate(ctx *gin.Context) {
 		return
 	}
 	var body struct {
-		SchoolID *uint `json:"school_id"`
+		SchoolID   *uint   `json:"school_id"`
+		Avatar     *string `json:"avatar"`     // 头像 URL，OSS 上传后传入
+		Background *string `json:"background"` // 背景图 URL
 	}
 	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
+	needUpdate := false
 	if body.SchoolID != nil {
 		user.SchoolID = *body.SchoolID
+		needUpdate = true
+	}
+	if body.Avatar != nil {
+		user.Avatar = *body.Avatar
+		needUpdate = true
+	}
+	if body.Background != nil {
+		user.Background = *body.Background
+		needUpdate = true
+	}
+	if needUpdate {
 		if err := dao.User().Update(ctx.Request.Context(), user); err != nil {
 			reply.ReplyInternalError(ctx, err)
 			return
@@ -346,10 +360,11 @@ func AdminArticleUpdate(ctx *gin.Context, articleType int) {
 		return
 	}
 	var body struct {
-		Title         *string `json:"title"`
-		Content       *string `json:"content"`
-		PublishStatus *int16  `json:"publish_status"`
-		Status        *int16  `json:"status"` // 1正常 2禁用，管理员可直改
+		Title         *string   `json:"title"`
+		Content       *string   `json:"content"`
+		PublishStatus *int16    `json:"publish_status"`
+		Status        *int16    `json:"status"` // 1正常 2禁用，管理员可直改
+		Images        *[]string `json:"images"` // 图片 URL 列表，用于 OSS 上传后更新
 	}
 	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
@@ -367,6 +382,10 @@ func AdminArticleUpdate(ctx *gin.Context, articleType int) {
 	}
 	if body.Status != nil && (*body.Status == constant.StatusValid || *body.Status == constant.StatusInvalid) {
 		updates["status"] = *body.Status
+	}
+	if body.Images != nil {
+		updates["images"] = *body.Images
+		updates["image_count"] = len(*body.Images)
 	}
 	if len(updates) == 0 {
 		reply.ReplyOK(ctx)
