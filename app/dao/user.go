@@ -22,8 +22,32 @@ func (s *UserStore) Create(ctx context.Context, user *model.User) (uint, error) 
 func (s *UserStore) Update(ctx context.Context, user *model.User) error {
 	return pgsql.DB.Save(user).Error
 }
-func (s *UserStore) Delete(ctx context.Context, user *model.User) error {
-	return pgsql.DB.Update("status", constant.StatusInvalid).Error
+func (s *UserStore) UpdateStatus(ctx context.Context, id uint, status int16) error {
+	return pgsql.DB.Model(&model.User{}).Where("id = ?", id).UpdateColumn("status", status).Error
+}
+
+func (s *UserStore) UpdateRole(ctx context.Context, id uint, role int16) error {
+	return pgsql.DB.Model(&model.User{}).Where("id = ?", id).UpdateColumn("role", role).Error
+}
+
+// List 分页列出用户（管理员用），statusFilter: 0全部 1正常 2禁用
+func (s *UserStore) List(ctx context.Context, page, pageSize int, statusFilter int16) ([]*model.User, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	q := pgsql.DB.WithContext(ctx).Model(&model.User{})
+	if statusFilter > 0 {
+		q = q.Where("status = ?", statusFilter)
+	}
+	var total int64
+	q.Count(&total)
+	var list []*model.User
+	err := q.Order("id DESC").Limit(pageSize).Offset(offset).Find(&list).Error
+	return list, total, err
 }
 
 func (s *UserStore) GetByID(ctx context.Context, id uint) (*model.User, error) {

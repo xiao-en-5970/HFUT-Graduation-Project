@@ -66,6 +66,31 @@ func (s *userService) Login(ctx *gin.Context, username, password string) (token 
 	return token, nil
 }
 
+// AdminLogin 管理员登录：验证账号密码且 role>=2 才返回 token
+func (s *userService) AdminLogin(ctx *gin.Context, username, password string) (token string, err error) {
+	user, err := dao.User().GetByUsername(ctx, username)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", errors.New("用户不存在")
+	}
+	if err != nil {
+		return "", err
+	}
+	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return "", errors.New("密码错误")
+	}
+	if user.Status != constant.StatusValid {
+		return "", errors.New("账户已被禁用")
+	}
+	if user.Role < constant.RoleAdmin {
+		return "", errors.New("无管理员权限")
+	}
+	token, err = util.GenerateToken(user.ID, user.Username)
+	if err != nil {
+		return "", errors.New("生成 token 失败: " + err.Error())
+	}
+	return token, nil
+}
+
 func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, error) {
 	userDao, err := dao.User().GetByID(ctx, userID)
 	if err != nil {

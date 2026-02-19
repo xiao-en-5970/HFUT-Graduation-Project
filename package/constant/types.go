@@ -27,3 +27,11 @@ const (
 	CommentTypeTop   = 1 // 顶层评论
 	CommentTypeReply = 2 // 评论回复
 )
+
+// UserRole 用户角色
+const (
+	RoleUser      = 1 // 普通用户
+	RoleAdmin     = 2 // 管理员
+	RoleSuper     = 3 // 超级管理员
+	RoleAnonymous = 4 // 匿名用户
+)

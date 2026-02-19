@@ -24,7 +24,8 @@
     {"name": "评论", "description": "评论与回复，path 传 extType：1帖子 2提问 3回答"},
     {"name": "收藏", "description": "收藏夹与收藏，path 传 extType：1帖子 2提问 3回答 4商品"},
     {"name": "点赞", "description": "点赞与取消，path 传 extType：1帖子 2提问 3回答"},
-    {"name": "OSS", "description": "文件存取"}
+    {"name": "OSS", "description": "文件存取"},
+    {"name": "管理员", "description": "需 role>=2 管理员权限"}
   ],
   "definitions": {
     "Response": {
@@ -189,6 +190,23 @@
       "get": {"tags": ["OSS"], "summary": "访问文件", "description": "公开，如 user/1/avatar.jpg", "parameters": [{"in": "path", "name": "path", "required": true, "type": "string"}], "responses": {"200": {}, "404": {}}},
       "post": {"tags": ["OSS"], "summary": "上传", "security": [{"BearerAuth": []}], "consumes": ["multipart/form-data"], "parameters": [{"in": "path", "name": "path", "required": true, "type": "string"}, {"in": "formData", "name": "file", "type": "file", "required": true}], "responses": {"200": {}, "401": {}}},
       "delete": {"tags": ["OSS"], "summary": "删除", "security": [{"BearerAuth": []}], "parameters": [{"in": "path", "name": "path", "required": true, "type": "string"}], "responses": {"200": {}, "401": {}}}
-    }
+    },
+    "/api/v1/admin/users": {"get": {"tags": ["管理员"], "summary": "用户列表", "security": [{"BearerAuth": []}], "parameters": [{"in": "query", "name": "page", "type": "integer"}, {"in": "query", "name": "pageSize", "type": "integer"}, {"in": "query", "name": "status", "type": "integer", "description": "0全部 1正常 2禁用"}], "responses": {"200": {}, "403": {}}}},
+    "/api/v1/admin/users/{id}": {"delete": {"tags": ["管理员"], "summary": "禁用用户", "security": [{"BearerAuth": []}], "responses": {"200": {}, "403": {}}}},
+    "/api/v1/admin/users/{id}/restore": {"post": {"tags": ["管理员"], "summary": "恢复用户", "security": [{"BearerAuth": []}], "responses": {"200": {}, "403": {}}}},
+    "/api/v1/admin/users/{id}/role": {"put": {"tags": ["管理员"], "summary": "修改角色", "description": "body: {role: 1|2|3|4}", "security": [{"BearerAuth": []}], "responses": {"200": {}, "403": {}}}},
+    "/api/v1/admin/users/{id}/status": {"put": {"tags": ["管理员"], "summary": "修改状态", "description": "body: {status: 1|2}", "security": [{"BearerAuth": []}], "responses": {"200": {}, "403": {}}}},
+    "/api/v1/admin/posts": {"get": {"tags": ["管理员"], "summary": "帖子列表", "parameters": [{"in": "query", "name": "include_invalid", "type": "string", "description": "1含已删除"}]}},
+    "/api/v1/admin/posts/{id}": {"delete": {"tags": ["管理员"], "summary": "禁用帖子"}},
+    "/api/v1/admin/posts/{id}/restore": {"post": {"tags": ["管理员"], "summary": "恢复帖子"}},
+    "/api/v1/admin/questions": {"get": {"tags": ["管理员"], "summary": "提问列表"}},
+    "/api/v1/admin/questions/{id}": {"delete": {"tags": ["管理员"], "summary": "禁用提问"}},
+    "/api/v1/admin/questions/{id}/restore": {"post": {"tags": ["管理员"], "summary": "恢复提问"}},
+    "/api/v1/admin/answers": {"get": {"tags": ["管理员"], "summary": "回答列表"}},
+    "/api/v1/admin/answers/{id}": {"delete": {"tags": ["管理员"], "summary": "禁用回答"}},
+    "/api/v1/admin/answers/{id}/restore": {"post": {"tags": ["管理员"], "summary": "恢复回答"}},
+    "/api/v1/admin/schools": {"get": {"tags": ["管理员"], "summary": "学校列表"}, "post": {"tags": ["管理员"], "summary": "新增学校", "description": "body: {name, login_url}"}},
+    "/api/v1/admin/schools/{id}": {"delete": {"tags": ["管理员"], "summary": "下架学校"}},
+    "/api/v1/admin/schools/{id}/restore": {"post": {"tags": ["管理员"], "summary": "恢复学校"}}
   }
 }

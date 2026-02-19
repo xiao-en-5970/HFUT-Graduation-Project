@@ -66,6 +66,10 @@ func (s *ArticleStore) SoftDelete(ctx context.Context, id uint) error {
 	return pgsql.DB.Model(&model.Article{}).Where("id = ?", id).Update("status", constant.StatusInvalid).Error
 }
 
+func (s *ArticleStore) Restore(ctx context.Context, id uint) error {
+	return pgsql.DB.Model(&model.Article{}).Where("id = ?", id).Update("status", constant.StatusValid).Error
+}
+
 func (s *ArticleStore) UpdateImages(ctx context.Context, id uint, images []string) error {
 	return pgsql.DB.Model(&model.Article{}).Where("id = ?", id).
 		Updates(map[string]interface{}{"images": images, "image_count": len(images)}).Error
@@ -93,6 +97,29 @@ func (s *ArticleStore) UpdateCollectCountDB(db *gorm.DB, id uint, delta int) err
 func (s *ArticleStore) UpdateLikeCountDB(db *gorm.DB, id uint, delta int) error {
 	return db.Model(&model.Article{}).Where("id = ?", id).
 		UpdateColumn("like_count", gorm.Expr("GREATEST(0, like_count + ?)", delta)).Error
+}
+
+// ListAdmin 管理员列表，可含已删除，不筛 publish_status
+func (s *ArticleStore) ListAdmin(ctx context.Context, schoolID uint, articleType int, includeInvalid bool, page, pageSize int) ([]*model.Article, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	q := pgsql.DB.WithContext(ctx).Model(&model.Article{}).Where("type = ?", articleType)
+	if !includeInvalid {
+		q = q.Where("status = ?", constant.StatusValid)
+	}
+	if schoolID > 0 {
+		q = q.Where("school_id = ?", schoolID)
+	}
+	var total int64
+	q.Count(&total)
+	var list []*model.Article
+	err := q.Order("created_at DESC").Limit(pageSize).Offset(offset).Find(&list).Error
+	return list, total, err
 }
 
 // List 按学校+类型分页列出，类型隔离+学校隔离

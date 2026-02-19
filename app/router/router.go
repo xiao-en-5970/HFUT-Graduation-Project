@@ -4,10 +4,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/controller"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 )
 
 // SetupRouter 设置路由，接收 gin.Engine 作为参数
 func SetupRouter(engine *gin.Engine) {
+	// 管理平台前端静态页（/admin 及子路径）
+	engine.GET("/admin", func(c *gin.Context) { c.Redirect(302, "/admin/") })
+	engine.Static("/admin", "package/web/admin")
 
 	// API 路由组
 	api := engine.Group("/api/v1")
@@ -18,6 +22,9 @@ func SetupRouter(engine *gin.Engine) {
 }
 
 func PublicRouter(api *gin.RouterGroup) {
+	// 管理员登录（公开，无需 JWT）
+	api.POST("/admin/login", controller.AdminLogin)
+
 	userGroup := api.Group("/user")
 	{
 		userGroup.POST("/login", controller.UserLogin)
@@ -98,4 +105,36 @@ func PrivateRouter(api *gin.RouterGroup) {
 	// OSS 上传、删除（需 JWT）
 	api.POST("/oss/*path", controller.OSSUpload)
 	api.DELETE("/oss/*path", controller.OSSDelete)
+
+	// 管理员接口：需 JWT + 管理员权限(role>=2)
+	adminGroup := api.Group("/admin")
+	adminGroup.Use(middleware.AdminAuth())
+	{
+		// 用户管理
+		adminGroup.GET("/users", controller.AdminUserList)
+		adminGroup.DELETE("/users/:id", controller.AdminUserDisable)
+		adminGroup.POST("/users/:id/restore", controller.AdminUserRestore)
+		adminGroup.PUT("/users/:id/role", controller.AdminUserUpdateRole)
+		// 用户权限（status/role 可合并到上面，这里单独提供 status 快捷接口）
+		adminGroup.PUT("/users/:id/status", controller.AdminUserUpdateStatus)
+
+		// 帖子管理
+		adminGroup.GET("/posts", func(c *gin.Context) { controller.AdminArticleList(c, constant.ArticleTypeNormal) })
+		adminGroup.DELETE("/posts/:id", controller.AdminPostDisable)
+		adminGroup.POST("/posts/:id/restore", controller.AdminPostRestore)
+		// 提问管理
+		adminGroup.GET("/questions", func(c *gin.Context) { controller.AdminArticleList(c, constant.ArticleTypeQuestion) })
+		adminGroup.DELETE("/questions/:id", controller.AdminQuestionDisable)
+		adminGroup.POST("/questions/:id/restore", controller.AdminQuestionRestore)
+		// 回答管理
+		adminGroup.GET("/answers", func(c *gin.Context) { controller.AdminArticleList(c, constant.ArticleTypeAnswer) })
+		adminGroup.DELETE("/answers/:id", controller.AdminAnswerDisable)
+		adminGroup.POST("/answers/:id/restore", controller.AdminAnswerRestore)
+
+		// 学校管理
+		adminGroup.GET("/schools", controller.AdminSchoolList)
+		adminGroup.POST("/schools", controller.AdminSchoolCreate)
+		adminGroup.DELETE("/schools/:id", controller.AdminSchoolDisable)
+		adminGroup.POST("/schools/:id/restore", controller.AdminSchoolRestore)
+	}
 }

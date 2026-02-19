@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理平台 - HFUT</title>
+  <link rel="stylesheet" href="/admin/style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="login-screen" class="screen">
+      <div class="login-card">
+        <h1>管理平台登录</h1>
+        <form id="login-form">
+          <input type="text" name="username" placeholder="账号" required autocomplete="username">
+          <input type="password" name="password" placeholder="密码" required autocomplete="current-password">
+          <button type="submit">登录</button>
+        </form>
+        <p id="login-error" class="error"></p>
+      </div>
+    </div>
+
+    <div id="dashboard-screen" class="screen hidden">
+      <aside class="sidebar">
+        <h2>管理后台</h2>
+        <nav>
+          <a href="#/users" class="nav-item" data-route="users">用户管理</a>
+          <a href="#/posts" class="nav-item" data-route="posts">帖子管理</a>
+          <a href="#/questions" class="nav-item" data-route="questions">提问管理</a>
+          <a href="#/answers" class="nav-item" data-route="answers">回答管理</a>
+          <a href="#/schools" class="nav-item" data-route="schools">学校管理</a>
+        </nav>
+        <button id="logout-btn" class="logout-btn">退出登录</button>
+      </aside>
+      <main class="content">
+        <div id="module-content"></div>
+      </main>
+    </div>
+  </div>
+  <script src="/admin/app.js"></script>
+</body>
+</html>
