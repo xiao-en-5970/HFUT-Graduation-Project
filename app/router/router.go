@@ -113,28 +113,36 @@ func PrivateRouter(api *gin.RouterGroup) {
 	{
 		// 用户管理
 		adminGroup.GET("/users", controller.AdminUserList)
+		adminGroup.POST("/users", controller.AdminUserCreate)
+		adminGroup.PUT("/users/:id", controller.AdminUserUpdate)
 		adminGroup.DELETE("/users/:id", controller.AdminUserDisable)
 		adminGroup.POST("/users/:id/restore", controller.AdminUserRestore)
 		adminGroup.PUT("/users/:id/role", controller.AdminUserUpdateRole)
-		// 用户权限（status/role 可合并到上面，这里单独提供 status 快捷接口）
 		adminGroup.PUT("/users/:id/status", controller.AdminUserUpdateStatus)
 
 		// 帖子管理
 		adminGroup.GET("/posts", func(c *gin.Context) { controller.AdminArticleList(c, constant.ArticleTypeNormal) })
+		adminGroup.POST("/posts", func(c *gin.Context) { controller.AdminArticleCreate(c, constant.ArticleTypeNormal) })
+		adminGroup.PUT("/posts/:id", func(c *gin.Context) { controller.AdminArticleUpdate(c, constant.ArticleTypeNormal) })
 		adminGroup.DELETE("/posts/:id", controller.AdminPostDisable)
 		adminGroup.POST("/posts/:id/restore", controller.AdminPostRestore)
 		// 提问管理
 		adminGroup.GET("/questions", func(c *gin.Context) { controller.AdminArticleList(c, constant.ArticleTypeQuestion) })
+		adminGroup.POST("/questions", func(c *gin.Context) { controller.AdminArticleCreate(c, constant.ArticleTypeQuestion) })
+		adminGroup.PUT("/questions/:id", func(c *gin.Context) { controller.AdminArticleUpdate(c, constant.ArticleTypeQuestion) })
 		adminGroup.DELETE("/questions/:id", controller.AdminQuestionDisable)
 		adminGroup.POST("/questions/:id/restore", controller.AdminQuestionRestore)
 		// 回答管理
 		adminGroup.GET("/answers", func(c *gin.Context) { controller.AdminArticleList(c, constant.ArticleTypeAnswer) })
+		adminGroup.POST("/answers", func(c *gin.Context) { controller.AdminArticleCreate(c, constant.ArticleTypeAnswer) })
+		adminGroup.PUT("/answers/:id", func(c *gin.Context) { controller.AdminArticleUpdate(c, constant.ArticleTypeAnswer) })
 		adminGroup.DELETE("/answers/:id", controller.AdminAnswerDisable)
 		adminGroup.POST("/answers/:id/restore", controller.AdminAnswerRestore)
 
 		// 学校管理
 		adminGroup.GET("/schools", controller.AdminSchoolList)
 		adminGroup.POST("/schools", controller.AdminSchoolCreate)
+		adminGroup.PUT("/schools/:id", controller.AdminSchoolUpdate)
 		adminGroup.DELETE("/schools/:id", controller.AdminSchoolDisable)
 		adminGroup.POST("/schools/:id/restore", controller.AdminSchoolRestore)
 	}

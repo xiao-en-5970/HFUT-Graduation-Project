@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -10,6 +11,8 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // AdminLogin 管理员登录：账号密码，仅 role>=2 可登录
@@ -28,6 +31,90 @@ func AdminLogin(ctx *gin.Context) {
 		return
 	}
 	reply.ReplyOKWithMessageAndData(ctx, "登录成功", gin.H{"token": token})
+}
+
+// AdminUserCreate 管理员：创建用户
+func AdminUserCreate(ctx *gin.Context) {
+	var body struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+		SchoolID uint   `json:"school_id"`
+		Role     int16  `json:"role"`
+		Status   int16  `json:"status"`
+	}
+	if err := ctx.BindJSON(&body); err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	_, err := dao.User().GetByUsername(ctx.Request.Context(), body.Username)
+	if err == nil {
+		reply.ReplyErrWithMessage(ctx, "用户名已存在")
+		return
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	if body.Role == 0 {
+		body.Role = constant.RoleUser
+	}
+	if body.Status == 0 {
+		body.Status = constant.StatusValid
+	}
+	if body.Role < constant.RoleUser || body.Role > constant.RoleAnonymous {
+		reply.ReplyErrWithMessage(ctx, "角色值无效，1普通 2管理员 3超管 4匿名")
+		return
+	}
+	if body.Status != constant.StatusValid && body.Status != constant.StatusInvalid {
+		reply.ReplyErrWithMessage(ctx, "状态值无效，1正常 2禁用")
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
+	if err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	user := &model.User{
+		Username: body.Username,
+		Password: string(hash),
+		SchoolID: body.SchoolID,
+		Role:     body.Role,
+		Status:   body.Status,
+	}
+	id, err := dao.User().Create(ctx.Request.Context(), user)
+	if err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"id": id})
+}
+
+// AdminUserUpdate 管理员：修改用户基本信息（不含 role/status，另有专用接口）
+func AdminUserUpdate(ctx *gin.Context) {
+	id, ok := parseID(ctx, "id")
+	if !ok {
+		return
+	}
+	user, err := dao.User().GetByID(ctx.Request.Context(), id)
+	if err != nil || user == nil {
+		reply.ReplyErrWithMessage(ctx, "用户不存在")
+		return
+	}
+	var body struct {
+		SchoolID *uint `json:"school_id"`
+	}
+	if err := ctx.BindJSON(&body); err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	if body.SchoolID != nil {
+		user.SchoolID = *body.SchoolID
+		if err := dao.User().Update(ctx.Request.Context(), user); err != nil {
+			reply.ReplyInternalError(ctx, err)
+			return
+		}
+	}
+	reply.ReplyOK(ctx)
 }
 
 // AdminUserList 管理员：用户列表
@@ -182,6 +269,116 @@ func adminArticleRestore(ctx *gin.Context, articleType int) {
 	reply.ReplyOK(ctx)
 }
 
+// AdminArticleCreate 管理员：创建文章（帖子/提问/回答）。user_id/school_id 可选，回答需 parent_id
+func AdminArticleCreate(ctx *gin.Context, articleType int) {
+	var body struct {
+		Title         string `json:"title" binding:"required"`
+		Content       string `json:"content" binding:"required"`
+		UserID        *uint  `json:"user_id"`
+		SchoolID      *uint  `json:"school_id"`
+		PublishStatus int16  `json:"publish_status"`
+		ParentID      *uint  `json:"parent_id"` // 回答必传
+	}
+	if err := ctx.BindJSON(&body); err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	var parent *model.Article
+	if articleType == constant.ArticleTypeAnswer {
+		if body.ParentID == nil || *body.ParentID == 0 {
+			reply.ReplyErrWithMessage(ctx, "回答必须指定 parent_id（提问ID）")
+			return
+		}
+		var err error
+		parent, err = dao.Article().GetByIDIncludeDeleted(ctx.Request.Context(), *body.ParentID)
+		if err != nil || parent == nil || parent.Type != constant.ArticleTypeQuestion {
+			reply.ReplyErrWithMessage(ctx, "父提问不存在")
+			return
+		}
+	}
+	var uid, sid, pid *int
+	if body.UserID != nil && *body.UserID > 0 {
+		u := int(*body.UserID)
+		uid = &u
+	}
+	if body.SchoolID != nil && *body.SchoolID > 0 {
+		s := int(*body.SchoolID)
+		sid = &s
+	}
+	if articleType == constant.ArticleTypeAnswer && body.ParentID != nil {
+		p := int(*body.ParentID)
+		pid = &p
+		if sid == nil && parent != nil && parent.SchoolID != nil {
+			sid = parent.SchoolID
+		}
+	}
+	pubStatus := body.PublishStatus
+	if pubStatus == 0 {
+		pubStatus = 2
+	}
+	a := &model.Article{
+		UserID:        uid,
+		SchoolID:      sid,
+		ParentID:      pid,
+		Title:         body.Title,
+		Content:       body.Content,
+		Status:        constant.StatusValid,
+		PublishStatus: pubStatus,
+		Type:          articleType,
+	}
+	id, err := dao.Article().Create(ctx.Request.Context(), a)
+	if err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"id": id})
+}
+
+// AdminArticleUpdate 管理员：修改文章（含已删除的也可修改）
+func AdminArticleUpdate(ctx *gin.Context, articleType int) {
+	id, ok := parseID(ctx, "id")
+	if !ok {
+		return
+	}
+	_, err := dao.Article().GetByIDIncludeDeleted(ctx.Request.Context(), id)
+	if err != nil {
+		reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
+		return
+	}
+	var body struct {
+		Title         *string `json:"title"`
+		Content       *string `json:"content"`
+		PublishStatus *int16  `json:"publish_status"`
+		Status        *int16  `json:"status"` // 1正常 2禁用，管理员可直改
+	}
+	if err := ctx.BindJSON(&body); err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	updates := make(map[string]interface{})
+	if body.Title != nil {
+		updates["title"] = *body.Title
+	}
+	if body.Content != nil {
+		updates["content"] = *body.Content
+	}
+	if body.PublishStatus != nil {
+		updates["publish_status"] = *body.PublishStatus
+	}
+	if body.Status != nil && (*body.Status == constant.StatusValid || *body.Status == constant.StatusInvalid) {
+		updates["status"] = *body.Status
+	}
+	if len(updates) == 0 {
+		reply.ReplyOK(ctx)
+		return
+	}
+	if err := dao.Article().UpdateColumns(ctx.Request.Context(), id, updates); err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	reply.ReplyOK(ctx)
+}
+
 // AdminArticleList 管理员：文章列表（帖子/提问/回答）。默认含已删除，可传 include_invalid=0 只看正常
 func AdminArticleList(ctx *gin.Context, articleType int) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
@@ -207,6 +404,38 @@ func AdminSchoolList(ctx *gin.Context) {
 		return
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
+}
+
+// AdminSchoolUpdate 管理员：修改学校信息
+func AdminSchoolUpdate(ctx *gin.Context) {
+	id, ok := parseID(ctx, "id")
+	if !ok {
+		return
+	}
+	school, err := dao.School().GetByID(ctx.Request.Context(), id)
+	if err != nil || school == nil {
+		reply.ReplyNotFound(ctx, errcode.ErrSchoolNotFound)
+		return
+	}
+	var body struct {
+		Name     *string `json:"name"`
+		LoginURL *string `json:"login_url"`
+	}
+	if err := ctx.BindJSON(&body); err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	if body.Name != nil {
+		school.Name = body.Name
+	}
+	if body.LoginURL != nil {
+		school.LoginURL = body.LoginURL
+	}
+	if err := dao.School().Update(ctx.Request.Context(), school); err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	reply.ReplyOK(ctx)
 }
 
 // AdminSchoolCreate 管理员：新增学校
