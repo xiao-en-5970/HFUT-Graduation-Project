@@ -150,6 +150,7 @@
 
   const ROLE_MAP = { 1: '普通用户', 2: '管理员', 3: '超级管理员', 4: '匿名用户' };
   const STATUS_MAP = { 1: '正常', 2: '禁用' };
+  const ARTICLE_STATUS_MAP = {1: '正常', 2: '已删除', 3: '草稿'};
 
   /** 列表单图展示（头像/背景），与帖子图片同一套 display 逻辑 */
   function renderListImage(url, title) {
@@ -301,19 +302,29 @@
         { key: 'id', label: 'ID' },
         { key: 'title', label: '标题', render: r => (r.title || '').slice(0, 40) + (r.title?.length > 40 ? '...' : '') },
         { key: 'images', label: '图片', render: r => renderListImages(r.images) },
-        { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
+        {
+          key: 'status',
+          label: '状态',
+          render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : r.status === 3 ? 'draft' : 'invalid'}">${ARTICLE_STATUS_MAP[r.status] || r.status}</span>`
+        },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
       ];
       list.forEach(a => {
-        a._actions = (a.status === 1 ? `<button class="btn btn-danger btn-sm" data-disable="${a.id}">禁用</button>` : `<button class="btn btn-success btn-sm" data-restore="${a.id}">恢复</button>`) +
-          ` <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        if (a.status === 1) {
+          a._actions = `<button class="btn btn-danger btn-sm" data-disable="${a.id}">禁用</button> <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        } else if (a.status === 2) {
+          a._actions = `<button class="btn btn-success btn-sm" data-restore="${a.id}">恢复</button> <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        } else {
+          a._actions = `<button class="btn btn-primary btn-sm" data-publish="${a.id}">发布</button> <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        }
       });
       const extra = '<button class="btn btn-primary" id="add-post-btn">新建帖子</button>';
       renderTable('帖子管理', columns, list, postPage, total, 15, (p) => { postPage = p; renderPosts(); }, extra);
 
-      document.getElementById('add-post-btn')?.addEventListener('click', () => showArticleModal('posts', '新建帖子', null));
+      document.getElementById('add-post-btn')?.addEventListener('click', () => createDraftThenShowModal('posts', '编辑帖子'));
       moduleContent.querySelectorAll('[data-disable]').forEach(btn => btn.addEventListener('click', () => articleAction('posts', parseInt(btn.dataset.disable, 10), 'disable')));
       moduleContent.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', () => articleAction('posts', parseInt(btn.dataset.restore, 10), 'restore')));
+      moduleContent.querySelectorAll('[data-publish]').forEach(btn => btn.addEventListener('click', () => articleAction('posts', parseInt(btn.dataset.publish, 10), 'publish')));
       moduleContent.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => showArticleModal('posts', '编辑帖子', list.find(x => x.id === parseInt(btn.dataset.edit, 10)))));
     } catch (e) { moduleContent.innerHTML = '<p class="error">' + e.message + '</p>'; }
   }
@@ -329,19 +340,29 @@
         { key: 'id', label: 'ID' },
         { key: 'title', label: '标题', render: r => (r.title || '').slice(0, 40) + (r.title?.length > 40 ? '...' : '') },
         { key: 'images', label: '图片', render: r => renderListImages(r.images) },
-        { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
+        {
+          key: 'status',
+          label: '状态',
+          render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : r.status === 3 ? 'draft' : 'invalid'}">${ARTICLE_STATUS_MAP[r.status] || r.status}</span>`
+        },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
       ];
       list.forEach(a => {
-        a._actions = (a.status === 1 ? `<button class="btn btn-danger btn-sm" data-disable="${a.id}">禁用</button>` : `<button class="btn btn-success btn-sm" data-restore="${a.id}">恢复</button>`) +
-          ` <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        if (a.status === 1) {
+          a._actions = `<button class="btn btn-danger btn-sm" data-disable="${a.id}">禁用</button> <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        } else if (a.status === 2) {
+          a._actions = `<button class="btn btn-success btn-sm" data-restore="${a.id}">恢复</button> <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        } else {
+          a._actions = `<button class="btn btn-primary btn-sm" data-publish="${a.id}">发布</button> <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        }
       });
       const extra = '<button class="btn btn-primary" id="add-question-btn">新建提问</button>';
       renderTable('提问管理', columns, list, questionPage, total, 15, (p) => { questionPage = p; renderQuestions(); }, extra);
 
-      document.getElementById('add-question-btn')?.addEventListener('click', () => showArticleModal('questions', '新建提问', null));
+      document.getElementById('add-question-btn')?.addEventListener('click', () => createDraftThenShowModal('questions', '编辑提问'));
       moduleContent.querySelectorAll('[data-disable]').forEach(btn => btn.addEventListener('click', () => articleAction('questions', parseInt(btn.dataset.disable, 10), 'disable')));
       moduleContent.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', () => articleAction('questions', parseInt(btn.dataset.restore, 10), 'restore')));
+      moduleContent.querySelectorAll('[data-publish]').forEach(btn => btn.addEventListener('click', () => articleAction('questions', parseInt(btn.dataset.publish, 10), 'publish')));
       moduleContent.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => showArticleModal('questions', '编辑提问', list.find(x => x.id === parseInt(btn.dataset.edit, 10)))));
     } catch (e) { moduleContent.innerHTML = '<p class="error">' + e.message + '</p>'; }
   }
@@ -363,24 +384,70 @@
         { key: 'parent_id', label: '提问ID' },
         { key: 'title', label: '标题', render: r => (r.title || r.content || '').slice(0, 40) + (r.content?.length > 40 ? '...' : '') },
         { key: 'images', label: '图片', render: r => renderListImages(r.images) },
-        { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>` },
+        {
+          key: 'status',
+          label: '状态',
+          render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : r.status === 3 ? 'draft' : 'invalid'}">${ARTICLE_STATUS_MAP[r.status] || r.status}</span>`
+        },
         { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) },
       ];
       list.forEach(a => {
-        a._actions = (a.status === 1 ? `<button class="btn btn-danger btn-sm" data-disable="${a.id}">禁用</button>` : `<button class="btn btn-success btn-sm" data-restore="${a.id}">恢复</button>`) +
-          ` <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        if (a.status === 1) {
+          a._actions = `<button class="btn btn-danger btn-sm" data-disable="${a.id}">禁用</button> <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        } else if (a.status === 2) {
+          a._actions = `<button class="btn btn-success btn-sm" data-restore="${a.id}">恢复</button> <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        } else {
+          a._actions = `<button class="btn btn-primary btn-sm" data-publish="${a.id}">发布</button> <button class="btn btn-sm" data-edit="${a.id}">编辑</button>`;
+        }
       });
       const extra = '<button class="btn btn-primary" id="add-answer-btn">新建回答</button>';
       renderTable('回答管理', columns, list, answerPage, total, 15, (p) => { answerPage = p; renderAnswers(); }, extra);
 
-      document.getElementById('add-answer-btn')?.addEventListener('click', () => showArticleModal('answers', '新建回答', null));
+      document.getElementById('add-answer-btn')?.addEventListener('click', () => showAnswerParentPicker());
       moduleContent.querySelectorAll('[data-disable]').forEach(btn => btn.addEventListener('click', () => articleAction('answers', parseInt(btn.dataset.disable, 10), 'disable')));
       moduleContent.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', () => articleAction('answers', parseInt(btn.dataset.restore, 10), 'restore')));
+      moduleContent.querySelectorAll('[data-publish]').forEach(btn => btn.addEventListener('click', () => articleAction('answers', parseInt(btn.dataset.publish, 10), 'publish')));
       moduleContent.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => showArticleModal('answers', '编辑回答', list.find(x => x.id === parseInt(btn.dataset.edit, 10)))));
     } catch (e) { moduleContent.innerHTML = '<p class="error">' + e.message + '</p>'; }
   }
 
   const TYPE_MAP = { posts: 'posts', questions: 'questions', answers: 'answers' };
+
+  /** 帖子/提问：点击新建 → 立即创建空草稿 → 打开编辑弹窗 */
+  async function createDraftThenShowModal(type, title) {
+    try {
+      const d = await api(`/admin/${type}`, {method: 'POST', body: JSON.stringify({publish_status: 2})});
+      const newId = d.data?.id;
+      if (!newId) throw new Error('创建草稿失败');
+      const row = {id: newId, status: 3, title: '', content: '', images: [], publish_status: 2};
+      showArticleModal(type, title, row);
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  /** 回答：先选提问 → 创建草稿 → 打开编辑弹窗 */
+  function showAnswerParentPicker() {
+    if (!questionListForAnswer.length) {
+      alert('暂无提问，请先创建提问');
+      return;
+    }
+    const opts = questionListForAnswer.map(q => `<option value="${q.id}">#${q.id} ${(q.title || '').slice(0, 40)}</option>`).join('');
+    showModal('选择要回复的提问', `<label>提问 <select id="answer-parent">${opts}</select></label>`, async (ov) => {
+      const parentId = parseInt(ov.querySelector('#answer-parent').value, 10);
+      if (!parentId) {
+        throw new Error('请选择提问');
+      }
+      const d = await api('/admin/answers', {
+        method: 'POST',
+        body: JSON.stringify({parent_id: parentId, publish_status: 2})
+      });
+      const newId = d.data?.id;
+      if (!newId) throw new Error('创建草稿失败');
+      const row = {id: newId, parent_id: parentId, status: 3, title: '', content: '', images: [], publish_status: 2};
+      showArticleModal('answers', '编辑回答', row);
+    });
+  }
 
   function showArticleModal(type, title, row) {
     const isAnswer = type === 'answers';
@@ -421,6 +488,7 @@
         if (row) {
           const putBody = { title: payload.title, content: payload.content, publish_status: payload.publish_status, user_id: payload.user_id, school_id: payload.school_id };
           putBody.images = images;
+          if (row.status === 3) putBody.status = 1;
           await api(`/admin/${type}/${row.id}`, { method: 'PUT', body: JSON.stringify(putBody) });
         } else {
           // 先创建草稿获取 id，再上传图片，最后 PUT 发布
@@ -468,7 +536,8 @@
           <span class="art-img-item" data-url="${url || ''}" data-idx="${i}">
             <img src="${url || ''}" alt="图${i + 1}" onerror="this.style.display='none'"/>
             <button type="button" class="art-img-del" title="删除">×</button>
-            <span class="art-img-move" title="下移">⇅</span>
+            <span class="art-img-move" title="上移">↑</span>
+            <span class="art-img-move" title="下移">↓</span>
           </span>
         `).join('');
         listEl.querySelectorAll('.art-img-del').forEach(btn => {
@@ -476,9 +545,15 @@
         });
         listEl.querySelectorAll('.art-img-move').forEach((span) => {
           const item = span.closest('.art-img-item');
+          const isUp = span.title === '上移';
           span.onclick = () => {
-            const next = item.nextElementSibling;
-            if (next) listEl.insertBefore(next, item);
+            if (isUp) {
+              const prev = item.previousElementSibling;
+              if (prev) listEl.insertBefore(item, prev);
+            } else {
+              const next = item.nextElementSibling;
+              if (next) listEl.insertBefore(next, item);
+            }
           };
         });
       }
@@ -488,12 +563,19 @@
           const span = document.createElement('span');
           span.className = 'art-img-item';
           span.dataset.url = url || '';
-          span.innerHTML = `<img src="${url || ''}" alt="" onerror="this.style.display='none'"/><button type="button" class="art-img-del" title="删除">×</button><span class="art-img-move" title="下移">⇅</span>`;
+          span.innerHTML = `<img src="${url || ''}" alt="" onerror="this.style.display='none'"/><button type="button" class="art-img-del" title="删除">×</button><span class="art-img-move" title="上移">↑</span><span class="art-img-move" title="下移">↓</span>`;
           span.querySelector('.art-img-del').onclick = () => span.remove();
-          span.querySelector('.art-img-move').onclick = () => {
-            const next = span.nextElementSibling;
-            if (next) listEl.insertBefore(next, span);
-          };
+          span.querySelectorAll('.art-img-move').forEach((s, i) => {
+            s.onclick = () => {
+              if (s.title === '上移') {
+                const prev = span.previousElementSibling;
+                if (prev) listEl.insertBefore(span, prev);
+              } else {
+                const next = span.nextElementSibling;
+                if (next) listEl.insertBefore(next, span);
+              }
+            };
+          });
           listEl.appendChild(span);
         });
       }
@@ -505,15 +587,22 @@
           span.className = 'art-img-item art-img-pending';
           span.dataset.url = '';
           span._file = file;
-          span.innerHTML = `<img src="${url}" alt="" onerror="this.style.display='none'"/><button type="button" class="art-img-del" title="删除">×</button><span class="art-img-move" title="下移">⇅</span>`;
+          span.innerHTML = `<img src="${url}" alt="" onerror="this.style.display='none'"/><button type="button" class="art-img-del" title="删除">×</button><span class="art-img-move" title="上移">↑</span><span class="art-img-move" title="下移">↓</span>`;
           span.querySelector('.art-img-del').onclick = () => {
             URL.revokeObjectURL(url);
             span.remove();
           };
-          span.querySelector('.art-img-move').onclick = () => {
-            const next = span.nextElementSibling;
-            if (next) listEl.insertBefore(next, span);
-          };
+          span.querySelectorAll('.art-img-move').forEach((s) => {
+            s.onclick = () => {
+              if (s.title === '上移') {
+                const prev = span.previousElementSibling;
+                if (prev) listEl.insertBefore(span, prev);
+              } else {
+                const next = span.nextElementSibling;
+                if (next) listEl.insertBefore(next, span);
+              }
+            };
+          });
           listEl.appendChild(span);
         });
       }
@@ -549,7 +638,11 @@
   async function articleAction(type, id, action) {
     try {
       if (action === 'disable') await api(`/admin/${type}/${id}`, { method: 'DELETE' });
-      else await api(`/admin/${type}/${id}/restore`, { method: 'POST' });
+      else if (action === 'restore') await api(`/admin/${type}/${id}/restore`, {method: 'POST'});
+      else if (action === 'publish') await api(`/admin/${type}/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({status: 1})
+      });
       if (type === 'posts') renderPosts();
       else if (type === 'questions') renderQuestions();
       else renderAnswers();

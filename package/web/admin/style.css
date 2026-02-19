@@ -240,6 +240,11 @@ td { font-size: 0.9rem; }
 .status-badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
 .status-valid { background: #14532d; color: #86efac; }
 .status-invalid { background: #7f1d1d; color: #fca5a5; }
+
+.status-draft {
+    background: #713f12;
+    color: #fcd34d;
+}
 .role-1 { color: #8b8f98; }
 .role-2 { color: #6366f1; }
 .role-3 { color: #f59e0b; }
