@@ -29,6 +29,18 @@ func Init() error {
 		level = zapcore.InfoLevel
 	}
 
+	var stackLevel zapcore.Level
+	switch config.LogStacktraceLevel {
+	case "debug":
+		stackLevel = zapcore.DebugLevel
+	case "info":
+		stackLevel = zapcore.InfoLevel
+	case "warn":
+		stackLevel = zapcore.WarnLevel
+	default:
+		stackLevel = zapcore.ErrorLevel
+	}
+
 	// Configure encoder for colored console output
 	encoderConfig := zap.NewDevelopmentEncoderConfig()
 	encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
@@ -48,7 +60,7 @@ func Init() error {
 		level,
 	)
 
-	sugarLog = zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel)).Sugar()
+	sugarLog = zap.New(core, zap.AddCaller(), zap.AddStacktrace(stackLevel)).Sugar()
 	return nil
 }
 
@@ -143,6 +155,11 @@ func Error(ctx context.Context, args ...interface{}) {
 		return
 	}
 	withFields(args[1:]...).Error(msg)
+}
+
+// ErrorWithStack 记录 error 并强制附带栈追踪（用于关键异常排查）
+func ErrorWithStack(ctx context.Context, msg string, fields ...zap.Field) {
+	sugarLog.Desugar().With(append(fields, zap.Stack("stack"))...).Error(msg)
 }
 func Fatal(ctx context.Context, args ...interface{}) {
 	if len(args) == 0 {

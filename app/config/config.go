@@ -31,8 +31,9 @@ var (
 	RedisPassword string
 	RedisDB       string
 
-	LogLevel    string
-	LogEncoding string
+	LogLevel           string
+	LogEncoding        string
+	LogStacktraceLevel string // 栈追踪起始级别：debug/info/warn/error，默认 error
 
 	JWTSecret     string
 	JWTExpireHour int
@@ -79,6 +80,7 @@ func LoadConfigFrom(path string) error {
 
 	LogLevel = getEnv("LOG_LEVEL", "info")
 	LogEncoding = getEnv("LOG_ENCODING", "console")
+	LogStacktraceLevel = getEnv("LOG_STACKTRACE_LEVEL", "error")
 
 	JWTSecret = getEnv("JWT_SECRET", "your-secret-key-change-in-production")
 	JWTExpireHour = getEnvInt("JWT_EXPIRE_HOUR", 24)
