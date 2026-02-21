@@ -168,6 +168,30 @@
         "school_id": {"type": "integer"}
       }
     },
+    "UserProfile": {
+      "type": "object",
+      "description": "公开用户信息（任意非删用户可见）",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        },
+        "background": {
+          "type": "string"
+        },
+        "follow_count": {
+          "type": "integer"
+        },
+        "fans_count": {
+          "type": "integer"
+        }
+      }
+    },
     "UserAdmin": {
       "type": "object",
       "properties": {
@@ -387,6 +411,49 @@
             "examples": {"application/json": {"code": 200, "message": "成功", "data": {"id": 1, "username": "zhangsan", "avatar": "", "background": "", "follow_count": 0, "fans_count": 0, "role": 1, "status": 1, "school_id": 1}}}
           },
           "401": {"description": "未认证/token无效", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      }
+    },
+    "/api/v1/user/{id}": {
+      "get": {
+        "tags": [
+          "用户"
+        ],
+        "summary": "获取指定用户公开信息",
+        "description": "根据用户ID获取非删用户的公开身份信息（id、昵称、头像、背景、关注数、粉丝数）。无需登录。",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "用户ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "用户公开信息",
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Response"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/definitions/UserProfile"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "404": {
+            "description": "用户不存在或已删除",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       }
     },

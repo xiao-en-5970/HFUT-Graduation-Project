@@ -91,6 +91,22 @@ func (s *userService) AdminLogin(ctx *gin.Context, username, password string) (t
 	return token, nil
 }
 
+// GetProfile 获取指定用户的公开身份信息，仅限 status=1 的正常用户
+func (s *userService) GetProfile(ctx *gin.Context, id uint) (*response.UserProfile, error) {
+	user, err := dao.User().GetByIDIfValid(ctx.Request.Context(), id)
+	if err != nil {
+		return nil, err
+	}
+	return &response.UserProfile{
+		ID:          user.ID,
+		Username:    user.Username,
+		Avatar:      oss.ToFullURL(user.Avatar),
+		Background:  oss.ToFullURL(user.Background),
+		FollowCount: user.FollowCount,
+		FansCount:   user.FansCount,
+	}, nil
+}
+
 func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, error) {
 	userDao, err := dao.User().GetByID(ctx, userID)
 	if err != nil {

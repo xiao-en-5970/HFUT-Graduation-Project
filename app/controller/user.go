@@ -1,13 +1,18 @@
 package controller
 
 import (
+	"errors"
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 func UserRegister(ctx *gin.Context) {
@@ -64,7 +69,26 @@ func UserInfo(ctx *gin.Context) {
 		return
 	}
 	reply.ReplyOKWithData(ctx, info)
-	return
+}
+
+// UserProfile 获取任意非删用户的公开身份信息（需 JWT）
+func UserProfile(ctx *gin.Context) {
+	idStr := ctx.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil || id == 0 {
+		reply.ReplyErrWithMessage(ctx, "用户ID无效")
+		return
+	}
+	profile, err := service.User().GetProfile(ctx, uint(id))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			reply.ReplyNotFound(ctx, errcode.ErrUserNotFound)
+			return
+		}
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	reply.ReplyOKWithData(ctx, profile)
 }
 
 func UserUpdate(ctx *gin.Context) {

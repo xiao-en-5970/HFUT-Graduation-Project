@@ -5,6 +5,7 @@ import (
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 )
 
 type UserStore struct {
@@ -58,6 +59,13 @@ func (s *UserStore) List(ctx context.Context, page, pageSize int, statusFilter i
 func (s *UserStore) GetByID(ctx context.Context, id uint) (*model.User, error) {
 	user := &model.User{}
 	err := pgsql.DB.Where("id = ?", id).First(user).Error
+	return user, err
+}
+
+// GetByIDIfValid 按 ID 获取用户，仅当 status=1（正常）时返回
+func (s *UserStore) GetByIDIfValid(ctx context.Context, id uint) (*model.User, error) {
+	user := &model.User{}
+	err := pgsql.DB.Where("id = ? AND status = ?", id, constant.StatusValid).First(user).Error
 	return user, err
 }
 

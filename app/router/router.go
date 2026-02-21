@@ -41,6 +41,7 @@ func PrivateRouter(api *gin.RouterGroup) {
 	{
 		userGroup.GET("/info", controller.UserInfo)
 		userGroup.GET("/logout", controller.UserLogout)
+		userGroup.GET("/:id", controller.UserProfile)
 		userGroup.POST("/update", controller.UserUpdate)
 		userGroup.POST("/bind/school", controller.UserBindSchool)
 		userGroup.POST("/avatar", controller.UserUploadAvatar)
