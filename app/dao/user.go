@@ -63,6 +63,38 @@ func (s *UserStore) GetByID(ctx context.Context, id uint) (*model.User, error) {
 	return user, err
 }
 
+// GetByIDs 批量按 ID 获取用户（用于填充 author 等），含已禁用用户
+func (s *UserStore) GetByIDs(ctx context.Context, ids []uint) (map[uint]*model.User, error) {
+	if len(ids) == 0 {
+		return map[uint]*model.User{}, nil
+	}
+	var list []*model.User
+	if err := pgsql.DB.WithContext(ctx).Where("id IN ?", ids).Find(&list).Error; err != nil {
+		return nil, err
+	}
+	m := make(map[uint]*model.User, len(list))
+	for _, u := range list {
+		m[u.ID] = u
+	}
+	return m, nil
+}
+
+// GetByIDsIfValid 批量按 ID 获取正常用户（status=1），用于 author 展示时避免泄露已禁用用户信息
+func (s *UserStore) GetByIDsIfValid(ctx context.Context, ids []uint) (map[uint]*model.User, error) {
+	if len(ids) == 0 {
+		return map[uint]*model.User{}, nil
+	}
+	var list []*model.User
+	if err := pgsql.DB.WithContext(ctx).Where("id IN ? AND status = ?", ids, constant.StatusValid).Find(&list).Error; err != nil {
+		return nil, err
+	}
+	m := make(map[uint]*model.User, len(list))
+	for _, u := range list {
+		m[u.ID] = u
+	}
+	return m, nil
+}
+
 // GetByIDIfValid 按 ID 获取用户，仅当 status=1（正常）时返回
 func (s *UserStore) GetByIDIfValid(ctx context.Context, id uint) (*model.User, error) {
 	user := &model.User{}

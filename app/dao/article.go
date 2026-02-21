@@ -214,6 +214,15 @@ func (s *ArticleStore) ExistsAndOwnedByWithSchoolAndType(ctx context.Context, id
 	return count > 0, err
 }
 
+// IsOwnedByUserForOSS 校验文章归属用户（含草稿），用于 OSS 路径权限校验
+func (s *ArticleStore) IsOwnedByUserForOSS(ctx context.Context, articleID uint, userID uint) (bool, error) {
+	var count int64
+	err := pgsql.DB.WithContext(ctx).Model(&model.Article{}).
+		Where("id = ? AND user_id = ? AND status IN ?", articleID, int(userID), []int16{constant.StatusValid, constant.StatusDraft}).
+		Count(&count).Error
+	return count > 0, err
+}
+
 // ExistsAndOwnedByWithSchoolAndTypeAllowDraft 校验存在、归属、可见、类型，允许 status=1 或 3（草稿可编辑）
 func (s *ArticleStore) ExistsAndOwnedByWithSchoolAndTypeAllowDraft(ctx context.Context, id uint, userID uint, schoolID uint, articleType int) (bool, error) {
 	var count int64

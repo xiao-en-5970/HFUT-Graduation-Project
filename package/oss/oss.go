@@ -284,3 +284,46 @@ func ExtFromFilename(filename string) string {
 	}
 	return filename[idx+1:]
 }
+
+// ExtractUserAssetPath 从 URL 或路径中提取 user/{id}/ 形式的存储路径；校验是否为指定用户的头像/背景
+func ExtractUserAssetPath(input string, userID uint) (storagePath string, err error) {
+	if input == "" {
+		return "", ErrInvalidPath
+	}
+	p := strings.TrimSpace(input)
+	// 从完整 URL 或 API 路径中提取 OSS 存储路径 user/123/xxx
+	if idx := strings.Index(p, "/api/v1/oss/"); idx >= 0 {
+		p = strings.TrimPrefix(p[idx:], "/api/v1/oss/")
+	} else {
+		p = strings.TrimPrefix(p, "/")
+		p = strings.TrimPrefix(p, "api/v1/oss/")
+	}
+	if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") {
+		if idx := strings.Index(p, "/api/v1/oss/"); idx >= 0 {
+			p = strings.TrimPrefix(p[idx:], "/api/v1/oss/")
+		} else {
+			return "", ErrInvalidPath
+		}
+	}
+	if idx := strings.Index(p, "?"); idx >= 0 {
+		p = p[:idx]
+	}
+	if !strings.HasPrefix(p, "user/") {
+		return "", ErrInvalidPath
+	}
+	// 期望格式 user/{id}/avatar.* 或 user/{id}/background.*
+	parts := strings.SplitN(p, "/", 3)
+	if len(parts) < 3 {
+		return "", ErrInvalidPath
+	}
+	idStr := parts[1]
+	id, e := strconv.ParseUint(idStr, 10, 32)
+	if e != nil || uint(id) != userID {
+		return "", ErrInvalidPath
+	}
+	// 禁止目录穿越
+	if strings.Contains(p, "..") {
+		return "", ErrInvalidPath
+	}
+	return p, nil
+}

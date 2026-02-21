@@ -117,6 +117,21 @@
         ]
       }
     },
+    "AuthorProfile": {
+      "type": "object",
+      "description": "作者简要信息（用于文章、评论等关联展示）",
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        },
+        "avatar": {
+          "type": "string"
+        }
+      }
+    },
     "Article": {
       "type": "object",
       "properties": {
@@ -140,7 +155,14 @@
         "collect_count": {"type": "integer"},
         "images": {"type": "array", "items": {"type": "string"}, "description": "图片完整 URL 数组"},
         "created_at": {"type": "string", "format": "date-time"},
-        "updated_at": {"type": "string", "format": "date-time"}
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "author": {
+          "$ref": "#/definitions/AuthorProfile",
+          "description": "作者简要信息，列表/详情返回时附带"
+        }
       }
     },
     "ArticleListResponse": {
@@ -168,6 +190,7 @@
     },
     "UserInfo": {
       "type": "object",
+      "description": "当前用户完整信息（info 接口），含绑定信息等",
       "properties": {
         "id": {"type": "integer"},
         "username": {"type": "string"},
@@ -177,7 +200,33 @@
         "fans_count": {"type": "integer"},
         "role": {"type": "integer", "description": "1普通 2管理员 3超管 4匿名"},
         "status": {"type": "integer", "description": "1正常 2禁用"},
-        "school_id": {"type": "integer"}
+        "school_id": {
+          "type": "integer"
+        },
+        "school_name": {
+          "type": "string",
+          "description": "学校名称，未绑定时为空"
+        },
+        "bind_qq": {
+          "type": "string",
+          "description": "绑定的 QQ"
+        },
+        "bind_wx": {
+          "type": "string",
+          "description": "绑定的微信"
+        },
+        "bind_phone": {
+          "type": "string",
+          "description": "绑定的手机"
+        },
+        "created_at": {
+          "type": "string",
+          "description": "注册时间"
+        },
+        "updated_at": {
+          "type": "string",
+          "description": "最后更新时间"
+        }
       }
     },
     "UserProfile": {
@@ -201,6 +250,11 @@
         },
         "fans_count": {
           "type": "integer"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "注册时间"
         }
       }
     },
@@ -232,7 +286,14 @@
         "images": {"type": "array", "items": {"type": "string"}, "description": "图片完整 URL 数组"},
         "type": {"type": "integer", "description": "1顶层 2回复"},
         "like_count": {"type": "integer"},
-        "created_at": {"type": "string", "format": "date-time"}
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "author": {
+          "$ref": "#/definitions/AuthorProfile",
+          "description": "作者简要信息，列表返回时附带"
+        }
       }
     },
     "CollectFolder": {
@@ -370,6 +431,7 @@
       "post": {
         "tags": ["用户"],
         "summary": "注册",
+        "description": "role 默认为 1（普通用户），不可通过接口指定",
         "parameters": [{
           "in": "body",
           "name": "body",
@@ -386,7 +448,12 @@
         }],
         "responses": {
           "200": {"description": "注册成功", "schema": {"$ref": "#/definitions/Response"}, "examples": {"application/json": {"code": 200, "message": "成功", "data": {"user_id": 1}}}},
-          "400": {"description": "两次密码不一致/用户已存在", "schema": {"$ref": "#/definitions/Response"}}
+          "400": {
+            "description": "参数格式错误/两次密码不一致/用户已存在",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       }
     },
@@ -427,7 +494,28 @@
           "200": {
             "description": "用户信息",
             "schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/UserInfo"}}}]},
-            "examples": {"application/json": {"code": 200, "message": "成功", "data": {"id": 1, "username": "zhangsan", "avatar": "", "background": "", "follow_count": 0, "fans_count": 0, "role": 1, "status": 1, "school_id": 1}}}
+            "examples": {
+              "application/json": {
+                "code": 200,
+                "message": "成功",
+                "data": {
+                  "id": 1,
+                  "username": "zhangsan",
+                  "avatar": "",
+                  "background": "",
+                  "follow_count": 0,
+                  "fans_count": 0,
+                  "role": 1,
+                  "status": 1,
+                  "school_id": 1,
+                  "bind_qq": "",
+                  "bind_wx": "",
+                  "bind_phone": "",
+                  "created_at": "2024-01-01 00:00:00",
+                  "updated_at": "2024-01-01 00:00:00"
+                }
+              }
+            }
           },
           "401": {"description": "未认证/token无效", "schema": {"$ref": "#/definitions/Response"}}
         }
@@ -480,6 +568,7 @@
       "post": {
         "tags": ["用户"],
         "summary": "更新个人信息",
+        "description": "仅支持部分更新。username、role、status、password 不可修改。按需传字段，未传的不更新",
         "security": [{"BearerAuth": []}],
         "parameters": [{
           "in": "body",
@@ -487,8 +576,14 @@
           "schema": {
             "type": "object",
             "properties": {
-              "avatar": {"type": "string"},
-              "background": {"type": "string"},
+              "avatar": {
+                "type": "string",
+                "description": "头像 URL（OSS 上传后传入或 POST /avatar 自动更新）"
+              },
+              "background": {
+                "type": "string",
+                "description": "背景图 URL"
+              },
               "bind_qq": {"type": "string"},
               "bind_wx": {"type": "string"},
               "bind_phone": {"type": "string"}
@@ -497,6 +592,12 @@
         }],
         "responses": {
           "200": {"schema": {"$ref": "#/definitions/Response"}},
+          "400": {
+            "description": "参数格式错误",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
           "401": {"schema": {"$ref": "#/definitions/Response"}}
         }
       }
@@ -505,12 +606,24 @@
       "post": {
         "tags": ["用户"],
         "summary": "绑定学校",
+        "description": "body 必须为 JSON 对象，含 school_id 字段",
         "security": [{"BearerAuth": []}],
         "parameters": [{
           "in": "body",
           "name": "body",
           "required": true,
-          "schema": {"type": "object", "required": ["school_id"], "properties": {"school_id": {"type": "integer", "description": "学校ID"}}}
+          "schema": {
+            "type": "object",
+            "required": [
+              "school_id"
+            ],
+            "properties": {
+              "school_id": {
+                "type": "integer",
+                "description": "学校ID，0 表示解绑"
+              }
+            }
+          }
         }],
         "responses": {
           "200": {"schema": {"$ref": "#/definitions/Response"}},

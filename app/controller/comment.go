@@ -86,7 +86,7 @@ func CommentList(ctx *gin.Context) {
 	for _, c := range list {
 		c.Images = oss.TransformImageURLs(c.Images)
 	}
-	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
+	reply.ReplyOKWithData(ctx, gin.H{"list": enrichCommentsWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
 }
 
 // CommentListReplies 统一回复列表：GET /comments/:extType/:id/:commentId/replies
@@ -129,7 +129,7 @@ func CommentListReplies(ctx *gin.Context) {
 	for _, c := range list {
 		c.Images = oss.TransformImageURLs(c.Images)
 	}
-	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
+	reply.ReplyOKWithData(ctx, gin.H{"list": enrichCommentsWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
 }
 
 func parseExtTypeAndID(ctx *gin.Context) (extType int, id uint, ok bool) {

@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"mime/multipart"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
@@ -105,11 +106,12 @@ func (s *userService) GetProfile(ctx *gin.Context, id uint) (*response.UserProfi
 		Background:  oss.ToFullURL(user.Background),
 		FollowCount: user.FollowCount,
 		FansCount:   user.FansCount,
+		CreatedAt:   user.CreatedAt.Format("2006-01-02 15:04:05"),
 	}, nil
 }
 
 func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, error) {
-	userDao, err := dao.User().GetByID(ctx, userID)
+	userDao, err := dao.User().GetByID(ctx.Request.Context(), userID)
 	if err != nil {
 		return &response.UserInfo{}, err
 	}
@@ -123,6 +125,16 @@ func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, e
 		Background:  oss.ToFullURL(userDao.Background),
 		FollowCount: userDao.FollowCount,
 		FansCount:   userDao.FansCount,
+		BindQQ:      userDao.BindQQ,
+		BindWX:      userDao.BindWX,
+		BindPhone:   userDao.BindPhone,
+		CreatedAt:   userDao.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:   userDao.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}
+	if userDao.SchoolID > 0 {
+		if school, err := dao.School().GetByID(ctx.Request.Context(), userDao.SchoolID); err == nil && school != nil && school.Name != nil {
+			userInfo.SchoolName = *school.Name
+		}
 	}
 	return userInfo, nil
 }
@@ -150,19 +162,39 @@ type UpdateProfileReq struct {
 func (s *userService) UpdateProfile(ctx *gin.Context, userID uint, req UpdateProfileReq) error {
 	updates := make(map[string]interface{})
 	if req.Avatar != nil {
-		updates["avatar"] = oss.PathForStorage(*req.Avatar)
+		storagePath, err := oss.ExtractUserAssetPath(*req.Avatar, userID)
+		if err != nil {
+			return errors.New("头像路径无效或无权使用")
+		}
+		updates["avatar"] = oss.PathForStorage(storagePath)
 	}
 	if req.Background != nil {
-		updates["background"] = oss.PathForStorage(*req.Background)
+		storagePath, err := oss.ExtractUserAssetPath(*req.Background, userID)
+		if err != nil {
+			return errors.New("背景路径无效或无权使用")
+		}
+		updates["background"] = oss.PathForStorage(storagePath)
 	}
 	if req.BindQQ != nil {
-		updates["bind_qq"] = *req.BindQQ
+		v := strings.TrimSpace(*req.BindQQ)
+		if len(v) > 128 {
+			return errors.New("QQ 长度不能超过 128 字符")
+		}
+		updates["bind_qq"] = v
 	}
 	if req.BindWX != nil {
-		updates["bind_wx"] = *req.BindWX
+		v := strings.TrimSpace(*req.BindWX)
+		if len(v) > 128 {
+			return errors.New("微信长度不能超过 128 字符")
+		}
+		updates["bind_wx"] = v
 	}
 	if req.BindPhone != nil {
-		updates["bind_phone"] = *req.BindPhone
+		v := strings.TrimSpace(*req.BindPhone)
+		if len(v) > 20 {
+			return errors.New("手机号长度不能超过 20 字符")
+		}
+		updates["bind_phone"] = v
 	}
 	if len(updates) == 0 {
 		return nil

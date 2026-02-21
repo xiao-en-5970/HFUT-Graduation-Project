@@ -38,7 +38,7 @@ func ArticleHandlers(articleType int) struct {
 			for _, a := range list {
 				a.Images = oss.TransformImageURLs(a.Images)
 			}
-			reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
+			reply.ReplyOKWithData(ctx, gin.H{"list": enrichArticlesWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
 		},
 		List: func(ctx *gin.Context) {
 			schoolID := middleware.GetSchoolID(ctx)
@@ -52,7 +52,7 @@ func ArticleHandlers(articleType int) struct {
 			for _, a := range list {
 				a.Images = oss.TransformImageURLs(a.Images)
 			}
-			reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
+			reply.ReplyOKWithData(ctx, gin.H{"list": enrichArticlesWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
 		},
 		Search: func(ctx *gin.Context) {
 			schoolID := middleware.GetSchoolID(ctx)
@@ -67,7 +67,7 @@ func ArticleHandlers(articleType int) struct {
 			for _, a := range list {
 				a.Images = oss.TransformImageURLs(a.Images)
 			}
-			reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
+			reply.ReplyOKWithData(ctx, gin.H{"list": enrichArticlesWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
 		},
 		Create: func(ctx *gin.Context) {
 			userID := middleware.GetUserID(ctx)
@@ -127,7 +127,8 @@ func ArticleHandlers(articleType int) struct {
 				return
 			}
 			art.Images = oss.TransformImageURLs(art.Images)
-			reply.ReplyOKWithData(ctx, art)
+			enriched := enrichArticleWithAuthor(ctx.Request.Context(), art)
+			reply.ReplyOKWithData(ctx, enriched)
 		},
 		Update: func(ctx *gin.Context) {
 			userID := middleware.GetUserID(ctx)
@@ -269,5 +270,5 @@ func QuestionListAnswers(ctx *gin.Context) {
 	for _, a := range list {
 		a.Images = oss.TransformImageURLs(a.Images)
 	}
-	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
+	reply.ReplyOKWithData(ctx, gin.H{"list": enrichArticlesWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
 }
