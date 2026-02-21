@@ -30,9 +30,10 @@ type CreateArticleReq struct {
 	Content       string `json:"content"`        // 可选，草稿可空
 	PublishStatus int16  `json:"publish_status"` // 1:私密 2:公开
 	ParentID      *uint  `json:"parent_id"`      // 仅回答必传，指向提问ID
+	IsPublic      int    `json:"is_public"`      // 0:按学校隔离（默认） 1:全站公开（school_id=0），仅帖子和提问可设置，设置后不可改
 }
 
-// UpdateArticleReq 更新请求（type 不可修改，由接口隔离）
+// UpdateArticleReq 更新请求（type、school_id、is_public 不可修改，由创建时决定）
 type UpdateArticleReq struct {
 	Title         *string   `json:"title"`
 	Content       *string   `json:"content"`
@@ -43,24 +44,37 @@ type UpdateArticleReq struct {
 
 // Create 创建草稿，articleType 由调用方传入。仅存 user_id、school_id、type、parent_id（回答）等元信息
 // 返回 ID 供前端立即进行 OSS 上传和编辑。回答必须指定 parent_id
+// is_public=1 时帖子和提问的 school_id 为 0（全站公开）；回答继承父提问的 school_id
 func (s *articleService) Create(ctx *gin.Context, userID uint, schoolID uint, articleType int, req CreateArticleReq) (uint, error) {
-	if schoolID == 0 {
+	if articleType != constant.ArticleTypeAnswer && schoolID == 0 {
 		return 0, ErrSchoolNotBound
 	}
+	var articleSchoolID *int
 	if articleType == constant.ArticleTypeAnswer {
 		if req.ParentID == nil || *req.ParentID == 0 {
 			return 0, ErrParentQuestionRequired
 		}
-		parent, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), *req.ParentID, schoolID, constant.ArticleTypeQuestion)
+		parent, err := dao.Article().GetByIDWithSchoolOrPublicAndType(ctx.Request.Context(), *req.ParentID, schoolID, constant.ArticleTypeQuestion)
 		if err != nil || parent == nil {
 			return 0, ErrParentQuestionNotFound
 		}
+		articleSchoolID = parent.SchoolID
+	} else {
+		if req.IsPublic == 1 {
+			zero := 0
+			articleSchoolID = &zero
+		} else {
+			if schoolID == 0 {
+				return 0, ErrSchoolNotBound
+			}
+			sid := int(schoolID)
+			articleSchoolID = &sid
+		}
 	}
 	uid := int(userID)
-	sid := int(schoolID)
 	a := &model.Article{
 		UserID:        &uid,
-		SchoolID:      &sid,
+		SchoolID:      articleSchoolID,
 		Title:         req.Title,
 		Content:       req.Content,
 		Status:        constant.StatusDraft,
@@ -77,11 +91,8 @@ func (s *articleService) Create(ctx *gin.Context, userID uint, schoolID uint, ar
 	return dao.Article().Create(ctx.Request.Context(), a)
 }
 
-// Get 获取详情，学校+类型隔离。草稿仅作者可见
+// Get 获取详情，学校+类型可见性。草稿仅作者可见。viewerSchoolID=0 时仅可看公开内容
 func (s *articleService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID uint, articleType int) (*model.Article, error) {
-	if schoolID == 0 {
-		return nil, ErrSchoolNotBound
-	}
 	art, err := dao.Article().GetByIDWithSchoolAndTypeAllowDraft(ctx.Request.Context(), id, schoolID, articleType)
 	if err != nil {
 		return nil, err
@@ -175,41 +186,31 @@ func (s *articleService) Delete(ctx *gin.Context, id uint, userID uint, schoolID
 	return dao.Article().SoftDelete(ctx.Request.Context(), id)
 }
 
-// List 分页列表，学校+类型隔离
-func (s *articleService) List(ctx *gin.Context, schoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
-	if schoolID == 0 {
-		return nil, 0, ErrSchoolNotBound
-	}
-	return dao.Article().List(ctx.Request.Context(), schoolID, articleType, page, pageSize)
+// List 分页列表，学校可见性（viewerSchoolID=0 仅公开，>0 公开+本校）
+func (s *articleService) List(ctx *gin.Context, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
+	return dao.Article().List(ctx.Request.Context(), viewerSchoolID, articleType, page, pageSize)
 }
 
-// Search 全文检索，学校+类型隔离
-func (s *articleService) Search(ctx *gin.Context, schoolID uint, articleType int, keyword string, page, pageSize int) ([]*model.Article, int64, error) {
-	if schoolID == 0 {
-		return nil, 0, ErrSchoolNotBound
-	}
-	return dao.Article().Search(ctx.Request.Context(), schoolID, articleType, keyword, page, pageSize)
+// Search 全文检索，学校可见性
+func (s *articleService) Search(ctx *gin.Context, viewerSchoolID uint, articleType int, keyword string, page, pageSize int) ([]*model.Article, int64, error) {
+	return dao.Article().Search(ctx.Request.Context(), viewerSchoolID, articleType, keyword, page, pageSize)
 }
 
-// ListAnswersByQuestionID 列出某提问下的回答，学校隔离
-func (s *articleService) ListAnswersByQuestionID(ctx *gin.Context, questionID uint, schoolID uint, page, pageSize int) ([]*model.Article, int64, error) {
-	if schoolID == 0 {
-		return nil, 0, ErrSchoolNotBound
-	}
-	// 校验提问存在且为提问类型
-	_, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), questionID, schoolID, constant.ArticleTypeQuestion)
-	if err != nil {
+// ListAnswersByQuestionID 列出某提问下的回答，按提问的 school_id 过滤（公开提问的回答也为公开）
+func (s *articleService) ListAnswersByQuestionID(ctx *gin.Context, questionID uint, viewerSchoolID uint, page, pageSize int) ([]*model.Article, int64, error) {
+	question, err := dao.Article().GetByIDWithSchoolOrPublicAndType(ctx.Request.Context(), questionID, viewerSchoolID, constant.ArticleTypeQuestion)
+	if err != nil || question == nil {
 		return nil, 0, ErrParentQuestionNotFound
 	}
-	return dao.Article().ListByParentID(ctx.Request.Context(), questionID, schoolID, constant.ArticleTypeAnswer, page, pageSize)
+	return dao.Article().ListByParentID(ctx.Request.Context(), questionID, question.SchoolID, constant.ArticleTypeAnswer, page, pageSize)
 }
 
 // ListDrafts 草稿列表，汇总帖子/提问/回答。type=0 全部 1帖子 2提问 3回答
-func (s *articleService) ListDrafts(ctx *gin.Context, userID uint, schoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
+func (s *articleService) ListDrafts(ctx *gin.Context, userID uint, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
 	if userID == 0 {
 		return nil, 0, errors.New("请先登录")
 	}
-	return dao.Article().ListDrafts(ctx.Request.Context(), userID, schoolID, articleType, page, pageSize)
+	return dao.Article().ListDrafts(ctx.Request.Context(), userID, viewerSchoolID, articleType, page, pageSize)
 }
 
 // PublishDraft 草稿发布为正式文章

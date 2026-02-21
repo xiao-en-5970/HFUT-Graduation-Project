@@ -26,12 +26,9 @@ type CreateCommentReq struct {
 }
 
 // Create 发评论或回复
-// articleID 为文章 ID，extType 为 1帖子/2提问/3回答，需校验文章存在且同校
+// articleID 为文章 ID，extType 为 1帖子/2提问/3回答，需校验文章存在且可见（本校或公开 school_id=0）
 func (s *commentService) Create(ctx *gin.Context, userID uint, schoolID uint, articleID uint, extType int, req CreateCommentReq) (uint, error) {
-	if schoolID == 0 {
-		return 0, ErrSchoolNotBound
-	}
-	// 校验文章存在、同校且类型匹配
+	// 校验文章存在、可见且类型匹配（schoolID=0 时仅可评公开文章）
 	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 	if err != nil || art == nil {
 		if err == gorm.ErrRecordNotFound {
@@ -93,9 +90,6 @@ func (s *commentService) Create(ctx *gin.Context, userID uint, schoolID uint, ar
 // ListComments 某文章的顶层评论列表
 // extType 1帖子 2提问 3回答
 func (s *commentService) ListComments(ctx *gin.Context, userID uint, schoolID uint, articleID uint, extType int, page, pageSize int) ([]*model.Comment, int64, error) {
-	if schoolID == 0 {
-		return nil, 0, ErrSchoolNotBound
-	}
 	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 	if err != nil || art == nil {
 		return nil, 0, ErrCommentArticleNotFound
@@ -112,9 +106,6 @@ func (s *commentService) ListComments(ctx *gin.Context, userID uint, schoolID ui
 // ListReplies 某评论的回复列表
 // extType 1帖子 2提问 3回答
 func (s *commentService) ListReplies(ctx *gin.Context, userID uint, schoolID uint, articleID uint, commentID uint, extType int, page, pageSize int) ([]*model.Comment, int64, error) {
-	if schoolID == 0 {
-		return nil, 0, ErrSchoolNotBound
-	}
 	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 	if err != nil || art == nil {
 		return nil, 0, ErrCommentArticleNotFound

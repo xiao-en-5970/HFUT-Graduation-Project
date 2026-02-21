@@ -25,10 +25,7 @@ func LikeAdd(ctx *gin.Context) {
 		reply.ReplyUnauthorized(ctx)
 		return
 	}
-	if schoolID == 0 {
-		reply.ReplyErrWithMessage(ctx, "请先绑定学校")
-		return
-	}
+	// schoolID=0 时仅可对公开文章点赞
 	extType, extID, ok := parseLikeExtTypeAndID(ctx)
 	if !ok {
 		return
@@ -54,10 +51,6 @@ func LikeRemove(ctx *gin.Context) {
 	schoolID := middleware.GetSchoolID(ctx)
 	if userID == 0 {
 		reply.ReplyUnauthorized(ctx)
-		return
-	}
-	if schoolID == 0 {
-		reply.ReplyErrWithMessage(ctx, "请先绑定学校")
 		return
 	}
 	extType, extID, ok := parseLikeExtTypeAndID(ctx)

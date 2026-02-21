@@ -26,10 +26,7 @@ func CommentCreate(ctx *gin.Context) {
 		reply.ReplyUnauthorized(ctx)
 		return
 	}
-	if schoolID == 0 {
-		reply.ReplyErrWithMessage(ctx, "请先绑定学校")
-		return
-	}
+	// schoolID=0 时仅可对公开文章评论
 	extType, articleID, ok := parseExtTypeAndID(ctx)
 	if !ok {
 		return
@@ -67,10 +64,6 @@ func CommentList(ctx *gin.Context) {
 		reply.ReplyUnauthorized(ctx)
 		return
 	}
-	if schoolID == 0 {
-		reply.ReplyErrWithMessage(ctx, "请先绑定学校")
-		return
-	}
 	extType, articleID, ok := parseExtTypeAndID(ctx)
 	if !ok {
 		return
@@ -102,10 +95,6 @@ func CommentListReplies(ctx *gin.Context) {
 	schoolID := middleware.GetSchoolID(ctx)
 	if userID == 0 {
 		reply.ReplyUnauthorized(ctx)
-		return
-	}
-	if schoolID == 0 {
-		reply.ReplyErrWithMessage(ctx, "请先绑定学校")
 		return
 	}
 	extType, articleID, ok := parseExtTypeAndID(ctx)

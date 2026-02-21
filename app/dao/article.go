@@ -27,13 +27,11 @@ func (s *ArticleStore) GetByID(ctx context.Context, id uint) (*model.Article, er
 	return a, err
 }
 
-// GetByIDWithSchool 按ID获取，学校隔离
+// GetByIDWithSchool 按ID获取，学校隔离（含公开）
 func (s *ArticleStore) GetByIDWithSchool(ctx context.Context, id uint, schoolID uint) (*model.Article, error) {
 	a := &model.Article{}
 	q := pgsql.DB.Where("id = ? AND status = ?", id, constant.StatusValid)
-	if schoolID > 0 {
-		q = q.Where("school_id = ?", schoolID)
-	}
+	q = applySchoolVisibility(q, schoolID)
 	err := q.First(a).Error
 	return a, err
 }
@@ -42,20 +40,33 @@ func (s *ArticleStore) GetByIDWithSchool(ctx context.Context, id uint, schoolID 
 func (s *ArticleStore) GetByIDWithSchoolAndType(ctx context.Context, id uint, schoolID uint, articleType int) (*model.Article, error) {
 	a := &model.Article{}
 	q := pgsql.DB.Where("id = ? AND status = ? AND type = ?", id, constant.StatusValid, articleType)
-	if schoolID > 0 {
-		q = q.Where("school_id = ?", schoolID)
-	}
+	q = applySchoolVisibility(q, schoolID)
 	err := q.First(a).Error
 	return a, err
+}
+
+// GetByIDWithSchoolOrPublicAndType 按ID获取，学校或公开（school_id=0 或 = schoolID）
+func (s *ArticleStore) GetByIDWithSchoolOrPublicAndType(ctx context.Context, id uint, viewerSchoolID uint, articleType int) (*model.Article, error) {
+	a := &model.Article{}
+	q := pgsql.DB.Where("id = ? AND status = ? AND type = ?", id, constant.StatusValid, articleType)
+	q = applySchoolVisibility(q, viewerSchoolID)
+	err := q.First(a).Error
+	return a, err
+}
+
+// applySchoolVisibility 应用学校可见性：viewerSchoolID=0 仅公开(school_id=0)，>0 公开或本校
+func applySchoolVisibility(q *gorm.DB, viewerSchoolID uint) *gorm.DB {
+	if viewerSchoolID == 0 {
+		return q.Where("school_id = 0")
+	}
+	return q.Where("school_id = 0 OR school_id = ?", int(viewerSchoolID))
 }
 
 // GetByIDWithSchoolAndTypeAllowDraft 按ID获取，学校+类型，允许 status=1 或 3
 func (s *ArticleStore) GetByIDWithSchoolAndTypeAllowDraft(ctx context.Context, id uint, schoolID uint, articleType int) (*model.Article, error) {
 	a := &model.Article{}
 	q := pgsql.DB.Where("id = ? AND type = ? AND status IN ?", id, articleType, []int16{constant.StatusValid, constant.StatusDraft})
-	if schoolID > 0 {
-		q = q.Where("school_id = ?", schoolID)
-	}
+	q = applySchoolVisibility(q, schoolID)
 	err := q.First(a).Error
 	return a, err
 }
@@ -134,8 +145,8 @@ func (s *ArticleStore) ListAdmin(ctx context.Context, schoolID uint, articleType
 	return list, total, err
 }
 
-// List 按学校+类型分页列出，类型隔离+学校隔离
-func (s *ArticleStore) List(ctx context.Context, schoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
+// List 按学校+类型分页列出，类型隔离+学校可见性（viewerSchoolID=0 仅公开，>0 公开或本校）
+func (s *ArticleStore) List(ctx context.Context, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -145,17 +156,15 @@ func (s *ArticleStore) List(ctx context.Context, schoolID uint, articleType int,
 	offset := (page - 1) * pageSize
 	var total int64
 	q := pgsql.DB.Model(&model.Article{}).Where("status = ? AND publish_status = ? AND type = ?", constant.StatusValid, 2, articleType)
-	if schoolID > 0 {
-		q = q.Where("school_id = ?", schoolID)
-	}
+	q = applySchoolVisibility(q, viewerSchoolID)
 	q.Count(&total)
 	var list []*model.Article
 	err := q.Order("created_at DESC").Limit(pageSize).Offset(offset).Find(&list).Error
 	return list, total, err
 }
 
-// Search 全文检索：按类型+学校隔离，相关度+点赞量+收藏量排序
-func (s *ArticleStore) Search(ctx context.Context, schoolID uint, articleType int, keyword string, page, pageSize int) ([]*model.Article, int64, error) {
+// Search 全文检索：按类型+学校可见性，相关度+点赞量+收藏量排序
+func (s *ArticleStore) Search(ctx context.Context, viewerSchoolID uint, articleType int, keyword string, page, pageSize int) ([]*model.Article, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -165,14 +174,12 @@ func (s *ArticleStore) Search(ctx context.Context, schoolID uint, articleType in
 	offset := (page - 1) * pageSize
 	keyword = strings.TrimSpace(keyword)
 	if keyword == "" {
-		return s.List(ctx, schoolID, articleType, page, pageSize)
+		return s.List(ctx, viewerSchoolID, articleType, page, pageSize)
 	}
 	q := pgsql.DB.Model(&model.Article{}).
 		Where("status = ? AND publish_status = ? AND type = ?", constant.StatusValid, 2, articleType).
 		Where("search_vector @@ plainto_tsquery('simple', ?)", keyword)
-	if schoolID > 0 {
-		q = q.Where("school_id = ?", schoolID)
-	}
+	q = applySchoolVisibility(q, viewerSchoolID)
 	var total int64
 	q.Count(&total)
 	var list []*model.Article
@@ -188,42 +195,36 @@ func (s *ArticleStore) ExistsAndOwnedBy(ctx context.Context, id uint, userID uin
 	return count > 0, err
 }
 
-// ExistsAndOwnedByWithSchool 校验存在、归属用户且同校
+// ExistsAndOwnedByWithSchool 校验存在、归属用户且可见（同校或公开）
 func (s *ArticleStore) ExistsAndOwnedByWithSchool(ctx context.Context, id uint, userID uint, schoolID uint) (bool, error) {
 	var count int64
 	q := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ? AND status = ?", id, int(userID), constant.StatusValid)
-	if schoolID > 0 {
-		q = q.Where("school_id = ?", schoolID)
-	}
+	q = applySchoolVisibility(q, schoolID)
 	err := q.Count(&count).Error
 	return count > 0, err
 }
 
-// ExistsAndOwnedByWithSchoolAndType 校验存在、归属用户、同校且类型匹配（仅 status=1 正常）
+// ExistsAndOwnedByWithSchoolAndType 校验存在、归属用户、可见且类型匹配（仅 status=1 正常）
 func (s *ArticleStore) ExistsAndOwnedByWithSchoolAndType(ctx context.Context, id uint, userID uint, schoolID uint, articleType int) (bool, error) {
 	var count int64
 	q := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ? AND type = ? AND status = ?", id, int(userID), articleType, constant.StatusValid)
-	if schoolID > 0 {
-		q = q.Where("school_id = ?", schoolID)
-	}
+	q = applySchoolVisibility(q, schoolID)
 	err := q.Count(&count).Error
 	return count > 0, err
 }
 
-// ExistsAndOwnedByWithSchoolAndTypeAllowDraft 校验存在、归属、同校、类型，允许 status=1 或 3（草稿可编辑）
+// ExistsAndOwnedByWithSchoolAndTypeAllowDraft 校验存在、归属、可见、类型，允许 status=1 或 3（草稿可编辑）
 func (s *ArticleStore) ExistsAndOwnedByWithSchoolAndTypeAllowDraft(ctx context.Context, id uint, userID uint, schoolID uint, articleType int) (bool, error) {
 	var count int64
 	q := pgsql.DB.Model(&model.Article{}).Where("id = ? AND user_id = ? AND type = ?", id, int(userID), articleType).
 		Where("status IN ?", []int16{constant.StatusValid, constant.StatusDraft})
-	if schoolID > 0 {
-		q = q.Where("school_id = ?", schoolID)
-	}
+	q = applySchoolVisibility(q, schoolID)
 	err := q.Count(&count).Error
 	return count > 0, err
 }
 
-// ListDrafts 草稿列表，按用户汇总，type=0 全部 1帖子 2提问 3回答
-func (s *ArticleStore) ListDrafts(ctx context.Context, userID uint, schoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
+// ListDrafts 草稿列表，按用户汇总，type=0 全部 1帖子 2提问 3回答（viewerSchoolID 用于过滤本人可编辑的草稿）
+func (s *ArticleStore) ListDrafts(ctx context.Context, userID uint, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -235,9 +236,7 @@ func (s *ArticleStore) ListDrafts(ctx context.Context, userID uint, schoolID uin
 	if articleType > 0 {
 		q = q.Where("type = ?", articleType)
 	}
-	if schoolID > 0 {
-		q = q.Where("school_id = ?", schoolID)
-	}
+	q = applySchoolVisibility(q, viewerSchoolID)
 	var total int64
 	q.Count(&total)
 	var list []*model.Article
@@ -253,8 +252,8 @@ func (s *ArticleStore) PublishDraft(ctx context.Context, id uint, userID uint) (
 	return result.RowsAffected > 0, result.Error
 }
 
-// ListByParentID 按父文章ID分页列出子文章（回答），学校隔离
-func (s *ArticleStore) ListByParentID(ctx context.Context, parentID uint, schoolID uint, childType int, page, pageSize int) ([]*model.Article, int64, error) {
+// ListByParentID 按父文章ID分页列出子文章（回答），按父提问的 school_id 过滤
+func (s *ArticleStore) ListByParentID(ctx context.Context, parentID uint, questionSchoolID *int, childType int, page, pageSize int) ([]*model.Article, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -265,8 +264,10 @@ func (s *ArticleStore) ListByParentID(ctx context.Context, parentID uint, school
 	var total int64
 	q := pgsql.DB.Model(&model.Article{}).
 		Where("status = ? AND publish_status = ? AND type = ? AND parent_id = ?", constant.StatusValid, 2, childType, parentID)
-	if schoolID > 0 {
-		q = q.Where("school_id = ?", schoolID)
+	if questionSchoolID == nil || *questionSchoolID == 0 {
+		q = q.Where("school_id = 0")
+	} else {
+		q = q.Where("school_id = ?", *questionSchoolID)
 	}
 	q.Count(&total)
 	var list []*model.Article

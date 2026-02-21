@@ -25,10 +25,7 @@ func CollectAdd(ctx *gin.Context) {
 		reply.ReplyUnauthorized(ctx)
 		return
 	}
-	if schoolID == 0 {
-		reply.ReplyErrWithMessage(ctx, "请先绑定学校")
-		return
-	}
+	// schoolID=0 时仅可收藏公开文章
 	extType, extID, ok := parseCollectExtTypeAndID(ctx)
 	if !ok {
 		return

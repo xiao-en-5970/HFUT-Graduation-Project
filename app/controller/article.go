@@ -42,10 +42,6 @@ func ArticleHandlers(articleType int) struct {
 		},
 		List: func(ctx *gin.Context) {
 			schoolID := middleware.GetSchoolID(ctx)
-			if schoolID == 0 {
-				reply.ReplyErrWithMessage(ctx, "请先绑定学校")
-				return
-			}
 			page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 			pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
 			list, total, err := service.Article().List(ctx, schoolID, articleType, page, pageSize)
@@ -60,10 +56,6 @@ func ArticleHandlers(articleType int) struct {
 		},
 		Search: func(ctx *gin.Context) {
 			schoolID := middleware.GetSchoolID(ctx)
-			if schoolID == 0 {
-				reply.ReplyErrWithMessage(ctx, "请先绑定学校")
-				return
-			}
 			keyword := ctx.Query("q")
 			page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 			pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
@@ -257,10 +249,6 @@ var (
 // QuestionListAnswers 列出某提问下的回答 GET /question/:id/answers
 func QuestionListAnswers(ctx *gin.Context) {
 	schoolID := middleware.GetSchoolID(ctx)
-	if schoolID == 0 {
-		reply.ReplyErrWithMessage(ctx, "请先绑定学校")
-		return
-	}
 	idStr := ctx.Param("id")
 	questionID, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {

@@ -337,20 +337,31 @@ func AdminArticleCreate(ctx *gin.Context, articleType int) {
 		u := int(*body.UserID)
 		uid = &u
 	}
-	if body.SchoolID != nil && *body.SchoolID > 0 {
-		_, err := dao.School().GetByID(ctx.Request.Context(), *body.SchoolID)
-		if err != nil {
-			reply.ReplyErrWithMessage(ctx, "学校不存在")
-			return
+	if body.SchoolID != nil {
+		if *body.SchoolID > 0 {
+			_, err := dao.School().GetByID(ctx.Request.Context(), *body.SchoolID)
+			if err != nil {
+				reply.ReplyErrWithMessage(ctx, "学校不存在")
+				return
+			}
+			s := int(*body.SchoolID)
+			sid = &s
+		} else {
+			// *body.SchoolID == 0 表示全站公开
+			zero := 0
+			sid = &zero
 		}
-		s := int(*body.SchoolID)
-		sid = &s
 	}
 	if articleType == constant.ArticleTypeAnswer && body.ParentID != nil {
 		p := int(*body.ParentID)
 		pid = &p
-		if sid == nil && parent != nil && parent.SchoolID != nil {
-			sid = parent.SchoolID
+		if sid == nil && parent != nil {
+			if parent.SchoolID != nil {
+				sid = parent.SchoolID
+			} else {
+				zero := 0
+				sid = &zero
+			}
 		}
 	}
 	pubStatus := body.PublishStatus
@@ -427,7 +438,7 @@ func AdminArticleUpdate(ctx *gin.Context, articleType int) {
 			}
 			updates["school_id"] = int(*body.SchoolID)
 		} else {
-			updates["school_id"] = nil
+			updates["school_id"] = 0 // 0 表示全站公开
 		}
 	}
 	if body.PublishStatus != nil {

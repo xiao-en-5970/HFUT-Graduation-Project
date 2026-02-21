@@ -51,7 +51,7 @@
     },
     "ArticleCreate": {
       "type": "object",
-      "description": "创建草稿（status=3），仅存元信息，立即返回 id。后续通过 PUT 编辑和上传图片，PUT 时传 status=1 发布",
+      "description": "创建草稿（status=3），仅存元信息，立即返回 id。后续通过 PUT 编辑和上传图片，PUT 时传 status=1 发布。is_public 仅帖子和提问可设置，设置后不可更改",
       "properties": {
         "title": {
           "type": "string",
@@ -62,7 +62,15 @@
           "description": "正文，可选"
         },
         "publish_status": {"type": "integer", "description": "1=私密 2=公开", "default": 1},
-        "parent_id": {"type": "integer", "description": "回答必传，对应提问ID"}
+        "parent_id": {
+          "type": "integer",
+          "description": "回答必传，对应提问ID"
+        },
+        "is_public": {
+          "type": "integer",
+          "description": "0=按学校隔离（默认） 1=全站公开（school_id=0），仅帖子和提问可设置，设置后不可改",
+          "default": 0
+        }
       },
       "example": {
         "publish_status": 2
@@ -70,6 +78,7 @@
     },
     "ArticleUpdate": {
       "type": "object",
+      "description": "用户更新接口。type、school_id、is_public 不可修改，由创建时决定",
       "properties": {
         "title": {"type": "string"},
         "content": {"type": "string"},
@@ -113,7 +122,10 @@
       "properties": {
         "id": {"type": "integer"},
         "user_id": {"type": "integer"},
-        "school_id": {"type": "integer"},
+        "school_id": {
+          "type": "integer",
+          "description": "学校ID，0=全站公开"
+        },
         "parent_id": {"type": "integer"},
         "title": {"type": "string"},
         "content": {"type": "string"},
@@ -255,7 +267,10 @@
           "description": "可选"
         },
         "user_id": {"type": "integer", "description": "可选"},
-        "school_id": {"type": "integer", "description": "可选"},
+        "school_id": {
+          "type": "integer",
+          "description": "可选，0=全站公开"
+        },
         "publish_status": {
           "type": "integer",
           "description": "1私密 2公开",
@@ -269,11 +284,15 @@
     },
     "AdminArticleUpdate": {
       "type": "object",
+      "description": "管理员可修改公开性（school_id）用于接口和数据调试。用户接口不可修改",
       "properties": {
         "title": {"type": "string"},
         "content": {"type": "string"},
         "user_id": {"type": "integer"},
-        "school_id": {"type": "integer"},
+        "school_id": {
+          "type": "integer",
+          "description": "0=全站公开，>0=指定学校"
+        },
         "publish_status": {"type": "integer"},
         "status": {
           "type": "integer",
@@ -576,6 +595,7 @@
       "get": {
         "tags": ["帖子"],
         "summary": "帖子列表",
+        "description": "学校可见性：已绑定学校可见本校+全站公开(school_id=0)；未绑定学校仅可见全站公开",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "query", "name": "page", "type": "integer", "default": 1},
@@ -602,6 +622,7 @@
       "get": {
         "tags": ["帖子"],
         "summary": "搜索帖子",
+        "description": "学校可见性同上。未绑定学校可搜索全站公开内容",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "query", "name": "q", "type": "string", "required": true, "description": "搜索关键词"},
@@ -615,6 +636,7 @@
       "get": {
         "tags": ["帖子"],
         "summary": "帖子详情",
+        "description": "未绑定学校仅可查看全站公开帖子",
         "security": [{"BearerAuth": []}],
         "parameters": [{"in": "path", "name": "id", "type": "integer", "required": true}],
         "responses": {"200": {"schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/Article"}}}]}}, "401": {}, "404": {"schema": {"$ref": "#/definitions/Response"}}}
@@ -622,7 +644,7 @@
       "put": {
         "tags": ["帖子"],
         "summary": "更新帖子",
-        "description": "支持 title、content、publish_status、images。images 按传入顺序覆盖，图片替换统一在此接口完成",
+        "description": "支持 title、content、publish_status、images。type、school_id、is_public 不可修改",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
@@ -749,6 +771,7 @@
       "get": {
         "tags": ["提问"],
         "summary": "提问列表",
+        "description": "学校可见性同上。未绑定学校仅可见全站公开提问",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "query", "name": "page", "type": "integer"},
@@ -769,6 +792,7 @@
       "get": {
         "tags": ["提问"],
         "summary": "搜索提问",
+        "description": "学校可见性同上",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "query", "name": "q", "type": "string", "required": true},
@@ -782,6 +806,7 @@
       "get": {
         "tags": ["提问"],
         "summary": "提问详情",
+        "description": "未绑定学校仅可查看全站公开提问",
         "security": [{"BearerAuth": []}],
         "parameters": [{"in": "path", "name": "id", "type": "integer", "required": true}],
         "responses": {"200": {}, "401": {}, "404": {}}
@@ -789,7 +814,7 @@
       "put": {
         "tags": ["提问"],
         "summary": "更新提问",
-        "description": "支持 title、content、publish_status、images，图片替换统一在此接口完成",
+        "description": "支持 title、content、publish_status、images。type、school_id、is_public 不可修改",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
@@ -835,6 +860,7 @@
       "get": {
         "tags": ["提问"],
         "summary": "该提问下的回答列表",
+        "description": "公开提问的回答也为公开。未绑定学校仅可查看公开提问的回答",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true, "description": "提问ID"},
@@ -925,7 +951,7 @@
       "post": {
         "tags": ["回答"],
         "summary": "创建回答草稿",
-        "description": "必须在哪个提问下回答：body 必传 parent_id（提问ID）。流程同帖子",
+        "description": "body 必传 parent_id（提问ID）。公开提问的回答自动为公开。未绑定学校可回答公开提问",
         "security": [{"BearerAuth": []}],
         "parameters": [{
           "in": "body",
@@ -957,6 +983,7 @@
       "get": {
         "tags": ["回答"],
         "summary": "回答详情",
+        "description": "未绑定学校仅可查看全站公开回答",
         "security": [{"BearerAuth": []}],
         "parameters": [{"in": "path", "name": "id", "type": "integer", "required": true}],
         "responses": {"200": {}, "401": {}, "404": {}}
@@ -964,7 +991,7 @@
       "put": {
         "tags": ["回答"],
         "summary": "更新回答",
-        "description": "支持 title、content、publish_status、images，图片替换统一在此接口完成",
+        "description": "支持 title、content、publish_status、images。type、school_id、is_public 不可修改",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
@@ -1304,7 +1331,12 @@
         "parameters": [
           {"in": "query", "name": "page", "type": "integer", "default": 1},
           {"in": "query", "name": "pageSize", "type": "integer", "default": 20},
-          {"in": "query", "name": "school_id", "type": "integer", "description": "按学校筛选，0=全部"},
+          {
+            "in": "query",
+            "name": "school_id",
+            "type": "integer",
+            "description": "按学校筛选，0=全部（含 school_id=0 全站公开）"
+          },
           {
             "in": "query",
             "name": "include_invalid",
@@ -1319,7 +1351,7 @@
       "put": {
         "tags": ["管理员"],
         "summary": "编辑帖子",
-        "description": "支持 title、content、images、status 等。草稿传 status=1 即发布",
+        "description": "可修改 school_id（公开性）用于调试。支持 title、content、images、status 等",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
@@ -1368,7 +1400,12 @@
         "parameters": [
           {"in": "query", "name": "page", "type": "integer", "default": 1},
           {"in": "query", "name": "pageSize", "type": "integer", "default": 20},
-          {"in": "query", "name": "school_id", "type": "integer"},
+          {
+            "in": "query",
+            "name": "school_id",
+            "type": "integer",
+            "description": "按学校筛选，0=全部"
+          },
           {
             "in": "query",
             "name": "include_invalid",
@@ -1383,6 +1420,7 @@
       "put": {
         "tags": ["管理员"],
         "summary": "编辑提问",
+        "description": "可修改 school_id（公开性）用于调试",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
@@ -1439,7 +1477,12 @@
         "parameters": [
           {"in": "query", "name": "page", "type": "integer", "default": 1},
           {"in": "query", "name": "pageSize", "type": "integer", "default": 20},
-          {"in": "query", "name": "school_id", "type": "integer"},
+          {
+            "in": "query",
+            "name": "school_id",
+            "type": "integer",
+            "description": "按学校筛选，0=全部"
+          },
           {
             "in": "query",
             "name": "include_invalid",
@@ -1454,6 +1497,7 @@
       "put": {
         "tags": ["管理员"],
         "summary": "编辑回答",
+        "description": "可修改 school_id（公开性）用于调试",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "path", "name": "id", "type": "integer", "required": true},
