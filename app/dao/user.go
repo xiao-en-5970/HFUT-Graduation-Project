@@ -25,6 +25,7 @@ func (s *UserStore) CreateWithOptionalSchool(ctx context.Context, user *model.Us
 	return user.ID, err
 }
 
+// Update 全量保存，ID=0 会触发 INSERT 导致唯一约束冲突。用户更新请用 UpdateColumns
 func (s *UserStore) Update(ctx context.Context, user *model.User) error {
 	return pgsql.DB.Save(user).Error
 }

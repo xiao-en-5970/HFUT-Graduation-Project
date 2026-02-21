@@ -26,6 +26,7 @@ func (s *userService) Register(ctx *gin.Context, username, password string) (uin
 		passwordHash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		return dao.User().Create(ctx, &model.User{
 			SchoolID: 0,
+			Role:     constant.RoleUser,
 			Username: username,
 			Password: string(passwordHash),
 		})
@@ -136,8 +137,37 @@ func (s *userService) BindSchool(ctx *gin.Context, userID uint, schoolId uint) e
 	return dao.User().UpdateSchoolByID(ctx.Request.Context(), userID, schoolId)
 }
 
-func (s *userService) Update(ctx *gin.Context, user *model.User) error {
-	return dao.User().Update(ctx, user)
+// UpdateProfileReq 用户更新资料请求（仅允许更新这些字段，不含 username/role/status/password）
+type UpdateProfileReq struct {
+	Avatar     *string `json:"avatar"`
+	Background *string `json:"background"`
+	BindQQ     *string `json:"bind_qq"`
+	BindWX     *string `json:"bind_wx"`
+	BindPhone  *string `json:"bind_phone"`
+}
+
+// UpdateProfile 根据当前登录用户 ID 部分更新资料
+func (s *userService) UpdateProfile(ctx *gin.Context, userID uint, req UpdateProfileReq) error {
+	updates := make(map[string]interface{})
+	if req.Avatar != nil {
+		updates["avatar"] = oss.PathForStorage(*req.Avatar)
+	}
+	if req.Background != nil {
+		updates["background"] = oss.PathForStorage(*req.Background)
+	}
+	if req.BindQQ != nil {
+		updates["bind_qq"] = *req.BindQQ
+	}
+	if req.BindWX != nil {
+		updates["bind_wx"] = *req.BindWX
+	}
+	if req.BindPhone != nil {
+		updates["bind_phone"] = *req.BindPhone
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return dao.User().UpdateColumns(ctx.Request.Context(), userID, updates)
 }
 
 func (s *userService) UploadAvatar(ctx *gin.Context, userID uint, file *multipart.FileHeader) (url string, err error) {

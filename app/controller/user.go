@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
@@ -23,7 +22,9 @@ func UserRegister(ctx *gin.Context) {
 	}
 	var user Register
 	if err := ctx.BindJSON(&user); err != nil {
-		logger.Error(ctx, "用户注册失败", zap.Error(err))
+		logger.Error(ctx, "用户注册参数错误", zap.Error(err))
+		reply.ReplyInvalidParams(ctx, err)
+		return
 	}
 	if user.RePassword != user.Password {
 		reply.ReplyErrWithMessage(ctx, "两次密码不一致！")
@@ -92,14 +93,17 @@ func UserProfile(ctx *gin.Context) {
 }
 
 func UserUpdate(ctx *gin.Context) {
-	user := &model.User{}
-	err := ctx.BindJSON(user)
-	if err != nil {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	var req service.UpdateProfileReq
+	if err := ctx.BindJSON(&req); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	err = service.User().Update(ctx, user)
-	if err != nil {
+	if err := service.User().UpdateProfile(ctx, userID, req); err != nil {
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
@@ -112,13 +116,14 @@ func UserBindSchool(ctx *gin.Context) {
 		reply.ReplyUnauthorized(ctx)
 		return
 	}
-	schoolId := uint(0)
-	err := ctx.BindJSON(&schoolId)
-	if err != nil {
+	var body struct {
+		SchoolID uint `json:"school_id"`
+	}
+	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	err = service.User().BindSchool(ctx, userID, schoolId)
+	err := service.User().BindSchool(ctx, userID, body.SchoolID)
 	if err != nil {
 		logger.Error(ctx, "用户绑定学校失败", zap.Error(err))
 		reply.ReplyInternalError(ctx, err)

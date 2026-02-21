@@ -54,6 +54,12 @@ func (s *SchoolStore) UpdateStatus(ctx context.Context, id uint, status int16) e
 	return pgsql.DB.WithContext(ctx).Model(&model.School{}).Where("id = ?", id).UpdateColumn("status", status).Error
 }
 
+// Update 全量保存，ID=0 会触发 INSERT。学校更新请用 UpdateColumns
 func (s *SchoolStore) Update(ctx context.Context, school *model.School) error {
 	return pgsql.DB.WithContext(ctx).Save(school).Error
+}
+
+// UpdateColumns 部分字段更新，避免 Save 误触发 INSERT
+func (s *SchoolStore) UpdateColumns(ctx context.Context, id uint, updates map[string]interface{}) error {
+	return pgsql.DB.WithContext(ctx).Model(&model.School{}).Where("id = ?", id).Updates(updates).Error
 }

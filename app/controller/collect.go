@@ -37,7 +37,10 @@ func CollectAdd(ctx *gin.Context) {
 	var body struct {
 		CollectID uint `json:"collect_id"` // 0 表示默认收藏夹
 	}
-	_ = ctx.BindJSON(&body)
+	if err := ctx.BindJSON(&body); err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
 	if err := service.Collect().AddArticle(ctx, userID, schoolID, body.CollectID, extID, extType); err != nil {
 		if errors.Is(err, service.ErrCollectArticleNotFound) {
 			reply.ReplyErrWithMessage(ctx, "内容不存在")

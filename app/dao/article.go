@@ -77,6 +77,7 @@ func (s *ArticleStore) GetByIDIncludeDeleted(ctx context.Context, id uint) (*mod
 	return a, err
 }
 
+// Update 全量保存，ID=0 会触发 INSERT。文章更新请用 UpdateColumns
 func (s *ArticleStore) Update(ctx context.Context, a *model.Article) error {
 	return pgsql.DB.Save(a).Error
 }

@@ -104,8 +104,7 @@ func AdminUserUpdate(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	user, err := dao.User().GetByID(ctx.Request.Context(), id)
-	if err != nil || user == nil {
+	if _, err := dao.User().GetByID(ctx.Request.Context(), id); err != nil {
 		reply.ReplyErrWithMessage(ctx, "用户不存在")
 		return
 	}
@@ -503,8 +502,7 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	school, err := dao.School().GetByID(ctx.Request.Context(), id)
-	if err != nil || school == nil {
+	if _, err := dao.School().GetByID(ctx.Request.Context(), id); err != nil {
 		reply.ReplyNotFound(ctx, errcode.ErrSchoolNotFound)
 		return
 	}
@@ -516,15 +514,18 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
+	updates := make(map[string]interface{})
 	if body.Name != nil {
-		school.Name = body.Name
+		updates["name"] = *body.Name
 	}
 	if body.LoginURL != nil {
-		school.LoginURL = body.LoginURL
+		updates["login_url"] = *body.LoginURL
 	}
-	if err := dao.School().Update(ctx.Request.Context(), school); err != nil {
-		reply.ReplyInternalError(ctx, err)
-		return
+	if len(updates) > 0 {
+		if err := dao.School().UpdateColumns(ctx.Request.Context(), id, updates); err != nil {
+			reply.ReplyInternalError(ctx, err)
+			return
+		}
 	}
 	reply.ReplyOK(ctx)
 }
