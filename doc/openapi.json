@@ -2,7 +2,7 @@
   "swagger": "2.0",
   "info": {
     "title": "HFUT Graduation Project API",
-    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址。数据库统一存 .small 路径，默认返回缩略图；前端去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）\n\n**创建流程（帖子/提问/回答）：** 1 创建草稿 POST 获取 id 2 POST /:id/images 上传图片（雪花算法）3 PUT 调整顺序与内容 4 POST /:id/publish 发布。**已弃用：** 一次性提交完整文章创建\n\n**近期更新：** 文章/评论列表含 author；UserInfo/UserProfile 扩展字段；按用户查看文章 GET /user/{id}/posts|questions|answers；**聚合搜索** GET /search/articles（帖子+提问+回答，筛选+排序）；全文检索使用 zhparser 中文智能分词；草稿列表 GET /post|question|answer/drafts（仅本人）；OSS 路径权限",
+    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**变更记录：** 每次更新后见 API_CHANGELOG.md（与 openapi.json 同目录），列出本次受影响接口及变更说明。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址。数据库统一存 .small 路径，默认返回缩略图；前端去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）\n\n**创建流程（帖子/提问/回答）：** 1 创建草稿 POST 获取 id 2 POST /:id/images 上传图片（雪花算法）3 PUT 调整顺序与内容 4 POST /:id/publish 发布。**已弃用：** 一次性提交完整文章创建\n\n**近期更新：** 文章/评论列表含 author；UserInfo/UserProfile 扩展字段；按用户查看文章 GET /user/{id}/posts|questions|answers；**聚合搜索** GET /search/articles（帖子+提问+回答，筛选+排序）；全文检索使用 zhparser 中文智能分词；草稿列表 GET /post|question|answer/drafts（仅本人）；OSS 路径权限",
     "version": "1.0.0"
   },
   "basePath": "/",
