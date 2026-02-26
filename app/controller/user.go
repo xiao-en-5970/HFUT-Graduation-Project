@@ -8,7 +8,9 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -171,4 +173,50 @@ func UserUploadBackground(ctx *gin.Context) {
 		return
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"url": url})
+}
+
+// UserListPosts 按用户列出帖子 GET /user/:id/posts
+func UserListPosts(ctx *gin.Context) {
+	UserListArticlesByType(ctx, constant.ArticleTypeNormal)
+}
+
+// UserListQuestions 按用户列出提问 GET /user/:id/questions
+func UserListQuestions(ctx *gin.Context) {
+	UserListArticlesByType(ctx, constant.ArticleTypeQuestion)
+}
+
+// UserListAnswers 按用户列出回答 GET /user/:id/answers
+func UserListAnswers(ctx *gin.Context) {
+	UserListArticlesByType(ctx, constant.ArticleTypeAnswer)
+}
+
+// UserListArticlesByType 按用户分页列出指定类型文章，自己看自己含私密，看别人仅公开
+func UserListArticlesByType(ctx *gin.Context, articleType int) {
+	viewerID := middleware.GetUserID(ctx)
+	if viewerID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	idStr := ctx.Param("id")
+	targetID, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil || targetID == 0 {
+		reply.ReplyErrWithMessage(ctx, "用户ID无效")
+		return
+	}
+	schoolID := middleware.GetSchoolID(ctx)
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
+	list, total, err := service.Article().ListByUser(ctx, uint(targetID), viewerID, schoolID, articleType, page, pageSize)
+	if err != nil {
+		if errors.Is(err, service.ErrArticleNotFoundOrNoPermission) {
+			reply.ReplyNotFound(ctx, errcode.ErrUserNotFound)
+			return
+		}
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	for _, a := range list {
+		a.Images = oss.TransformImageURLs(a.Images)
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"list": enrichArticlesWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
 }

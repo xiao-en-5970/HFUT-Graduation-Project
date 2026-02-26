@@ -1,0 +1,38 @@
+# PostgreSQL + zhparser 中文分词扩展
+# 基于 postgres:18.1-alpine，编译安装 zhparser
+FROM postgres:18.1-alpine
+
+USER root
+
+# 构建依赖（GitHub 源码需 autoconf/automake 生成 configure）
+RUN apk add --no-cache \
+    postgresql-dev \
+    build-base \
+    git \
+    wget \
+    autoconf \
+    automake \
+    libtool
+
+# 1. 安装 SCWS（zhparser 依赖。GitHub 源码无 configure，需先 autoreconf）
+ARG SCWS_VERSION=1.2.3
+RUN wget -q -O - "https://github.com/hightman/scws/archive/refs/tags/${SCWS_VERSION}.tar.gz" | tar xzf - \
+    && cd scws-${SCWS_VERSION} \
+    && touch README && aclocal && autoconf && autoheader && libtoolize -f && automake --add-missing \
+    && ./configure --prefix=/usr/local \
+    && make \
+    && make install \
+    && cd .. && rm -rf scws-${SCWS_VERSION}
+
+# 2. 编译 zhparser（PG 18 自带 LLVM 依赖会调用 clang，无 clang 时禁用 bitcode）
+RUN git clone --depth 1 https://github.com/amutu/zhparser.git /tmp/zhparser \
+    && cd /tmp/zhparser \
+    && SCWS_HOME=/usr/local make with_llvm=no \
+    && SCWS_HOME=/usr/local make with_llvm=no install \
+    && cd / \
+    && rm -rf /tmp/zhparser
+
+# 清理构建依赖（减小镜像）
+RUN apk del build-base git wget autoconf automake libtool
+
+USER postgres

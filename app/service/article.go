@@ -191,9 +191,29 @@ func (s *articleService) List(ctx *gin.Context, viewerSchoolID uint, articleType
 	return dao.Article().List(ctx.Request.Context(), viewerSchoolID, articleType, page, pageSize)
 }
 
+// ListByUser 按用户分页列出文章。自己看自己：含私密(publish_status=1)；看别人：仅公开(publish_status=2)
+func (s *articleService) ListByUser(ctx *gin.Context, targetUserID uint, viewerID uint, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
+	if targetUserID == 0 {
+		return nil, 0, ErrArticleNotFoundOrNoPermission
+	}
+	onlyPublic := (viewerID != targetUserID)
+	if onlyPublic {
+		// 看别人：目标用户需存在且正常
+		if _, err := dao.User().GetByIDIfValid(ctx.Request.Context(), targetUserID); err != nil {
+			return nil, 0, ErrArticleNotFoundOrNoPermission
+		}
+	}
+	return dao.Article().ListByUserID(ctx.Request.Context(), targetUserID, articleType, onlyPublic, viewerSchoolID, page, pageSize)
+}
+
 // Search 全文检索，学校可见性
 func (s *articleService) Search(ctx *gin.Context, viewerSchoolID uint, articleType int, keyword string, page, pageSize int) ([]*model.Article, int64, error) {
 	return dao.Article().Search(ctx.Request.Context(), viewerSchoolID, articleType, keyword, page, pageSize)
+}
+
+// AggregateSearch 聚合搜索：帖子+提问+回答，支持筛选与排序
+func (s *articleService) AggregateSearch(ctx *gin.Context, params dao.AggregateSearchParams) ([]*model.Article, int64, error) {
+	return dao.Article().AggregateSearch(ctx.Request.Context(), params)
 }
 
 // ListAnswersByQuestionID 列出某提问下的回答，按提问的 school_id 过滤（公开提问的回答也为公开）

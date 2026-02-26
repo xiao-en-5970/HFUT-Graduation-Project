@@ -256,8 +256,19 @@ comment on column articles.school_id is '学校ID';
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS parent_id integer REFERENCES articles(id);
 comment on column articles.parent_id is '父文章ID，仅回答类型(type=3)使用，指向提问';
 
--- 全文检索：tsvector 倒排索引，用于标题、正文搜索
-ALTER TABLE articles ADD COLUMN IF NOT EXISTS search_vector tsvector
-  GENERATED ALWAYS AS (setweight(to_tsvector('simple', coalesce(title,'')), 'A') ||
-                       setweight(to_tsvector('simple', coalesce(content,'')), 'B')) STORED;
+-- 全文检索：tsvector 倒排索引，中文智能分词（依赖 zhparser 扩展，需先安装）
+CREATE EXTENSION IF NOT EXISTS zhparser;
+DROP TEXT SEARCH CONFIGURATION IF EXISTS chinese_zh;
+CREATE TEXT SEARCH CONFIGURATION chinese_zh (PARSER = zhparser);
+ALTER TEXT SEARCH CONFIGURATION chinese_zh ADD MAPPING FOR n,v,a,i,e,l,j WITH simple;
+
+-- search_vector：标题权重 A，正文权重 B
+ALTER TABLE articles
+    DROP COLUMN IF EXISTS search_vector;
+ALTER TABLE articles
+    ADD COLUMN search_vector tsvector
+        GENERATED ALWAYS AS (
+            setweight(to_tsvector('chinese_zh', coalesce(title, '')), 'A') ||
+            setweight(to_tsvector('chinese_zh', coalesce(content, '')), 'B')
+            ) STORED;
 CREATE INDEX IF NOT EXISTS idx_articles_search ON articles USING GIN (search_vector);

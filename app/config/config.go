@@ -42,6 +42,7 @@ var (
 	OSSHost           string // OSS 对外访问域名，如 http://api.xiaoen.xyz，用于返回完整 URL 给前端
 	OSSSmallImageSize int    // 压缩图最大边长（像素），如 720 或 540，0 表示不生成压缩图
 	OSSSmallImageKB   int    // 压缩图体积上限（KB），如 200，0 表示 200
+
 )
 
 const defaultEnvPath = "/.env"

@@ -41,6 +41,9 @@ func PrivateRouter(api *gin.RouterGroup) {
 	{
 		userGroup.GET("/info", controller.UserInfo)
 		userGroup.GET("/logout", controller.UserLogout)
+		userGroup.GET("/:id/posts", controller.UserListPosts)
+		userGroup.GET("/:id/questions", controller.UserListQuestions)
+		userGroup.GET("/:id/answers", controller.UserListAnswers)
 		userGroup.GET("/:id", controller.UserProfile)
 		userGroup.POST("/update", controller.UserUpdate)
 		userGroup.POST("/bind/school", controller.UserBindSchool)
@@ -49,6 +52,8 @@ func PrivateRouter(api *gin.RouterGroup) {
 	}
 	// 帖子（type=1）、提问（type=2）、回答（type=3），三类接口数据隔离+学校隔离
 	api.Use(middleware.LoadUserSchool())
+	// 聚合搜索：帖子+提问+回答，支持筛选与排序
+	api.GET("/search/articles", controller.SearchArticles)
 	postGroup := api.Group("/post")
 	{
 		postGroup.GET("/drafts", controller.PostHandlers.ListDrafts)

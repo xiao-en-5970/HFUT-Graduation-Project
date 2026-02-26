@@ -2,7 +2,7 @@
   "swagger": "2.0",
   "info": {
     "title": "HFUT Graduation Project API",
-    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址。数据库统一存 .small 路径，默认返回缩略图；前端去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）\n\n**创建流程（帖子/提问/回答）：** 1 创建草稿 POST 获取 id 2 POST /:id/images 上传图片（雪花算法）3 PUT 调整顺序与内容 4 POST /:id/publish 发布。**已弃用：** 一次性提交完整文章创建",
+    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址。数据库统一存 .small 路径，默认返回缩略图；前端去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）\n\n**创建流程（帖子/提问/回答）：** 1 创建草稿 POST 获取 id 2 POST /:id/images 上传图片（雪花算法）3 PUT 调整顺序与内容 4 POST /:id/publish 发布。**已弃用：** 一次性提交完整文章创建\n\n**近期更新：** 文章/评论列表含 author；UserInfo/UserProfile 扩展字段；按用户查看文章 GET /user/{id}/posts|questions|answers；**聚合搜索** GET /search/articles（帖子+提问+回答，筛选+排序）；全文检索使用 zhparser 中文智能分词；草稿列表 GET /post|question|answer/drafts（仅本人）；OSS 路径权限",
     "version": "1.0.0"
   },
   "basePath": "/",
@@ -25,6 +25,10 @@
     {"name": "收藏", "description": "收藏夹与收藏"},
     {"name": "点赞", "description": "点赞与取消"},
     {"name": "OSS", "description": "文件存取"},
+    {
+      "name": "搜索",
+      "description": "聚合搜索帖子+提问+回答"
+    },
     {"name": "管理员", "description": "需 role>=2 管理员权限"}
   ],
   "definitions": {
@@ -148,7 +152,10 @@
           "type": "integer",
           "description": "1=正常 2=已删除/禁用 3=草稿"
         },
-        "publish_status": {"type": "integer"},
+        "publish_status": {
+          "type": "integer",
+          "description": "1=私密（仅本人可见）2=公开"
+        },
         "type": {"type": "integer", "description": "1帖子 2提问 3回答"},
         "view_count": {"type": "integer"},
         "like_count": {"type": "integer"},
@@ -527,7 +534,7 @@
           "用户"
         ],
         "summary": "获取指定用户公开信息",
-        "description": "根据用户ID获取非删用户的公开身份信息（id、昵称、头像、背景、关注数、粉丝数）。无需登录。",
+        "description": "根据用户ID获取非删用户的公开身份信息（id、昵称、头像、背景、关注数、粉丝数、注册时间）。需 JWT。",
         "parameters": [
           {
             "in": "path",
@@ -561,6 +568,209 @@
               "$ref": "#/definitions/Response"
             }
           }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/user/{id}/posts": {
+      "get": {
+        "tags": [
+          "用户",
+          "帖子"
+        ],
+        "summary": "按用户列出帖子",
+        "description": "分页列出指定用户的帖子。**自己看自己**：含私密(publish_status=1)和公开；**看别人**：仅公开(publish_status=2)。学校可见性同其他列表接口。需 JWT。",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "用户ID"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data: {list, total, page, page_size}，list 含 author",
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Response"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/definitions/ArticleListResponse"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "401": {
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "用户不存在或已删除",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/user/{id}/questions": {
+      "get": {
+        "tags": [
+          "用户",
+          "提问"
+        ],
+        "summary": "按用户列出提问",
+        "description": "分页列出指定用户的提问。**自己看自己**：含私密和公开；**看别人**：仅公开。需 JWT。",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "用户ID"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data: {list, total, page, page_size}",
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Response"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/definitions/ArticleListResponse"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "401": {
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "用户不存在或已删除",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/user/{id}/answers": {
+      "get": {
+        "tags": [
+          "用户",
+          "回答"
+        ],
+        "summary": "按用户列出回答",
+        "description": "分页列出指定用户的回答。**自己看自己**：含私密和公开；**看别人**：仅公开。需 JWT。",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "type": "integer",
+            "required": true,
+            "description": "用户ID"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data: {list, total, page, page_size}",
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Response"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/definitions/ArticleListResponse"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "401": {
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          },
+          "404": {
+            "description": "用户不存在或已删除",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
         }
       }
     },
@@ -568,7 +778,7 @@
       "post": {
         "tags": ["用户"],
         "summary": "更新个人信息",
-        "description": "仅支持部分更新。username、role、status、password 不可修改。按需传字段，未传的不更新",
+        "description": "仅支持部分更新。username、role、status、password 不可修改。avatar、background 必须是当前用户自己的 OSS 路径（user/{当前用户ID}/...），否则拒绝。bind_qq/bind_wx 最长 128 字符，bind_phone 最长 20 字符。",
         "security": [{"BearerAuth": []}],
         "parameters": [{
           "in": "body",
@@ -657,13 +867,129 @@
         }
       }
     },
+    "/api/v1/search/articles": {
+      "get": {
+        "tags": [
+          "搜索",
+          "帖子",
+          "提问",
+          "回答"
+        ],
+        "summary": "聚合搜索",
+        "description": "搜索帖子+提问+回答，支持丰富筛选与排序。需 JWT，仅可访问公开或本校内容。全文检索使用 zhparser 中文智能分词。\n\n**筛选条件：**\n- type: 0=全部 1=帖子 2=提问 3=回答\n- visibility: public=仅公开(school_id=0) | my_school=仅本校 | all=公开+本校\n- time_range: 7d|30d|90d|all\n- created_after/created_before: 日期 YYYY-MM-DD 自定义时间范围\n\n**排序：**\n- relevance: 相关度（标题权重 A > 正文权重 B，zhparser 中文分词）\n- popularity: 热度（收藏×10 + 点赞×5 + 浏览）\n- combined: 综合（相关度+热度）",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "type": "string",
+            "description": "搜索关键词，空则不做全文检索"
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "type": "integer",
+            "description": "0=全部 1=帖子 2=提问 3=回答",
+            "default": 0
+          },
+          {
+            "in": "query",
+            "name": "visibility",
+            "type": "string",
+            "enum": [
+              "public",
+              "my_school",
+              "all"
+            ],
+            "default": "all"
+          },
+          {
+            "in": "query",
+            "name": "time_range",
+            "type": "string",
+            "enum": [
+              "7d",
+              "30d",
+              "90d",
+              "all"
+            ],
+            "default": "all"
+          },
+          {
+            "in": "query",
+            "name": "created_after",
+            "type": "string",
+            "format": "date",
+            "description": "YYYY-MM-DD，优先于 time_range"
+          },
+          {
+            "in": "query",
+            "name": "created_before",
+            "type": "string",
+            "format": "date",
+            "description": "YYYY-MM-DD"
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "type": "string",
+            "enum": [
+              "relevance",
+              "popularity",
+              "combined"
+            ],
+            "default": "relevance"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "type": "integer",
+            "default": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data: {list, total, page, page_size}，list 含 author",
+            "schema": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Response"
+                },
+                {
+                  "properties": {
+                    "data": {
+                      "$ref": "#/definitions/ArticleListResponse"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "401": {
+            "schema": {
+              "$ref": "#/definitions/Response"
+            }
+          }
+        }
+      }
+    },
     "/api/v1/post/drafts": {
       "get": {
         "tags": [
           "帖子"
         ],
         "summary": "帖子草稿列表",
-        "description": "当前用户的帖子草稿，草稿不可见。流程：创建草稿→上传图片→调整顺序和信息→发布",
+        "description": "当前用户自己的帖子草稿（status=3），仅本人可见。data: {list, total, page, page_size}，list 含 author",
         "security": [
           {
             "BearerAuth": []
@@ -735,12 +1061,27 @@
       "get": {
         "tags": ["帖子"],
         "summary": "搜索帖子",
-        "description": "学校可见性同上。未绑定学校可搜索全站公开内容",
+        "description": "学校可见性同上。全文检索使用 zhparser 中文智能分词，q 为空时退化为列表",
         "security": [{"BearerAuth": []}],
         "parameters": [
-          {"in": "query", "name": "q", "type": "string", "required": true, "description": "搜索关键词"},
-          {"in": "query", "name": "page", "type": "integer"},
-          {"in": "query", "name": "pageSize", "type": "integer"}
+          {
+            "in": "query",
+            "name": "q",
+            "type": "string",
+            "description": "关键词，空则退化为列表"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
         ],
         "responses": {"200": {"schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]}}, "401": {"schema": {"$ref": "#/definitions/Response"}}}
       }
@@ -839,7 +1180,7 @@
           "提问"
         ],
         "summary": "提问草稿列表",
-        "description": "当前用户的提问草稿。流程同帖子",
+        "description": "当前用户自己的提问草稿（status=3），仅本人可见。data: {list, total, page, page_size}，list 含 author",
         "security": [
           {
             "BearerAuth": []
@@ -905,12 +1246,27 @@
       "get": {
         "tags": ["提问"],
         "summary": "搜索提问",
-        "description": "学校可见性同上",
+        "description": "学校可见性同上。全文检索使用 zhparser 中文智能分词，q 为空时退化为列表",
         "security": [{"BearerAuth": []}],
         "parameters": [
-          {"in": "query", "name": "q", "type": "string", "required": true},
-          {"in": "query", "name": "page", "type": "integer"},
-          {"in": "query", "name": "pageSize", "type": "integer"}
+          {
+            "in": "query",
+            "name": "q",
+            "type": "string",
+            "description": "关键词，空则退化为列表"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
         ],
         "responses": {"200": {"schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]}}, "401": {}}
       }
@@ -1009,7 +1365,7 @@
           "回答"
         ],
         "summary": "回答草稿列表",
-        "description": "当前用户的回答草稿。创建时需指定 parent_id（在哪个提问下回答）",
+        "description": "当前用户自己的回答草稿（status=3），仅本人可见。data: {list, total, page, page_size}，list 含 author",
         "security": [
           {
             "BearerAuth": []
@@ -1083,11 +1439,27 @@
       "get": {
         "tags": ["回答"],
         "summary": "搜索回答",
+        "description": "学校可见性同上。全文检索使用 zhparser 中文智能分词，q 为空时退化为列表",
         "security": [{"BearerAuth": []}],
         "parameters": [
-          {"in": "query", "name": "q", "type": "string", "required": true},
-          {"in": "query", "name": "page", "type": "integer"},
-          {"in": "query", "name": "pageSize", "type": "integer"}
+          {
+            "in": "query",
+            "name": "q",
+            "type": "string",
+            "description": "关键词，空则退化为列表"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "type": "integer",
+            "default": 20
+          }
         ],
         "responses": {"200": {"schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]}}, "401": {}}
       }
@@ -1310,18 +1682,33 @@
             "name": "path",
             "type": "string",
             "required": true,
-            "description": "存储路径。文章图片：article/{id}/img_{snowflake}.{ext}"
+            "description": "存储路径。**路径权限**：user/{id}/ 仅本人；article/{id}/ 仅文章作者；school/{id}/ 仅管理员。示例：article/1/img_123.jpg、user/1/avatar.jpg"
           },
           {"in": "formData", "name": "file", "type": "file", "required": true}
         ],
-        "responses": {"200": {"description": "data.url 为完整 URL（OSS_HOST 配置时），data.path 为存储路径"}, "401": {}}
+        "responses": {
+          "200": {
+            "description": "data.url 为完整 URL（OSS_HOST 配置时），data.path 为存储路径"
+          },
+          "401": {},
+          "403": {
+            "description": "无权操作该路径"
+          }
+        }
       },
       "delete": {
         "tags": ["OSS"],
         "summary": "删除文件",
+        "description": "路径权限同 POST 上传：user/{id}/ 仅本人，article/{id}/ 仅文章作者，school/{id}/ 仅管理员",
         "security": [{"BearerAuth": []}],
         "parameters": [{"in": "path", "name": "path", "type": "string", "required": true}],
-        "responses": {"200": {}, "401": {}}
+        "responses": {
+          "200": {},
+          "401": {},
+          "403": {
+            "description": "无权操作该路径"
+          }
+        }
       }
     },
     "/api/v1/admin/users": {
