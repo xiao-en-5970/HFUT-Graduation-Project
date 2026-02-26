@@ -43,6 +43,14 @@ var (
 	OSSSmallImageSize int    // 压缩图最大边长（像素），如 720 或 540，0 表示不生成压缩图
 	OSSSmallImageKB   int    // 压缩图体积上限（KB），如 200，0 表示 200
 
+	// 聚合搜索排序权重（热度 = (收藏*W_C+点赞*W_L+浏览*W_V)×互动衰减）
+	SearchWeightCollect        int     // 收藏权重，默认 10
+	SearchWeightLike           int     // 点赞权重，默认 5
+	SearchWeightView           int     // 浏览权重，默认 1
+	SearchInteractionDecayDays float64 // 互动分衰减半衰期（天），默认 90；互动分*=1/(1+距今天数/此值)，0=不衰减
+	SearchCombinedRelevance    float64 // combined 排序：相关度系数，默认 100
+	SearchCombinedPopularity   float64 // combined 排序：热度系数，默认 0.01
+
 )
 
 const defaultEnvPath = "/.env"
@@ -93,6 +101,13 @@ func LoadConfigFrom(path string) error {
 		OSSSmallImageKB = 200
 	}
 
+	SearchWeightCollect = getEnvInt("SEARCH_WEIGHT_COLLECT", 10)
+	SearchWeightLike = getEnvInt("SEARCH_WEIGHT_LIKE", 5)
+	SearchWeightView = getEnvInt("SEARCH_WEIGHT_VIEW", 1)
+	SearchInteractionDecayDays = getEnvFloat("SEARCH_INTERACTION_DECAY_DAYS", 90)
+	SearchCombinedRelevance = getEnvFloat("SEARCH_COMBINED_RELEVANCE", 100)
+	SearchCombinedPopularity = getEnvFloat("SEARCH_COMBINED_POPULARITY", 0.01)
+
 	return nil
 }
 
@@ -106,6 +121,15 @@ func getEnv(key, defaultValue string) string {
 func getEnvInt(key string, defaultValue int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return defaultValue
+}
+
+func getEnvFloat(key string, defaultValue float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseFloat(v, 64); err == nil {
 			return n
 		}
 	}

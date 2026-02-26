@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/config"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
@@ -32,6 +33,13 @@ func SearchArticles(ctx *gin.Context) {
 		Sort:         dao.SortRelevance,
 		Page:         1,
 		PageSize:     20,
+		// 排序权重从环境变量读取
+		WeightCollect:        config.SearchWeightCollect,
+		WeightLike:           config.SearchWeightLike,
+		WeightView:           config.SearchWeightView,
+		InteractionDecayDays: config.SearchInteractionDecayDays,
+		CombinedRelevance:    config.SearchCombinedRelevance,
+		CombinedPopularity:   config.SearchCombinedPopularity,
 	}
 
 	if v := ctx.Query("type"); v != "" {

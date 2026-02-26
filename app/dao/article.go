@@ -2,6 +2,7 @@ package dao
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -257,6 +258,14 @@ type AggregateSearchParams struct {
 	Sort          string // relevance|popularity|combined
 	Page          int
 	PageSize      int
+
+	// 排序权重，由 service 从 config 填入
+	WeightCollect        int     // 收藏权重
+	WeightLike           int     // 点赞权重
+	WeightView           int     // 浏览权重
+	InteractionDecayDays float64 // 互动分衰减半衰期（天），互动分 *= 1/(1+距今天数/此值)，0=不衰减
+	CombinedRelevance    float64 // combined：相关度系数
+	CombinedPopularity   float64 // combined：热度系数
 }
 
 // AggregateSearch 聚合搜索：帖子+提问+回答，支持筛选与排序
@@ -303,24 +312,53 @@ func (s *ArticleStore) AggregateSearch(ctx context.Context, p AggregateSearchPar
 	var total int64
 	q.Count(&total)
 
-	// 排序：relevance=标题优先相关度；popularity=收藏*10+点赞*5+浏览；combined=相关度+热度
+	// 权重默认值
+	wc, wl, wv := p.WeightCollect, p.WeightLike, p.WeightView
+	if wc == 0 {
+		wc = 10
+	}
+	if wl == 0 {
+		wl = 5
+	}
+	if wv == 0 {
+		wv = 1
+	}
+	decayDays := p.InteractionDecayDays
+	// 互动分衰减系数：1/(1+距今天数/decayDays)，decayDays<=0 表示不衰减
+	interactionDecay := "1"
+	if decayDays > 0 {
+		interactionDecay = fmt.Sprintf("(1.0 / (1 + EXTRACT(EPOCH FROM (now() - created_at))/86400/%f))", decayDays)
+	}
+	combRel := p.CombinedRelevance
+	if combRel <= 0 {
+		combRel = 100
+	}
+	combPop := p.CombinedPopularity
+	if combPop <= 0 {
+		combPop = 0.01
+	}
+
+	// 热度 = (收藏*Wc+点赞*Wl+浏览*Wv)*互动衰减；互动衰减=1/(1+距今天数/decayDays)
+	popExpr := fmt.Sprintf("(collect_count*%d + like_count*%d + view_count*%d) * %s", wc, wl, wv, interactionDecay)
+
 	hasKeyword := keyword != ""
 	switch p.Sort {
 	case SortRelevance:
 		if hasKeyword {
 			q = q.Order(gorm.Expr("ts_rank(search_vector, plainto_tsquery(?, ?)) DESC", searchConfig, keyword))
 		} else {
-			q = q.Order(gorm.Expr("(collect_count*10 + like_count*5 + view_count) DESC, created_at DESC"))
+			q = q.Order(gorm.Expr(popExpr + " DESC, created_at DESC"))
 		}
 	case SortPopularity:
-		q = q.Order(gorm.Expr("(collect_count*10 + like_count*5 + view_count) DESC, created_at DESC"))
+		q = q.Order(gorm.Expr(popExpr + " DESC, created_at DESC"))
 	case SortCombined:
 		fallthrough
 	default:
 		if hasKeyword {
-			q = q.Order(gorm.Expr("ts_rank(search_vector, plainto_tsquery(?, ?))*100 + (collect_count*10 + like_count*5 + view_count)*0.01 DESC", searchConfig, keyword))
+			combined := fmt.Sprintf("ts_rank(search_vector, plainto_tsquery(?, ?))*%f + (%s)*%f DESC", combRel, popExpr, combPop)
+			q = q.Order(gorm.Expr(combined, searchConfig, keyword))
 		} else {
-			q = q.Order(gorm.Expr("(collect_count*10 + like_count*5 + view_count) DESC, created_at DESC"))
+			q = q.Order(gorm.Expr(popExpr + " DESC, created_at DESC"))
 		}
 	}
 

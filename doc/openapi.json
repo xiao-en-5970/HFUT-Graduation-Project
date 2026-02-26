@@ -2,7 +2,7 @@
   "swagger": "2.0",
   "info": {
     "title": "HFUT Graduation Project API",
-    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**变更记录：** 每次更新后见 API_CHANGELOG.md（与 openapi.json 同目录），列出本次受影响接口及变更说明。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：配置 OSS_HOST 后，图片 URL 返回完整地址。数据库统一存 .small 路径，默认返回缩略图；前端去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）\n\n**创建流程（帖子/提问/回答）：** 1 创建草稿 POST 获取 id 2 POST /:id/images 上传图片（雪花算法）3 PUT 调整顺序与内容 4 POST /:id/publish 发布。**已弃用：** 一次性提交完整文章创建\n\n**近期更新：** 文章/评论列表含 author；UserInfo/UserProfile 扩展字段；按用户查看文章 GET /user/{id}/posts|questions|answers；**聚合搜索** GET /search/articles（帖子+提问+回答，筛选+排序）；全文检索使用 zhparser 中文智能分词；草稿列表 GET /post|question|answer/drafts（仅本人）；OSS 路径权限",
+    "description": "合肥工业大学毕业设计项目 API。需 JWT 认证、学校隔离。\n\n**变更记录：** 每次更新后见 API_CHANGELOG.md（与 openapi.json 同目录），列出本次受影响接口及变更说明。\n\n**通用说明：**\n- 成功响应 code 均为 200 或 0\n- 认证方式：Header 添加 `Authorization: Bearer <token>`\n- extType: 1=帖子 2=提问 3=回答 4=商品\n- OSS：图片 URL 可能为完整地址或相对路径；默认返回 .small 缩略图，去掉 .small 可获取原图\n- 学校隔离：大部分接口需先绑定学校（POST /user/bind/school）\n\n**创建流程（帖子/提问/回答）：** 1 创建草稿 POST 获取 id 2 POST /:id/images 上传图片 3 PUT 调整顺序与内容 4 POST /:id/publish 发布。**已弃用：** 一次性提交完整文章创建\n\n**近期更新：** 文章/评论列表含 author；UserInfo/UserProfile 扩展字段；按用户查看文章 GET /user/{id}/posts|questions|answers；聚合搜索 GET /search/articles；草稿列表 GET /post|question|answer/drafts",
     "version": "1.0.0"
   },
   "basePath": "/",
@@ -849,7 +849,22 @@
         "consumes": ["multipart/form-data"],
         "parameters": [{"in": "formData", "name": "file", "type": "file", "required": true, "description": "图片文件"}],
         "responses": {
-          "200": {"description": "data.url 为图片完整 URL（由 OSS_HOST 配置）", "schema": {"$ref": "#/definitions/Response"}, "examples": {"application/json": {"code": 200, "message": "成功", "data": {"url": "http://api.example.com/api/v1/oss/user/1/avatar.jpg.small", "path": "user/1/avatar.jpg"}}}},
+          "200": {
+            "description": "data.url 为图片 URL，data.path 为存储路径",
+            "schema": {
+              "$ref": "#/definitions/Response"
+            },
+            "examples": {
+              "application/json": {
+                "code": 200,
+                "message": "成功",
+                "data": {
+                  "url": "http://api.example.com/api/v1/oss/user/1/avatar.jpg.small",
+                  "path": "user/1/avatar.jpg"
+                }
+              }
+            }
+          },
           "401": {"schema": {"$ref": "#/definitions/Response"}}
         }
       }
@@ -876,7 +891,7 @@
           "回答"
         ],
         "summary": "聚合搜索",
-        "description": "搜索帖子+提问+回答，支持丰富筛选与排序。需 JWT，仅可访问公开或本校内容。全文检索使用 zhparser 中文智能分词。\n\n**筛选条件：**\n- type: 0=全部 1=帖子 2=提问 3=回答\n- visibility: public=仅公开(school_id=0) | my_school=仅本校 | all=公开+本校\n- time_range: 7d|30d|90d|all\n- created_after/created_before: 日期 YYYY-MM-DD 自定义时间范围\n\n**排序：**\n- relevance: 相关度（标题权重 A > 正文权重 B，zhparser 中文分词）\n- popularity: 热度（收藏×10 + 点赞×5 + 浏览）\n- combined: 综合（相关度+热度）",
+        "description": "搜索帖子+提问+回答，支持丰富筛选与排序。需 JWT，仅可访问公开或本校内容。\n\n**筛选条件：**\n- type: 0=全部 1=帖子 2=提问 3=回答\n- visibility: public=仅公开 | my_school=仅本校 | all=公开+本校\n- time_range: 7d|30d|90d|all\n- created_after/created_before: YYYY-MM-DD 自定义时间范围\n\n**排序：**\n- relevance: 按关键词相关度\n- popularity: 按热度（收藏、点赞、浏览加权，新帖权重更高）\n- combined: 相关度与热度综合",
         "security": [
           {
             "BearerAuth": []
@@ -887,7 +902,7 @@
             "in": "query",
             "name": "q",
             "type": "string",
-            "description": "搜索关键词，空则不做全文检索"
+            "description": "搜索关键词，空则忽略关键词筛选"
           },
           {
             "in": "query",
@@ -1061,7 +1076,7 @@
       "get": {
         "tags": ["帖子"],
         "summary": "搜索帖子",
-        "description": "学校可见性同上。全文检索使用 zhparser 中文智能分词，q 为空时退化为列表",
+        "description": "学校可见性同上。q 支持中文关键词搜索，空则返回列表",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {
@@ -1246,7 +1261,7 @@
       "get": {
         "tags": ["提问"],
         "summary": "搜索提问",
-        "description": "学校可见性同上。全文检索使用 zhparser 中文智能分词，q 为空时退化为列表",
+        "description": "学校可见性同上。q 支持中文关键词搜索，空则返回列表",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {
@@ -1439,7 +1454,7 @@
       "get": {
         "tags": ["回答"],
         "summary": "搜索回答",
-        "description": "学校可见性同上。全文检索使用 zhparser 中文智能分词，q 为空时退化为列表",
+        "description": "学校可见性同上。q 支持中文关键词搜索，空则返回列表",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {
@@ -1688,7 +1703,7 @@
         ],
         "responses": {
           "200": {
-            "description": "data.url 为完整 URL（OSS_HOST 配置时），data.path 为存储路径"
+            "description": "data.url 为图片 URL，data.path 为存储路径"
           },
           "401": {},
           "403": {
