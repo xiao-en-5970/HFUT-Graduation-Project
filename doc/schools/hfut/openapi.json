@@ -1,0 +1,91 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "HFUT 合肥工业大学 - 学校对接 API",
+    "description": "合肥工业大学对接的学校端登录、绑定学校接口说明。主 API 见 doc/openapi.json",
+    "version": "1.0.0"
+  },
+  "basePath": "/",
+  "schemes": ["https", "http"],
+  "tags": [
+    {"name": "HFUT", "description": "合肥工业大学对接"}
+  ],
+  "paths": {
+    "/api/v1/user/school-login": {
+      "post": {
+        "tags": ["HFUT"],
+        "summary": "学校端登录（HFUT）",
+        "description": "school_code 固定为 `hfut`。对接 CAS，验证码由后端 OCR 自动处理。",
+        "parameters": [{
+          "in": "body",
+          "name": "body",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "required": ["school_code", "username", "password"],
+            "properties": {
+              "school_code": {"type": "string", "example": "hfut", "description": "固定为 hfut"},
+              "username": {"type": "string", "example": "2021234567", "description": "学号"},
+              "password": {"type": "string", "description": "学校统一认证密码"}
+            }
+          }
+        }],
+        "responses": {
+          "200": {
+            "description": "验证成功",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {"type": "integer", "example": 200},
+                "message": {"type": "string"},
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "student_id": {"type": "string", "description": "学号"},
+                    "name": {"type": "string", "description": "姓名（如有）"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"description": "账号密码错误或验证码识别失败"}
+        }
+      }
+    },
+    "/api/v1/user/bind/school": {
+      "post": {
+        "tags": ["HFUT"],
+        "summary": "绑定学校（HFUT）",
+        "description": "需 JWT。school_id 为合肥工业大学在系统中的 ID，username 为学号，password 为学校密码。验证成功后写入 user_cert（含学生信息 JSON）。",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{
+          "in": "body",
+          "name": "body",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "required": ["school_id", "username", "password"],
+            "properties": {
+              "school_id": {"type": "integer", "description": "合肥工业大学在 schools 表中的 ID"},
+              "username": {"type": "string", "example": "2021234567", "description": "学号"},
+              "password": {"type": "string", "description": "学校统一认证密码"}
+            }
+          }
+        }],
+        "responses": {
+          "200": {"description": "绑定成功"},
+          "400": {"description": "学校不存在/验证失败/该学校暂不支持在线认证"},
+          "401": {"description": "未认证"}
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "BearerAuth": {
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header",
+      "description": "JWT，格式：Bearer {token}"
+    }
+  }
+}

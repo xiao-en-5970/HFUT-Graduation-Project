@@ -2,9 +2,29 @@
 
 本目录记录各学校对接的接口说明，供开发与联调参考。
 
-## 目录
+## 目录结构
 
-- [HFUT 合肥工业大学](./hfut.md)
+每个学校有独立子目录，内含：
+
+- `README.md`：对接流程、登录说明、绑定说明
+- `openapi.json`：该学校相关的 API 定义（school-login、bind/school 等）
+
+```
+doc/schools/
+├── README.md          # 本文件
+├── hfut/              # 合肥工业大学
+│   ├── README.md
+│   └── openapi.json
+└── {code}/             # 其他学校，code 如 school_code
+    ├── README.md
+    └── openapi.json
+```
+
+## 已对接学校
+
+| 代码 | 学校 | 文档 |
+|-----|------|------|
+| hfut | 合肥工业大学 | [hfut/](./hfut/) |
 
 ## 通用流程
 

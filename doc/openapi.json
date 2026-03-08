@@ -29,6 +29,7 @@
       "name": "搜索",
       "description": "聚合搜索帖子+提问+回答"
     },
+    {"name": "学校对接", "description": "学校端登录、绑定学校。各学校详细说明见 doc/schools/{code}/"},
     {"name": "管理员", "description": "需 role>=2 管理员权限"}
   ],
   "definitions": {
@@ -494,9 +495,9 @@
     },
     "/api/v1/user/school-login": {
       "post": {
-        "tags": ["用户"],
+        "tags": ["用户", "学校对接"],
         "summary": "学校端登录",
-        "description": "对接学校 CAS，仅需账号密码。验证码由后端自动处理。school_code 如 hfut",
+        "description": "对接学校 CAS，仅需账号密码。验证码由后端自动处理。school_code 见各学校文档：doc/schools/hfut/ 等",
         "parameters": [{
           "in": "body",
           "name": "body",
@@ -842,9 +843,9 @@
     },
     "/api/v1/user/bind/school": {
       "post": {
-        "tags": ["用户"],
+        "tags": ["用户", "学校对接"],
         "summary": "绑定学校",
-        "description": "body 必须为 JSON 对象，含 school_id 字段",
+        "description": "需学校端账号密码验证，成功后写入 user_cert 并更新 user.school_id。各学校参数说明见 doc/schools/{code}/",
         "security": [{"BearerAuth": []}],
         "parameters": [{
           "in": "body",
@@ -852,19 +853,17 @@
           "required": true,
           "schema": {
             "type": "object",
-            "required": [
-              "school_id"
-            ],
+            "required": ["school_id", "username", "password"],
             "properties": {
-              "school_id": {
-                "type": "integer",
-                "description": "学校ID，0 表示解绑"
-              }
+              "school_id": {"type": "integer", "description": "学校ID"},
+              "username": {"type": "string", "description": "学校端账号（如学号）", "example": "学号"},
+              "password": {"type": "string", "description": "学校端密码"}
             }
           }
         }],
         "responses": {
-          "200": {"schema": {"$ref": "#/definitions/Response"}},
+          "200": {"description": "绑定成功", "schema": {"$ref": "#/definitions/Response"}},
+          "400": {"description": "学校不存在/验证失败", "schema": {"$ref": "#/definitions/Response"}},
           "401": {"schema": {"$ref": "#/definitions/Response"}}
         }
       }
