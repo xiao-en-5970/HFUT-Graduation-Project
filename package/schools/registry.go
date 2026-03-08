@@ -1,6 +1,9 @@
 package schools
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 var (
 	registry = make(map[string]School)
