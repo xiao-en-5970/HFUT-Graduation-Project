@@ -249,3 +249,17 @@ td { font-size: 0.9rem; }
 .role-2 { color: #6366f1; }
 .role-3 { color: #f59e0b; }
 .role-4 { color: #22c55e; }
+
+/* 绑定学校 */
+.bind-school-form label { display: block; margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-muted); }
+.bind-school-form label input, .bind-school-form label select {
+  width: 100%; max-width: 320px; padding: 0.6rem 0.8rem; margin-top: 0.25rem;
+  border: 1px solid #3d424d; border-radius: 6px; background: var(--bg-dark); color: var(--text);
+}
+.bind-school-form #bind-captcha-refresh { margin-left: 0.5rem; }
+.captcha-img-wrap { margin-top: 0.5rem; }
+.captcha-img-wrap img.captcha-img { max-height: 48px; border: 1px solid #3d424d; border-radius: 4px; }
+.bind-school-already { padding: 2rem; background: var(--bg-card); border-radius: 10px; max-width: 480px; }
+.bind-school-already p { margin: 0.5rem 0; }
+.text-muted { color: var(--text-muted); font-size: 0.9rem; }
+.bind-actions { margin-top: 1.5rem; }

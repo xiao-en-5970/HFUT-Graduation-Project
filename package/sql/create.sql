@@ -284,7 +284,8 @@ ALTER TABLE schools ADD COLUMN IF NOT EXISTS captcha_url VARCHAR(512);
 COMMENT ON COLUMN schools.form_fields IS '登录表单字段：username,password,captcha 等';
 COMMENT ON COLUMN schools.captcha_url IS '验证码图片 URL，空则调用后端 GET /schools/:id/captcha';
 
--- HFUT 需验证码，执行： UPDATE schools SET form_fields = '["username","password","captcha"]'::jsonb WHERE code = 'hfut';
+-- HFUT 需验证码，执行：
+-- UPDATE schools SET form_fields = '[{"key":"username","label_zh":"学号","label_en":"Student ID"},{"key":"password","label_zh":"密码","label_en":"Password"},{"key":"captcha","label_zh":"验证码","label_en":"Captcha"}]'::jsonb WHERE code = 'hfut';
 
 -- 用户认证表：记录用户在某学校的认证信息
 CREATE TABLE IF NOT EXISTS user_cert

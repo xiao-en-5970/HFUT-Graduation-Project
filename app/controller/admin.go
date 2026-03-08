@@ -507,11 +507,11 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 		return
 	}
 	var body struct {
-		Name       *string        `json:"name"`
-		LoginURL   *string        `json:"login_url"`
-		Code       *string        `json:"code"`
-		FormFields []string       `json:"form_fields"`
-		CaptchaURL *string        `json:"captcha_url"`
+		Name       *string              `json:"name"`
+		LoginURL   *string              `json:"login_url"`
+		Code       *string              `json:"code"`
+		FormFields []model.FormFieldItem `json:"form_fields"`
+		CaptchaURL *string              `json:"captcha_url"`
 	}
 	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
@@ -545,11 +545,11 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 // AdminSchoolCreate 管理员：新增学校
 func AdminSchoolCreate(ctx *gin.Context) {
 	var body struct {
-		Name       string   `json:"name"`
-		LoginURL   string   `json:"login_url"`
-		Code       string   `json:"code"`
-		FormFields []string `json:"form_fields"`
-		CaptchaURL string   `json:"captcha_url"`
+		Name       string                `json:"name"`
+		LoginURL   string                `json:"login_url"`
+		Code       string                `json:"code"`
+		FormFields []model.FormFieldItem `json:"form_fields"`
+		CaptchaURL string                `json:"captcha_url"`
 	}
 	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
@@ -557,7 +557,10 @@ func AdminSchoolCreate(ctx *gin.Context) {
 	}
 	formFields := body.FormFields
 	if len(formFields) == 0 {
-		formFields = []string{"username", "password"}
+		formFields = []model.FormFieldItem{
+			{Key: "username", LabelZh: "学号", LabelEn: "Student ID"},
+			{Key: "password", LabelZh: "密码", LabelEn: "Password"},
+		}
 	}
 	school := &model.School{
 		Name:       strPtr(body.Name),

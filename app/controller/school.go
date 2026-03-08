@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
@@ -30,11 +31,14 @@ func SchoolListForBind(ctx *gin.Context) {
 			"name": s.Name,
 			"code": s.Code,
 		}
-		keys := s.FormFields
-		if len(keys) == 0 {
-			keys = []string{"username", "password"}
+		fields := s.FormFields
+		if len(fields) == 0 {
+			fields = []model.FormFieldItem{
+				{Key: "username", LabelZh: "学号", LabelEn: "Student ID"},
+				{Key: "password", LabelZh: "密码", LabelEn: "Password"},
+			}
 		}
-		item["form_fields"] = schools.BuildFormFieldsWithLabels(keys)
+		item["form_fields"] = fields
 		if s.CaptchaURL != nil && *s.CaptchaURL != "" {
 			item["captcha_url"] = s.CaptchaURL
 		} else {

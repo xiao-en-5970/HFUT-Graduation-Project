@@ -150,6 +150,14 @@ type BindSchoolReq struct {
 }
 
 func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolReq) error {
+	user, err := dao.User().GetByID(ctx.Request.Context(), userID)
+	if err != nil {
+		return err
+	}
+	if user.SchoolID != 0 {
+		return errors.New("已绑定学校，无法重复绑定")
+	}
+
 	school, err := dao.School().GetByIDValid(ctx.Request.Context(), req.SchoolID)
 	if err != nil {
 		return errors.New("学校不存在")
@@ -158,13 +166,7 @@ func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolRe
 		return errors.New("该学校暂不支持在线认证绑定")
 	}
 
-	needCaptcha := false
-	for _, f := range school.FormFields {
-		if f == "captcha" {
-			needCaptcha = true
-			break
-		}
-	}
+	needCaptcha := school.FormFields.HasKey("captcha")
 	if needCaptcha && (req.Captcha == "" || req.CaptchaToken == "") {
 		return errors.New("请先获取验证码并填写")
 	}

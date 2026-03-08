@@ -2,6 +2,20 @@
 
 本目录记录各学校对接的接口说明，供开发与联调参考。
 
+## 关系说明
+
+每个学校有独立的绑定与认证方式，通过 `schools.code` 关联实现：
+
+| 层级 | 说明 |
+|------|------|
+| **schools 表** | 存 form_fields、captcha_url、code，每学校独立配置 |
+| **schools.code** | 如 `hfut`，对应 `package/schools/hfut/` 实现 |
+| **package/schools/{code}/** | 该学校的登录、验证码等具体逻辑 |
+
+- 绑定/认证时：根据 `school_id` 查 `code`，调用 `schools.Login(code, ...)` 或 `schools.GetCaptcha(code)`
+- 仅实现 `SchoolWithCaptcha` 的学校才支持 `GET /schools/:id/captcha`
+- form_fields 含 `captcha` 时，绑定需传 captcha、captcha_token
+
 ## 目录结构
 
 每个学校有独立子目录，内含：

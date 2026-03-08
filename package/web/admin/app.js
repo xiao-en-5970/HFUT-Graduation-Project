@@ -111,7 +111,7 @@
   const moduleContent = document.getElementById('module-content');
   logoutBtn.addEventListener('click', redirectToLogin);
 
-  const routes = ['users', 'posts', 'questions', 'answers', 'schools'];
+  const routes = ['users', 'posts', 'questions', 'answers', 'schools', 'bind-school'];
   function getRoute() {
     const hash = (location.hash || '#/users').slice(2) || 'users';
     return routes.includes(hash) ? hash : 'users';
@@ -125,6 +125,7 @@
     else if (r === 'questions') renderQuestions();
     else if (r === 'answers') renderAnswers();
     else if (r === 'schools') renderSchools();
+    else if (r === 'bind-school') renderBindSchool();
   }
   window.addEventListener('hashchange', route);
 
@@ -175,6 +176,7 @@
       const columns = [
         { key: 'id', label: 'ID' },
         { key: 'username', label: '用户名' },
+        { key: 'school_id', label: '学校', render: r => r.school_id ? `#${r.school_id}` : '<span class="text-muted">未绑定</span>' },
         { key: 'avatar', label: '头像', render: r => renderListImage(r.avatar, '头像') },
         { key: 'background', label: '背景图', render: r => renderListImage(r.background, '背景图') },
         { key: 'status', label: '状态', render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${STATUS_MAP[r.status] || r.status}</span>` },
@@ -736,10 +738,21 @@
     showModal('新建学校', `
       <label>学校名称 <input type="text" id="s-name" placeholder="学校名称"></label>
       <label>登录地址 <input type="text" id="s-login_url" placeholder="https://"></label>
+      <label>学校代码 <input type="text" id="s-code" placeholder="hfut"></label>
+      <label>表单字段(JSON) <textarea id="s-form_fields" rows="4" placeholder='[{"key":"username","label_zh":"学号","label_en":"Student ID"},{"key":"password","label_zh":"密码","label_en":"Password"}]'></textarea></label>
+      <label>验证码URL <input type="text" id="s-captcha_url" placeholder="空则用后端"></label>
     `, async (ov) => {
+      let formFields = [];
+      try {
+        const raw = ov.querySelector('#s-form_fields').value.trim();
+        formFields = raw ? JSON.parse(raw) : [];
+      } catch (_) {}
       await api('/admin/schools', { method: 'POST', body: JSON.stringify({
         name: ov.querySelector('#s-name').value.trim(),
-        login_url: ov.querySelector('#s-login_url').value.trim()
+        login_url: ov.querySelector('#s-login_url').value.trim(),
+        code: ov.querySelector('#s-code').value.trim(),
+        form_fields: formFields.length ? formFields : undefined,
+        captcha_url: ov.querySelector('#s-captcha_url').value.trim() || undefined
       })});
       renderSchools();
     });
@@ -747,16 +760,171 @@
 
   function showEditSchoolModal(school) {
     if (!school) return;
+    const formFieldsJson = school.form_fields && Array.isArray(school.form_fields) ? JSON.stringify(school.form_fields) : '[]';
     showModal('编辑学校 #' + school.id, `
       <label>学校名称 <input type="text" id="se-name" value="${school.name || ''}" placeholder="学校名称"></label>
       <label>登录地址 <input type="text" id="se-login_url" value="${school.login_url || ''}" placeholder="https://"></label>
+      <label>学校代码 <input type="text" id="se-code" value="${school.code || ''}" placeholder="hfut"></label>
+      <label>表单字段(JSON) <textarea id="se-form_fields" rows="4" placeholder='[{"key":"username","label_zh":"学号","label_en":"Student ID"},...]'>${formFieldsJson}</textarea></label>
+      <label>验证码URL <input type="text" id="se-captcha_url" value="${school.captcha_url || ''}" placeholder="空则用后端"></label>
     `, async (ov) => {
+      let formFields = [];
+      try {
+        formFields = JSON.parse(ov.querySelector('#se-form_fields').value.trim() || '[]');
+      } catch (_) {}
       await api('/admin/schools/' + school.id, { method: 'PUT', body: JSON.stringify({
         name: ov.querySelector('#se-name').value.trim(),
-        login_url: ov.querySelector('#se-login_url').value.trim()
+        login_url: ov.querySelector('#se-login_url').value.trim(),
+        code: ov.querySelector('#se-code').value.trim() || undefined,
+        form_fields: formFields.length ? formFields : undefined,
+        captcha_url: ov.querySelector('#se-captcha_url').value.trim() || undefined
       })});
       renderSchools();
     });
+  }
+
+  async function renderBindSchool() {
+    moduleContent.innerHTML = '<p>加载中...</p>';
+    try {
+      const userData = await api('/user/info');
+      const schoolId = userData.data?.school_id ?? 0;
+      const schoolName = userData.data?.school_name || '';
+
+      if (schoolId !== 0 && schoolId !== '0') {
+        moduleContent.innerHTML = `
+          <div class="module-header"><h3>绑定学校</h3></div>
+          <div class="bind-school-already">
+            <p>您已绑定学校：<strong>${schoolName || '学校#' + schoolId}</strong></p>
+            <p class="text-muted">已绑定学校的用户不允许重复绑定。</p>
+          </div>
+        `;
+        return;
+      }
+
+      const schoolsData = await api('/schools');
+      const schoolList = schoolsData.data?.list || [];
+
+      if (!schoolList.length) {
+        moduleContent.innerHTML = `
+          <div class="module-header"><h3>绑定学校</h3></div>
+          <p class="text-muted">暂无可绑定的学校，请先在学校管理中新增并配置 code、form_fields。</p>
+        `;
+        return;
+      }
+
+      const schoolOpts = schoolList.map(s => `<option value="${s.id}">${s.name || s.code || '#' + s.id}</option>`).join('');
+      const defaultSchool = schoolList[0]?.id;
+
+      let formFieldsHtml = '';
+      let needCaptcha = false;
+      if (defaultSchool) {
+        const sel = schoolList.find(s => s.id == defaultSchool || Number(s.id) === defaultSchool);
+        const fields = sel?.form_fields || [];
+        needCaptcha = fields.some(f => f.key === 'captcha');
+        formFieldsHtml = fields.map(f => {
+          if (f.key === 'captcha') {
+            return `<label>${f.label_zh || f.key} <input type="text" id="bind-${f.key}" placeholder="验证码" maxlength="8"><button type="button" id="bind-captcha-refresh" class="btn btn-sm">获取验证码</button><div id="bind-captcha-img"></div></label>`;
+          }
+          const type = f.key === 'password' ? 'password' : 'text';
+          return `<label>${f.label_zh || f.key} <input type="${type}" id="bind-${f.key}" placeholder="${f.label_zh || f.key}"></label>`;
+        }).join('');
+      }
+
+      moduleContent.innerHTML = `
+        <div class="module-header"><h3>绑定学校</h3></div>
+        <div class="bind-school-form">
+          <p class="text-muted">选择学校并填写认证信息，验证通过后完成绑定。</p>
+          <label>选择学校 <select id="bind-school-select">${schoolOpts}</select></label>
+          <div id="bind-form-fields">${formFieldsHtml}</div>
+          <div class="bind-actions">
+            <button class="btn btn-primary" id="bind-submit">提交绑定</button>
+          </div>
+        </div>
+      `;
+
+      const formEl = moduleContent.querySelector('.bind-school-form');
+      const schoolSelect = moduleContent.querySelector('#bind-school-select');
+      const formFieldsContainer = moduleContent.querySelector('#bind-form-fields');
+
+      function renderFormFields(school) {
+        const fields = school?.form_fields || [];
+        const needCap = fields.some(f => f.key === 'captcha');
+        formFieldsContainer.innerHTML = fields.map(f => {
+          if (f.key === 'captcha') {
+            return `<label>${f.label_zh || f.key} <input type="text" id="bind-${f.key}" placeholder="验证码" maxlength="8"><button type="button" id="bind-captcha-refresh" class="btn btn-sm">获取验证码</button><div id="bind-captcha-img" class="captcha-img-wrap"></div></label>`;
+          }
+          const type = f.key === 'password' ? 'password' : 'text';
+          return `<label>${f.label_zh || f.key} <input type="${type}" id="bind-${f.key}" placeholder="${f.label_zh || f.key}"></label>`;
+        }).join('');
+        if (needCap) {
+          formFieldsContainer.querySelector('#bind-captcha-refresh')?.addEventListener('click', () => fetchCaptcha(school.id));
+        }
+      }
+
+      let captchaToken = '';
+      async function fetchCaptcha(sid) {
+        try {
+          const d = await api('/schools/' + sid + '/captcha');
+          captchaToken = d.data?.token || '';
+          const img = d.data?.image;
+          const wrap = formFieldsContainer.querySelector('#bind-captcha-img');
+          if (wrap && img) {
+            wrap.innerHTML = `<img src="data:image/png;base64,${img}" alt="验证码" class="captcha-img"/>`;
+          }
+        } catch (e) {
+          alert(e.message);
+        }
+      }
+
+      schoolSelect.addEventListener('change', () => {
+        const sid = parseInt(schoolSelect.value, 10);
+        const school = schoolList.find(s => s.id == sid || Number(s.id) === sid);
+        renderFormFields(school);
+        captchaToken = '';
+        if (school?.form_fields?.some(f => f.key === 'captcha')) {
+          fetchCaptcha(sid);
+        }
+      });
+
+      const selSchool = schoolList.find(s => s.id == defaultSchool || Number(s.id) === defaultSchool);
+      renderFormFields(selSchool);
+      if (needCaptcha) fetchCaptcha(defaultSchool);
+
+      moduleContent.querySelector('#bind-submit').addEventListener('click', async () => {
+        const sid = parseInt(schoolSelect.value, 10);
+        const school = schoolList.find(s => s.id == sid || Number(s.id) === sid);
+        const fields = school?.form_fields || [];
+        const body = { school_id: sid };
+        fields.forEach(f => {
+          const input = formFieldsContainer.querySelector('#bind-' + f.key);
+          if (input) {
+            if (f.key === 'captcha') {
+              body.captcha = input.value.trim();
+              body.captcha_token = captchaToken;
+            } else {
+              body[f.key] = input.value.trim();
+            }
+          }
+        });
+        if (!body.username || !body.password) {
+          alert('请填写账号和密码');
+          return;
+        }
+        if (fields.some(f => f.key === 'captcha') && (!body.captcha || !body.captcha_token)) {
+          alert('请先获取验证码并填写');
+          return;
+        }
+        try {
+          await api('/user/bind/school', { method: 'POST', body: JSON.stringify(body) });
+          alert('绑定成功');
+          renderBindSchool();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+    } catch (e) {
+      moduleContent.innerHTML = '<p class="error">' + e.message + '</p>';
+    }
   }
 
   if (!getToken()) { redirectToLogin(); return; }
