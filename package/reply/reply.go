@@ -116,7 +116,9 @@ func ReplyNotFound(ctx *gin.Context, code int) {
 func ReplyInternalError(ctx *gin.Context, err error) {
 	message := errcode.GetMsg(errcode.InternalServerError)
 	if err != nil {
-		message = message + ": " + err.Error()
+		if s := err.Error(); s != "" {
+			message = message + ": " + s
+		}
 	}
 	ctx.JSON(http.StatusInternalServerError, response.Response{
 		Code:    errcode.InternalServerError,

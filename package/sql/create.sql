@@ -301,3 +301,13 @@ CREATE TABLE IF NOT EXISTS user_cert
 
 COMMENT ON TABLE user_cert IS '用户学校认证记录';
 COMMENT ON COLUMN user_cert.cert_info IS '学生信息 JSON，来自学校端接口响应';
+
+
+
+UPDATE schools
+SET form_fields = '[
+  {"key":"username","label_zh":"学号","label_en":"Student ID"},
+  {"key":"password","label_zh":"密码","label_en":"Password"},
+  {"key":"captcha","label_zh":"验证码","label_en":"Captcha"}
+]'::jsonb
+WHERE code = 'hfut';

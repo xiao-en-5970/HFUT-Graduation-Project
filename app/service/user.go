@@ -167,11 +167,13 @@ func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolRe
 	}
 
 	needCaptcha := school.FormFields.HasKey("captcha")
-	if needCaptcha && (req.Captcha == "" || req.CaptchaToken == "") {
+	captcha := strings.TrimSpace(req.Captcha)
+	captchaToken := strings.TrimSpace(req.CaptchaToken)
+	if needCaptcha && (captcha == "" || captchaToken == "") {
 		return errors.New("请先获取验证码并填写")
 	}
 
-	res, err := schools.Login(ctx.Request.Context(), *school.Code, req.Username, req.Password, req.Captcha, req.CaptchaToken)
+	res, err := schools.Login(ctx.Request.Context(), *school.Code, req.Username, req.Password, captcha, captchaToken)
 	if err != nil {
 		return err
 	}

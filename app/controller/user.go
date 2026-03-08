@@ -158,7 +158,12 @@ func UserBindSchool(ctx *gin.Context) {
 	err := service.User().BindSchool(ctx, userID, req)
 	if err != nil {
 		logger.Error(ctx, "用户绑定学校失败", zap.Error(err))
-		reply.ReplyInternalError(ctx, err)
+		msg := err.Error()
+		if msg == "" {
+			msg = "操作失败，请稍后重试"
+		}
+		reply.ReplyErrWithMessage(ctx, msg)
+		return
 	}
 	reply.ReplyOK(ctx)
 }

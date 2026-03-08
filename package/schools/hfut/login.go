@@ -87,6 +87,9 @@ func (h *HFUT) Login(ctx context.Context, username, password, captcha, captchaTo
 	if err != nil {
 		return &schools.LoginResult{Success: false, Message: err.Error()}, nil
 	}
+	if cookieStr == "" {
+		return &schools.LoginResult{Success: false, Message: "验证码会话无效或已过期，请重新获取验证码"}, nil
+	}
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
