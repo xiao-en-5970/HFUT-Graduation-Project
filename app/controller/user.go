@@ -12,6 +12,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/schools"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -38,6 +39,35 @@ func UserRegister(ctx *gin.Context) {
 		return
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"user_id": userId})
+}
+
+// UserSchoolLogin 学校端登录：仅需账号密码，对接学校 CAS 验证（内部处理验证码）
+// POST /api/v1/user/school-login
+// Body: { "school_code": "hfut", "username": "学号", "password": "密码" }
+func UserSchoolLogin(ctx *gin.Context) {
+	type Req struct {
+		SchoolCode string `json:"school_code" binding:"required"`
+		Username   string `json:"username" binding:"required"`
+		Password   string `json:"password" binding:"required"`
+	}
+	var req Req
+	if err := ctx.BindJSON(&req); err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	res, err := schools.Login(ctx.Request.Context(), req.SchoolCode, req.Username, req.Password)
+	if err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	if !res.Success {
+		reply.ReplyErrWithMessage(ctx, res.Message)
+		return
+	}
+	reply.ReplyOKWithData(ctx, gin.H{
+		"student_id": res.StudentID,
+		"name":       res.Name,
+	})
 }
 
 // Login 用户登录

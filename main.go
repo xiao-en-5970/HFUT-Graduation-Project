@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 
+	_ "github.com/xiao-en-5970/HFUT-Graduation-Project/package/schools/hfut" // 注册 HFUT 学校登录
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/bootstrap"
 )
 

@@ -29,6 +29,7 @@ func PublicRouter(api *gin.RouterGroup) {
 	userGroup := api.Group("/user")
 	{
 		userGroup.POST("/login", controller.UserLogin)
+		userGroup.POST("/school-login", controller.UserSchoolLogin) // 学校端登录，仅需账号密码
 		userGroup.POST("/register", controller.UserRegister)
 	}
 	// OSS 文件访问（公开，前端可直接用 URL 展示图片等）

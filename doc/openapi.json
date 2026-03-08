@@ -492,6 +492,34 @@
         }
       }
     },
+    "/api/v1/user/school-login": {
+      "post": {
+        "tags": ["用户"],
+        "summary": "学校端登录",
+        "description": "对接学校 CAS，仅需账号密码。验证码由后端自动处理。school_code 如 hfut",
+        "parameters": [{
+          "in": "body",
+          "name": "body",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "required": ["school_code", "username", "password"],
+            "properties": {
+              "school_code": {"type": "string", "example": "hfut"},
+              "username": {"type": "string", "example": "学号"},
+              "password": {"type": "string", "example": "密码"}
+            }
+          }
+        }],
+        "responses": {
+          "200": {
+            "description": "验证成功，data: {student_id, name}",
+            "schema": {"$ref": "#/definitions/Response"}
+          },
+          "400": {"description": "账号密码错误或学校不支持", "schema": {"$ref": "#/definitions/Response"}}
+        }
+      }
+    },
     "/api/v1/user/info": {
       "get": {
         "tags": ["用户"],
