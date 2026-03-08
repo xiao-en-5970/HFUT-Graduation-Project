@@ -807,47 +807,45 @@
       if (!schoolList.length) {
         moduleContent.innerHTML = `
           <div class="module-header"><h3>绑定学校</h3></div>
-          <p class="text-muted">暂无可绑定的学校，请先在学校管理中新增并配置 code、form_fields。</p>
+          <p class="text-muted">暂无可绑定的学校，请先在学校管理中新增并配置 code。</p>
         `;
         return;
       }
 
       const schoolOpts = schoolList.map(s => `<option value="${s.id}">${s.name || s.code || '#' + s.id}</option>`).join('');
-      const defaultSchool = schoolList[0]?.id;
-
-      let formFieldsHtml = '';
-      let needCaptcha = false;
-      if (defaultSchool) {
-        const sel = schoolList.find(s => s.id == defaultSchool || Number(s.id) === defaultSchool);
-        const fields = sel?.form_fields || [];
-        needCaptcha = fields.some(f => f.key === 'captcha');
-        formFieldsHtml = fields.map(f => {
-          if (f.key === 'captcha') {
-            return `<label>${f.label_zh || f.key} <input type="text" id="bind-${f.key}" placeholder="验证码" maxlength="8"><button type="button" id="bind-captcha-refresh" class="btn btn-sm">获取验证码</button><div id="bind-captcha-img"></div></label>`;
-          }
-          const type = f.key === 'password' ? 'password' : 'text';
-          return `<label>${f.label_zh || f.key} <input type="${type}" id="bind-${f.key}" placeholder="${f.label_zh || f.key}"></label>`;
-        }).join('');
-      }
 
       moduleContent.innerHTML = `
         <div class="module-header"><h3>绑定学校</h3></div>
         <div class="bind-school-form">
           <p class="text-muted">选择学校并填写认证信息，验证通过后完成绑定。</p>
           <label>选择学校 <select id="bind-school-select">${schoolOpts}</select></label>
-          <div id="bind-form-fields">${formFieldsHtml}</div>
+          <div id="bind-form-fields"><p class="text-muted">请先选择学校</p></div>
           <div class="bind-actions">
             <button class="btn btn-primary" id="bind-submit">提交绑定</button>
           </div>
         </div>
       `;
 
-      const formEl = moduleContent.querySelector('.bind-school-form');
       const schoolSelect = moduleContent.querySelector('#bind-school-select');
       const formFieldsContainer = moduleContent.querySelector('#bind-form-fields');
 
+      let currentSchoolDetail = null;
+      let captchaToken = '';
+
+      async function loadSchoolDetail(sid) {
+        try {
+          const d = await api('/schools/' + sid);
+          currentSchoolDetail = d.data;
+          return currentSchoolDetail;
+        } catch (e) {
+          formFieldsContainer.innerHTML = '<p class="error">' + (e.message || '加载失败') + '</p>';
+          return null;
+        }
+      }
+
       function renderFormFields(school) {
-        const fields = school?.form_fields || [];
+        if (!school) return;
+        const fields = school.form_fields || [];
         const needCap = fields.some(f => f.key === 'captcha');
         formFieldsContainer.innerHTML = fields.map(f => {
           if (f.key === 'captcha') {
@@ -861,7 +859,6 @@
         }
       }
 
-      let captchaToken = '';
       async function fetchCaptcha(sid) {
         try {
           const d = await api('/schools/' + sid + '/captcha');
@@ -876,24 +873,35 @@
         }
       }
 
-      schoolSelect.addEventListener('change', () => {
+      async function onSchoolChange() {
         const sid = parseInt(schoolSelect.value, 10);
-        const school = schoolList.find(s => s.id == sid || Number(s.id) === sid);
-        renderFormFields(school);
         captchaToken = '';
-        if (school?.form_fields?.some(f => f.key === 'captcha')) {
-          fetchCaptcha(sid);
+        formFieldsContainer.innerHTML = '<p class="text-muted">加载中...</p>';
+        const school = await loadSchoolDetail(sid);
+        if (school) {
+          renderFormFields(school);
+          if (school.form_fields?.some(f => f.key === 'captcha')) {
+            fetchCaptcha(sid);
+          }
         }
-      });
+      }
 
-      const selSchool = schoolList.find(s => s.id == defaultSchool || Number(s.id) === defaultSchool);
-      renderFormFields(selSchool);
-      if (needCaptcha) fetchCaptcha(defaultSchool);
+      schoolSelect.addEventListener('change', onSchoolChange);
+
+      // 初始加载默认学校详情
+      onSchoolChange();
 
       moduleContent.querySelector('#bind-submit').addEventListener('click', async () => {
         const sid = parseInt(schoolSelect.value, 10);
-        const school = schoolList.find(s => s.id == sid || Number(s.id) === sid);
-        const fields = school?.form_fields || [];
+        let school = currentSchoolDetail;
+        if (!school) {
+          school = await loadSchoolDetail(sid);
+          if (!school) {
+            alert('请先选择学校');
+            return;
+          }
+        }
+        const fields = school.form_fields || [];
         const body = { school_id: sid };
         fields.forEach(f => {
           const input = formFieldsContainer.querySelector('#bind-' + f.key);

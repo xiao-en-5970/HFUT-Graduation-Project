@@ -4,10 +4,11 @@
 
 `hfut`
 
-## 表单配置
+## 表单配置（必须配置，禁止写死）
 
 - **form_fields**: `[{key:"username",label_zh:"学号",label_en:"Student ID"}, {key:"password",label_zh:"密码",label_en:"Password"}, {key:"captcha",label_zh:"验证码",label_en:"Captcha"}]`
-- **captcha_url**: 空，使用后端 `GET /api/v1/schools/:id/captcha` 获取验证码
+- **login_url**: 必填，CAS 登录页地址，如 `https://cas.hfut.edu.cn/cas/login?service=...`
+- **captcha_url**: 必填，验证码图片地址，如 `https://cas.hfut.edu.cn/cas/vercode`
 
 ## 登录流程
 

@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
@@ -57,7 +58,16 @@ func UserSchoolLogin(ctx *gin.Context) {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	res, err := schools.Login(ctx.Request.Context(), req.SchoolCode, req.Username, req.Password, req.Captcha, req.CaptchaToken)
+	opts := &schools.LoginOptions{}
+	if school, err := dao.School().GetByCode(ctx.Request.Context(), req.SchoolCode); err == nil && school != nil {
+		if school.LoginURL != nil {
+			opts.LoginURL = *school.LoginURL
+		}
+		if school.CaptchaURL != nil {
+			opts.CaptchaURL = *school.CaptchaURL
+		}
+	}
+	res, err := schools.Login(ctx.Request.Context(), req.SchoolCode, req.Username, req.Password, req.Captcha, req.CaptchaToken, opts)
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
 		return

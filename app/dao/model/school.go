@@ -95,7 +95,7 @@ type School struct {
 	ID         uint           `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name       *string        `gorm:"type:varchar(50)" json:"name"`
 	Code       *string        `gorm:"type:varchar(32);uniqueIndex" json:"code"`
-	LoginURL   *string        `gorm:"column:login_url;type:varchar(255)" json:"login_url"`
+	LoginURL   *string        `gorm:"column:login_url;type:varchar(512)" json:"login_url"`
 	FormFields FormFieldsJSON `gorm:"column:form_fields;type:jsonb" json:"form_fields"`
 	CaptchaURL *string        `gorm:"column:captcha_url;type:varchar(512)" json:"captcha_url"`
 	UserCount  int            `gorm:"column:user_count;default:0" json:"user_count"`

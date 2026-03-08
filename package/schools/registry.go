@@ -25,17 +25,17 @@ func Get(code string) (School, bool) {
 	return s, ok
 }
 
-// Login 统一入口：按学校代码调用对应登录，captcha/captchaToken 需验证码时必填
-func Login(ctx context.Context, schoolCode, username, password, captcha, captchaToken string) (*LoginResult, error) {
+// Login 统一入口：按学校代码调用对应登录，opts 从 schools 表配置传入
+func Login(ctx context.Context, schoolCode, username, password, captcha, captchaToken string, opts *LoginOptions) (*LoginResult, error) {
 	s, ok := Get(schoolCode)
 	if !ok {
 		return &LoginResult{Success: false, Message: "不支持的学校"}, nil
 	}
-	return s.Login(ctx, username, password, captcha, captchaToken)
+	return s.Login(ctx, username, password, captcha, captchaToken, opts)
 }
 
-// GetCaptcha 获取学校验证码，仅支持 SchoolWithCaptcha
-func GetCaptcha(ctx context.Context, schoolCode string) (image []byte, token string, err error) {
+// GetCaptcha 获取学校验证码，仅支持 SchoolWithCaptcha，opts 从 schools 表配置传入
+func GetCaptcha(ctx context.Context, schoolCode string, opts *CaptchaOptions) (image []byte, token string, err error) {
 	s, ok := Get(schoolCode)
 	if !ok {
 		return nil, "", nil
@@ -44,5 +44,5 @@ func GetCaptcha(ctx context.Context, schoolCode string) (image []byte, token str
 	if !ok {
 		return nil, "", nil
 	}
-	return swc.GetCaptcha(ctx)
+	return swc.GetCaptcha(ctx, opts)
 }

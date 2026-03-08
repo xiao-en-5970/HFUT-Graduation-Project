@@ -172,8 +172,18 @@ func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolRe
 	if needCaptcha && (captcha == "" || captchaToken == "") {
 		return errors.New("请先获取验证码并填写")
 	}
+	if needCaptcha && (school.LoginURL == nil || *school.LoginURL == "" || school.CaptchaURL == nil || *school.CaptchaURL == "") {
+		return errors.New("该学校未配置 login_url 或 captcha_url，请先在学校管理中配置")
+	}
 
-	res, err := schools.Login(ctx.Request.Context(), *school.Code, req.Username, req.Password, captcha, captchaToken)
+	opts := &schools.LoginOptions{}
+	if school.LoginURL != nil {
+		opts.LoginURL = *school.LoginURL
+	}
+	if school.CaptchaURL != nil {
+		opts.CaptchaURL = *school.CaptchaURL
+	}
+	res, err := schools.Login(ctx.Request.Context(), *school.Code, req.Username, req.Password, captcha, captchaToken, opts)
 	if err != nil {
 		return err
 	}
