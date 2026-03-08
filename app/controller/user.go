@@ -148,14 +148,12 @@ func UserBindSchool(ctx *gin.Context) {
 		reply.ReplyUnauthorized(ctx)
 		return
 	}
-	var body struct {
-		SchoolID uint `json:"school_id"`
-	}
-	if err := ctx.BindJSON(&body); err != nil {
+	var req service.BindSchoolReq
+	if err := ctx.BindJSON(&req); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	err := service.User().BindSchool(ctx, userID, body.SchoolID)
+	err := service.User().BindSchool(ctx, userID, req)
 	if err != nil {
 		logger.Error(ctx, "用户绑定学校失败", zap.Error(err))
 		reply.ReplyInternalError(ctx, err)

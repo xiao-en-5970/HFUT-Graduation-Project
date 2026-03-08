@@ -24,6 +24,13 @@ func (s *SchoolStore) GetByID(ctx context.Context, id uint) (*model.School, erro
 	return school, err
 }
 
+// GetByCode 按学校代码查询（用于对接 package/schools 登录）
+func (s *SchoolStore) GetByCode(ctx context.Context, code string) (*model.School, error) {
+	school := &model.School{}
+	err := pgsql.DB.WithContext(ctx).Where("code = ?", code).First(school).Error
+	return school, err
+}
+
 // GetByIDValid 仅获取 status=1 的学校
 func (s *SchoolStore) GetByIDValid(ctx context.Context, id uint) (*model.School, error) {
 	school := &model.School{}

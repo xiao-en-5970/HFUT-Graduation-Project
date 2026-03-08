@@ -1,6 +1,7 @@
 package dao
 
 func User() *UserStore               { return &UserStore{} }
+func UserCert() *UserCertStore       { return &UserCertStore{} }
 func Article() *ArticleStore         { return &ArticleStore{} }
 func School() *SchoolStore           { return &SchoolStore{} }
 func Comment() *CommentStore         { return &CommentStore{} }

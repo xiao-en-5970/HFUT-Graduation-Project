@@ -6,20 +6,21 @@
 
 ---
 
-## 2025-02-17（学校登录）
+## 2025-02-17（学校登录与绑定）
 
 ### 新增
 
-| 接口 | 变更说明 |
-|------|----------|
+| 接口                               | 变更说明                                            |
+|----------------------------------|-------------------------------------------------|
 | `POST /api/v1/user/school-login` | 学校端登录，仅需 school_code、username、password，对接学校 CAS |
-
+| `user_cert` 表                    | 记录用户在某学校的认证信息，cert_info 为 JSONB 存储学生信息          |
 
 ### 修改
 
-| 接口                            | 变更说明                                                                                                        |
-|-------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `GET /api/v1/search/articles` | 热度公式配比全部环境变量可配置：SEARCH_WEIGHT_COLLECT/LIKE/VIEW(10/5/1)、SEARCH_INTERACTION_DECAY_DAYS(90)、SEARCH_COMBINED_* |
+| 接口                              | 变更说明                                                                                                        |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `POST /api/v1/user/bind/school` | **Breaking**：请求体改为 `{ school_id, username, password }`，需学校端账号密码验证；成功后写入 user_cert                           |
+| `GET /api/v1/search/articles`   | 热度公式配比全部环境变量可配置：SEARCH_WEIGHT_COLLECT/LIKE/VIEW(10/5/1)、SEARCH_INTERACTION_DECAY_DAYS(90)、SEARCH_COMBINED_* |
 
 ---
 

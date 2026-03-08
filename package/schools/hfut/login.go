@@ -17,10 +17,10 @@ import (
 )
 
 const (
-	code       = "hfut"
-	name       = "合肥工业大学"
-	casBase    = "https://cas.hfut.edu.cn"
-	loginPath  = "/cas/login"
+	code        = "hfut"
+	name        = "合肥工业大学"
+	casBase     = "https://cas.hfut.edu.cn"
+	loginPath   = "/cas/login"
 	vercodePath = "/cas/vercode"
 )
 
@@ -153,10 +153,10 @@ func (h *HFUT) doLogin(ctx context.Context, client *http.Client, username, passw
 	// 6. POST 提交登录
 	form := url.Values{
 		"username":    {username},
-		"password":   {encPwd},
-		"capcha":     {captcha},
-		"execution":  {"e1s1"},
-		"_eventId":   {"submit"},
+		"password":    {encPwd},
+		"capcha":      {captcha},
+		"execution":   {"e1s1"},
+		"_eventId":    {"submit"},
 		"geolocation": {""},
 	}.Encode()
 	req6, _ := http.NewRequestWithContext(ctx, "POST", loginURL, bytes.NewBufferString(form))
@@ -172,10 +172,16 @@ func (h *HFUT) doLogin(ctx context.Context, client *http.Client, username, passw
 	if res6.StatusCode == 302 {
 		loc := res6.Header.Get("Location")
 		if strings.Contains(loc, "ticket=") {
-			return &schools.LoginResult{
-				Success:   true,
-				StudentID: username,
-			}, nil
+			res := &schools.LoginResult{Success: true, StudentID: username}
+			if certInfo, err := fetchStudentInfo(ctx, jar.string()); err == nil && len(certInfo) > 0 {
+				res.CertInfo = certInfo
+				if n, ok := certInfo["username_zh"].(string); ok && n != "" {
+					res.Name = n
+				} else if n, ok := certInfo["姓名"].(string); ok && n != "" {
+					res.Name = n
+				}
+			}
+			return res, nil
 		}
 	}
 	return &schools.LoginResult{Success: false, Message: "登录失败"}, nil

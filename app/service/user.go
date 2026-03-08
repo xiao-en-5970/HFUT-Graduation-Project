@@ -12,6 +12,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/schools"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/util"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -139,14 +140,48 @@ func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, e
 	return userInfo, nil
 }
 
-func (s *userService) BindSchool(ctx *gin.Context, userID uint, schoolId uint) error {
-	if schoolId > 0 {
-		_, err := dao.School().GetByID(ctx.Request.Context(), schoolId)
-		if err != nil {
-			return errors.New("学校不存在")
-		}
+// BindSchoolReq 绑定学校请求（需学校端账号密码验证）
+type BindSchoolReq struct {
+	SchoolID uint   `json:"school_id" binding:"required"`
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolReq) error {
+	school, err := dao.School().GetByIDValid(ctx.Request.Context(), req.SchoolID)
+	if err != nil {
+		return errors.New("学校不存在")
 	}
-	return dao.User().UpdateSchoolByID(ctx.Request.Context(), userID, schoolId)
+	if school.Code == nil || *school.Code == "" {
+		return errors.New("该学校暂不支持在线认证绑定")
+	}
+
+	res, err := schools.Login(ctx.Request.Context(), *school.Code, req.Username, req.Password)
+	if err != nil {
+		return err
+	}
+	if !res.Success {
+		return errors.New(res.Message)
+	}
+
+	certInfo := make(map[string]interface{})
+	if res.CertInfo != nil {
+		certInfo = res.CertInfo
+	}
+	certInfo["student_id"] = res.StudentID
+	if res.Name != "" {
+		certInfo["name"] = res.Name
+	}
+
+	cert := &model.UserCert{
+		UserID:   userID,
+		SchoolID: req.SchoolID,
+		CertInfo: certInfo,
+	}
+	if err := dao.UserCert().Upsert(ctx.Request.Context(), cert); err != nil {
+		return err
+	}
+	return dao.User().UpdateSchoolByID(ctx.Request.Context(), userID, req.SchoolID)
 }
 
 // UpdateProfileReq 用户更新资料请求（仅允许更新这些字段，不含 username/role/status/password）
