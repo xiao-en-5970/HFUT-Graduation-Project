@@ -183,6 +183,12 @@ func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolRe
 	if school.CaptchaURL != nil {
 		opts.CaptchaURL = *school.CaptchaURL
 	}
+	if school.EAMServiceURL != nil {
+		opts.EAMServiceURL = *school.EAMServiceURL
+	}
+	if school.InfoURL != nil {
+		opts.InfoURL = *school.InfoURL
+	}
 	res, err := schools.Login(ctx.Request.Context(), *school.Code, req.Username, req.Password, captcha, captchaToken, opts)
 	if err != nil {
 		return err
@@ -193,7 +199,9 @@ func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolRe
 
 	certInfo := make(map[string]interface{})
 	if res.CertInfo != nil {
-		certInfo = res.CertInfo
+		for k, v := range res.CertInfo {
+			certInfo[k] = v
+		}
 	}
 	certInfo["student_id"] = res.StudentID
 	if res.Name != "" {
@@ -204,6 +212,7 @@ func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolRe
 		UserID:   userID,
 		SchoolID: req.SchoolID,
 		CertInfo: certInfo,
+		Status:   constant.StatusValid,
 	}
 	if err := dao.UserCert().Upsert(ctx.Request.Context(), cert); err != nil {
 		return err

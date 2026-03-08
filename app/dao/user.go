@@ -15,13 +15,9 @@ func (s *UserStore) Create(ctx context.Context, user *model.User) (uint, error) 
 	return s.CreateWithOptionalSchool(ctx, user)
 }
 
-// CreateWithOptionalSchool 创建用户，school_id 为 0 时插入 NULL 避免 FK 约束
+// CreateWithOptionalSchool 创建用户，school_id 存 0 表示未绑定（需 schools 表存在 id=0 占位行）
 func (s *UserStore) CreateWithOptionalSchool(ctx context.Context, user *model.User) (uint, error) {
-	if user.SchoolID > 0 {
-		err := pgsql.DB.WithContext(ctx).Create(user).Error
-		return user.ID, err
-	}
-	err := pgsql.DB.WithContext(ctx).Omit("SchoolID").Create(user).Error
+	err := pgsql.DB.WithContext(ctx).Create(user).Error
 	return user.ID, err
 }
 
@@ -109,9 +105,6 @@ func (s *UserStore) GetByUsername(ctx context.Context, username string) (*model.
 }
 
 func (s *UserStore) UpdateSchoolByID(ctx context.Context, userID uint, schoolID uint) error {
-	if schoolID == 0 {
-		return pgsql.DB.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Update("school_id", nil).Error
-	}
 	return pgsql.DB.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Update("school_id", schoolID).Error
 }
 

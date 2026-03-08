@@ -95,9 +95,11 @@ type School struct {
 	ID         uint           `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name       *string        `gorm:"type:varchar(50)" json:"name"`
 	Code       *string        `gorm:"type:varchar(32);uniqueIndex" json:"code"`
-	LoginURL   *string        `gorm:"column:login_url;type:varchar(512)" json:"login_url"`
-	FormFields FormFieldsJSON `gorm:"column:form_fields;type:jsonb" json:"form_fields"`
-	CaptchaURL *string        `gorm:"column:captcha_url;type:varchar(512)" json:"captcha_url"`
+	LoginURL       *string        `gorm:"column:login_url;type:varchar(512)" json:"login_url"`
+	FormFields     FormFieldsJSON `gorm:"column:form_fields;type:jsonb" json:"form_fields"`
+	CaptchaURL     *string        `gorm:"column:captcha_url;type:varchar(512)" json:"captcha_url"`
+	EAMServiceURL  *string        `gorm:"column:eam_service_url;type:varchar(512)" json:"-"` // 仅后端 info 流程用，不暴露给前端
+	InfoURL       *string        `gorm:"column:info_url;type:varchar(512)" json:"-"`       // 仅后端 info 流程用，不暴露给前端
 	UserCount  int            `gorm:"column:user_count;default:0" json:"user_count"`
 	Status     int16          `gorm:"type:smallint;default:1" json:"status"`
 	CreatedAt  time.Time      `gorm:"autoCreateTime" json:"created_at"`

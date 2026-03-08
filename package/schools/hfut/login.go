@@ -197,7 +197,7 @@ func (h *HFUT) Login(ctx context.Context, username, password, captcha, captchaTo
 		loc := res6.Header.Get("Location")
 		if strings.Contains(loc, "ticket=") {
 			res := &schools.LoginResult{Success: true, StudentID: username}
-			if certInfo, err := fetchStudentInfo(ctx, jar.string()); err == nil && len(certInfo) > 0 {
+			if certInfo, err := fetchStudentInfo(ctx, jar.string(), opts); err == nil && len(certInfo) > 0 {
 				res.CertInfo = certInfo
 				if n, ok := certInfo["username_zh"].(string); ok && n != "" {
 					res.Name = n

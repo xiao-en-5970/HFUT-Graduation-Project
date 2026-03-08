@@ -13,8 +13,10 @@ type LoginResult struct {
 
 // LoginOptions 登录所需配置，从 schools 表读取，禁止写死
 type LoginOptions struct {
-	LoginURL   string // 登录页 URL
-	CaptchaURL string // 验证码 URL（用于推导 cas_base 等）
+	LoginURL       string // 登录页 URL
+	CaptchaURL     string // 验证码 URL（用于推导 cas_base 等）
+	EAMServiceURL  string // EAM SSO 地址，CAS cookie 换取 EAM session（info 流程用）
+	InfoURL        string // 学生信息页 base URL，请求 /info/{code} 获取完整信息（禁止写死）
 }
 
 // School 学校登录接口，封装与学校端的认证对接

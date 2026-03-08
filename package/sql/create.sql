@@ -43,6 +43,9 @@ comment on column schools.name is '学校名称';
 comment on column schools.login_url is '登录地址';
 comment on column schools.user_count is '用户数量';
 
+-- 插入 id=0 占位行，供 users.school_id=0 表示「未绑定」使用（FK 约束需要）
+INSERT INTO schools (id, name) VALUES (0, '未绑定') ON CONFLICT (id) DO NOTHING;
+SELECT setval(pg_get_serial_sequence('schools', 'id'), (SELECT COALESCE(MAX(id), 1) FROM schools));
 
 create table articles (
             id SERIAL PRIMARY KEY,
@@ -286,26 +289,37 @@ ALTER TABLE schools ALTER COLUMN login_url TYPE VARCHAR(512);
 COMMENT ON COLUMN schools.form_fields IS '登录表单字段：username,password,captcha 等';
 COMMENT ON COLUMN schools.captcha_url IS '验证码图片 URL，空则调用后端 GET /schools/:id/captcha';
 
--- HFUT 需验证码，必须配置 login_url 和 captcha_url（禁止写死）：
+-- info 接口配置（禁止写死）：eam_service_url 用于 CAS cookie 换取 EAM session，info_url 为学生信息页 base
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS eam_service_url VARCHAR(512);
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS info_url VARCHAR(512);
+COMMENT ON COLUMN schools.eam_service_url IS 'EAM SSO 地址，CAS cookie 换取 EAM session 用';
+COMMENT ON COLUMN schools.info_url IS '学生信息页 base URL，请求 /info/{code} 获取完整信息';
+
+-- HFUT 需验证码，必须配置 login_url、captcha_url、eam_service_url、info_url（禁止写死）：
 -- UPDATE schools SET form_fields = '[{"key":"username","label_zh":"学号","label_en":"Student ID"},{"key":"password","label_zh":"密码","label_en":"Password"},{"key":"captcha","label_zh":"验证码","label_en":"Captcha"}]'::jsonb,
 --   login_url = 'https://cas.hfut.edu.cn/cas/login?service=https%3A%2F%2Fcas.hfut.edu.cn%2Fcas%2Foauth2.0%2FcallbackAuthorize%3Fclient_id%3DBsHfutEduPortal%26redirect_uri%3Dhttps%253A%252F%252Fone.hfut.edu.cn%252Fhome%252Findex%26response_type%3Dcode%26client_name%3DCasOAuthClient',
 --   captcha_url = 'https://cas.hfut.edu.cn/cas/vercode'
 -- WHERE code = 'hfut';
 
--- 用户认证表：记录用户在某学校的认证信息
+-- 用户认证表：记录用户在某学校的认证信息（学校信息门户 info 接口全部信息存入 cert_info）
 CREATE TABLE IF NOT EXISTS user_cert
 (
     id         SERIAL PRIMARY KEY,
     user_id    integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     school_id  integer NOT NULL REFERENCES schools (id) ON DELETE CASCADE,
     cert_info  jsonb   NOT NULL DEFAULT '{}',
+    status     smallint NOT NULL DEFAULT 1,
     created_at TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP        DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (user_id, school_id)
 );
 
 COMMENT ON TABLE user_cert IS '用户学校认证记录';
-COMMENT ON COLUMN user_cert.cert_info IS '学生信息 JSON，来自学校端接口响应';
+COMMENT ON COLUMN user_cert.cert_info IS '学生信息 JSON，来自学校信息门户 info 接口';
+COMMENT ON COLUMN user_cert.status IS '1正常 2惰性删除';
+
+-- 已有表增加 status 列（首次创建时 CREATE 已含，此 ALTER 用于旧表迁移）
+ALTER TABLE user_cert ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;
 
 
 
@@ -316,5 +330,7 @@ SET form_fields = '[
   {"key":"captcha","label_zh":"验证码","label_en":"Captcha"}
 ]'::jsonb,
   login_url = 'https://cas.hfut.edu.cn/cas/login?service=https%3A%2F%2Fcas.hfut.edu.cn%2Fcas%2Foauth2.0%2FcallbackAuthorize%3Fclient_id%3DBsHfutEduPortal%26redirect_uri%3Dhttps%253A%252F%252Fone.hfut.edu.cn%252Fhome%252Findex%26response_type%3Dcode%26client_name%3DCasOAuthClient',
-  captcha_url = 'https://cas.hfut.edu.cn/cas/vercode'
+  captcha_url = 'https://cas.hfut.edu.cn/cas/vercode',
+  eam_service_url = 'https://cas.hfut.edu.cn/cas/login?service=http://jxglstu.hfut.edu.cn/eams5-student/neusoft-sso/login',
+  info_url = 'http://jxglstu.hfut.edu.cn/eams5-student/for-std/student-info'
 WHERE code = 'hfut';

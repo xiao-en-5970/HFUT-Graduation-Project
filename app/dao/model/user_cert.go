@@ -29,12 +29,13 @@ func (c *CertInfoJSON) Scan(value interface{}) error {
 	return json.Unmarshal(b, c)
 }
 
-// UserCert 用户学校认证表
+// UserCert 用户学校认证表，cert_info 存学校信息门户 info 接口全部信息
 type UserCert struct {
 	ID        uint         `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID    uint         `gorm:"column:user_id;not null;uniqueIndex:idx_user_school" json:"user_id"`
 	SchoolID  uint         `gorm:"column:school_id;not null;uniqueIndex:idx_user_school" json:"school_id"`
 	CertInfo  CertInfoJSON `gorm:"column:cert_info;type:jsonb;not null" json:"cert_info"`
+	Status    int16        `gorm:"column:status;type:smallint;not null;default:1" json:"status"` // 1正常 2惰性删除
 	CreatedAt time.Time    `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time    `gorm:"autoUpdateTime" json:"updated_at"`
 }

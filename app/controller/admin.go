@@ -127,7 +127,7 @@ func AdminUserUpdate(ctx *gin.Context) {
 			}
 			updates["school_id"] = *body.SchoolID
 		} else {
-			updates["school_id"] = nil
+			updates["school_id"] = 0 // 0 表示未绑定
 		}
 	}
 	if body.Avatar != nil {
@@ -512,6 +512,7 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 		Code       *string              `json:"code"`
 		FormFields []model.FormFieldItem `json:"form_fields"`
 		CaptchaURL *string              `json:"captcha_url"`
+		// eam_service_url、info_url 仅后端 info 流程用，不通过 API 暴露或接收，需在 DB 中配置
 	}
 	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
@@ -550,6 +551,7 @@ func AdminSchoolCreate(ctx *gin.Context) {
 		Code       string                `json:"code"`
 		FormFields []model.FormFieldItem `json:"form_fields"`
 		CaptchaURL string                `json:"captcha_url"`
+		// eam_service_url、info_url 仅后端用，需在 DB 中配置
 	}
 	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)

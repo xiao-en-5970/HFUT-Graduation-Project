@@ -9,6 +9,7 @@
 - **form_fields**: `[{key:"username",label_zh:"学号",label_en:"Student ID"}, {key:"password",label_zh:"密码",label_en:"Password"}, {key:"captcha",label_zh:"验证码",label_en:"Captcha"}]`
 - **login_url**: 必填，CAS 登录页地址，如 `https://cas.hfut.edu.cn/cas/login?service=...`
 - **captcha_url**: 必填，验证码图片地址，如 `https://cas.hfut.edu.cn/cas/vercode`
+- **eam_service_url**、**info_url**：仅后端 info 流程用，不暴露给前端，需在 DB 中配置（见 create.sql 中 HFUT 的 UPDATE）
 
 ## 登录流程
 
@@ -20,10 +21,10 @@
    - `GET cas.hfut.edu.cn/cas/login?service=http://jxglstu.hfut.edu.cn/eams5-student/neusoft-sso/login`
    - 跟随 302 至 jxglstu.hfut.edu.cn，获取 EAM session cookie
 
-3. **学生信息**：`http://jxglstu.hfut.edu.cn/eams5-student/for-std/student-info`
+3. **学生信息**：`http://jxglstu.hfut.edu.cn/eams5-student/for-std/student-info`（参考 hfut-api）
    - 需 EAM session
-   - 首次访问重定向至 `/info/{studentCode}`，解析 HTML 获取学生信息
-   - 返回字段：studentId、usernameZh、usernameEn、sex、department、major、class、campus 等
+   - 首次访问重定向至 `/info/{studentCode}`，再请求 `/info/{code}` 获取完整信息
+   - 不解析响应，直接存响应体：若为 JSON 则原样存入 cert_info，否则以 `{"raw": "..."}` 存储
 
 ## 绑定学校
 

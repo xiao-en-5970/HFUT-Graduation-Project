@@ -2,6 +2,7 @@ package hfut
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,16 +11,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/schools"
 )
 
-const (
-	eamServiceURL  = "https://cas.hfut.edu.cn/cas/login?service=http://jxglstu.hfut.edu.cn/eams5-student/neusoft-sso/login"
-	studentInfoURL = "http://jxglstu.hfut.edu.cn/eams5-student/for-std/student-info"
-)
+// fetchStudentInfo 使用 CAS cookie 获取 EAM session，再拉取学生信息（参考 hfut-api）
+// opts 从 schools 表配置传入，eam_service_url、info_url 禁止写死；未配置时跳过
+// 不解析响应，直接存响应体：若为 JSON 则原样存入 cert_info，否则以 {"raw": "..."} 形式存储
+func fetchStudentInfo(ctx context.Context, cookieStr string, opts *schools.LoginOptions) (map[string]interface{}, error) {
+	if opts == nil || opts.InfoURL == "" || opts.EAMServiceURL == "" || opts.CaptchaURL == "" {
+		return nil, nil
+	}
+	casBase := deriveBaseFromURL(opts.CaptchaURL)
+	if casBase == "" {
+		return nil, nil
+	}
 
-// fetchStudentInfo 使用 CAS cookie 获取 EAM session，再拉取学生信息页并解析
-func fetchStudentInfo(ctx context.Context, cookieStr string) (map[string]interface{}, error) {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{
 		Timeout: 15 * time.Second,
@@ -32,12 +38,11 @@ func fetchStudentInfo(ctx context.Context, cookieStr string) (map[string]interfa
 		},
 	}
 
-	// 注入 CAS cookie 到 jar
-	casURL, _ := url.Parse("https://cas.hfut.edu.cn")
+	casURL, _ := url.Parse(casBase)
 	client.Jar.SetCookies(casURL, parseCookieString(cookieStr))
 
 	// 1. 用 CAS cookie 访问 EAM service，跟随重定向获取 EAM session
-	req1, _ := http.NewRequestWithContext(ctx, "GET", eamServiceURL, nil)
+	req1, _ := http.NewRequestWithContext(ctx, "GET", opts.EAMServiceURL, nil)
 	req1.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/100.0.4896.75")
 	res1, err := client.Do(req1)
 	if err != nil {
@@ -45,8 +50,8 @@ func fetchStudentInfo(ctx context.Context, cookieStr string) (map[string]interfa
 	}
 	res1.Body.Close()
 
-	// 2. 访问学生信息页（可能重定向到 /info/{studentCode}），jar 已含 EAM cookie
-	req2, _ := http.NewRequestWithContext(ctx, "GET", studentInfoURL, nil)
+	// 2. 访问学生信息页（参考 hfut-api：首次可能 302 到 /info/{code}，从 Location 取 code）
+	req2, _ := http.NewRequestWithContext(ctx, "GET", opts.InfoURL, nil)
 	req2.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/100.0.4896.75")
 	res2, err := client.Do(req2)
 	if err != nil {
@@ -54,12 +59,50 @@ func fetchStudentInfo(ctx context.Context, cookieStr string) (map[string]interfa
 	}
 	defer res2.Body.Close()
 
-	body, err := io.ReadAll(res2.Body)
-	if err != nil {
-		return nil, err
+	code := ""
+	if res2.StatusCode == 302 {
+		loc := res2.Header.Get("Location")
+		if loc != "" {
+			// Location 形如 /eams5-student/for-std/student-info/info/2020123456
+			parts := strings.Split(strings.TrimSuffix(loc, "/"), "/")
+			if len(parts) > 0 {
+				code = parts[len(parts)-1]
+			}
+		}
 	}
 
-	return parseStudentInfoHTML(string(body))
+	// 3. 若有 code，请求 /info/{code} 获取完整信息（hfut-api 流程）
+	var body []byte
+	if code != "" {
+		infoURL := strings.TrimSuffix(opts.InfoURL, "/") + "/info/" + code
+		req3, _ := http.NewRequestWithContext(ctx, "GET", infoURL, nil)
+		req3.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/100.0.4896.75")
+		res3, err := client.Do(req3)
+		if err != nil {
+			return nil, fmt.Errorf("获取学生详情失败: %w", err)
+		}
+		defer res3.Body.Close()
+		body, err = io.ReadAll(res3.Body)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		body, err = io.ReadAll(res2.Body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return rawBodyToCertInfo(body)
+}
+
+// rawBodyToCertInfo 将响应体原样存入 cert_info：若为有效 JSON 则解析后返回，否则以 {"raw": "..."} 存储
+func rawBodyToCertInfo(body []byte) (map[string]interface{}, error) {
+	var m map[string]interface{}
+	if err := json.Unmarshal(body, &m); err == nil && m != nil {
+		return m, nil
+	}
+	return map[string]interface{}{"raw": string(body)}, nil
 }
 
 func parseCookieString(s string) []*http.Cookie {
@@ -79,77 +122,4 @@ func parseCookieString(s string) []*http.Cookie {
 		})
 	}
 	return cookies
-}
-
-// parseStudentInfoHTML 解析 EAMS5 学生信息页 HTML，提取 key-value 到 map
-func parseStudentInfoHTML(html string) (map[string]interface{}, error) {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-	if err != nil {
-		return nil, err
-	}
-
-	info := make(map[string]interface{})
-
-	// 常见结构：table tr 内 th/td 或 label+span，或 dl dt dd
-	doc.Find("table.student-info tr, table tr, .info-table tr, .form-table tr").Each(func(_ int, tr *goquery.Selection) {
-		label := strings.TrimSpace(tr.Find("th, td:first-child, .label, dt").First().Text())
-		value := strings.TrimSpace(tr.Find("td:last-child, td:nth-child(2), .value, dd").First().Text())
-		if label != "" && value != "" {
-			key := toSnakeCase(label)
-			if key != "" {
-				info[key] = value
-			}
-		}
-	})
-
-	// 备用：dl dt dd
-	doc.Find("dl").Each(func(_ int, dl *goquery.Selection) {
-		dl.Find("dt").Each(func(i int, dt *goquery.Selection) {
-			label := strings.TrimSpace(dt.Text())
-			dd := dt.NextFiltered("dd")
-			value := strings.TrimSpace(dd.First().Text())
-			if label != "" && value != "" {
-				key := toSnakeCase(label)
-				if key != "" {
-					info[key] = value
-				}
-			}
-		})
-	})
-
-	// 映射常见中文标签到标准字段
-	labelMap := map[string]string{
-		"学号": "student_id", "姓名": "username_zh", "英文名": "username_en",
-		"性别": "sex", "院系": "department", "专业": "major",
-		"班级": "class", "校区": "campus", "学院": "department",
-	}
-	for cn, en := range labelMap {
-		for k, v := range info {
-			if k == cn || strings.Contains(k, cn) {
-				info[en] = v
-				break
-			}
-		}
-	}
-
-	return info, nil
-}
-
-func toSnakeCase(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	var b strings.Builder
-	for _, r := range s {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
-			b.WriteRune(r)
-		} else if r >= 'A' && r <= 'Z' {
-			b.WriteRune(r + 32)
-		} else if r > 127 {
-			b.WriteString(s)
-			return s
-		}
-	}
-	return b.String()
 }
