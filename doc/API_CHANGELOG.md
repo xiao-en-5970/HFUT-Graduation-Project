@@ -6,6 +6,24 @@
 
 ---
 
+## 2025-02-17（验证码改为前端填写）
+
+### 修改
+
+| 接口 | 变更说明 |
+|------|----------|
+| `GET /api/v1/schools` | **新增**：学校列表，含 form_fields、captcha_url |
+| `GET /api/v1/schools/:id/captcha` | **新增**：获取验证码图片（base64）及 token |
+| `POST /api/v1/user/bind/school` | 增加 captcha、captcha_token（form_fields 含 captcha 时必填） |
+| `POST /api/v1/user/school-login` | 增加 captcha、captcha_token（需验证码的学校必填） |
+
+### 数据库
+
+- schools 表：form_fields（jsonb）、captcha_url（varchar）
+- HFUT：`UPDATE schools SET form_fields = '["username","password","captcha"]'::jsonb WHERE code = 'hfut'`
+
+---
+
 ## 2025-02-17（学校登录与绑定）
 
 ### 新增

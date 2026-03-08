@@ -507,8 +507,11 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 		return
 	}
 	var body struct {
-		Name     *string `json:"name"`
-		LoginURL *string `json:"login_url"`
+		Name       *string        `json:"name"`
+		LoginURL   *string        `json:"login_url"`
+		Code       *string        `json:"code"`
+		FormFields []string       `json:"form_fields"`
+		CaptchaURL *string        `json:"captcha_url"`
 	}
 	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
@@ -520,6 +523,15 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 	}
 	if body.LoginURL != nil {
 		updates["login_url"] = *body.LoginURL
+	}
+	if body.Code != nil {
+		updates["code"] = *body.Code
+	}
+	if body.FormFields != nil {
+		updates["form_fields"] = body.FormFields
+	}
+	if body.CaptchaURL != nil {
+		updates["captcha_url"] = *body.CaptchaURL
 	}
 	if len(updates) > 0 {
 		if err := dao.School().UpdateColumns(ctx.Request.Context(), id, updates); err != nil {
@@ -533,17 +545,29 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 // AdminSchoolCreate 管理员：新增学校
 func AdminSchoolCreate(ctx *gin.Context) {
 	var body struct {
-		Name     string `json:"name"`
-		LoginURL string `json:"login_url"`
+		Name       string   `json:"name"`
+		LoginURL   string   `json:"login_url"`
+		Code       string   `json:"code"`
+		FormFields []string `json:"form_fields"`
+		CaptchaURL string   `json:"captcha_url"`
 	}
 	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
+	formFields := body.FormFields
+	if len(formFields) == 0 {
+		formFields = []string{"username", "password"}
+	}
 	school := &model.School{
-		Name:     strPtr(body.Name),
-		LoginURL: strPtr(body.LoginURL),
-		Status:   constant.StatusValid,
+		Name:       strPtr(body.Name),
+		LoginURL:   strPtr(body.LoginURL),
+		Code:       strPtr(body.Code),
+		FormFields: model.FormFieldsJSON(formFields),
+		Status:     constant.StatusValid,
+	}
+	if body.CaptchaURL != "" {
+		school.CaptchaURL = &body.CaptchaURL
 	}
 	id, err := dao.School().Create(ctx.Request.Context(), school)
 	if err != nil {

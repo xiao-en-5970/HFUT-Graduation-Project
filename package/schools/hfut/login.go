@@ -24,16 +24,68 @@ const (
 	vercodePath = "/cas/vercode"
 )
 
-// HFUT 合肥工业大学 CAS 登录
+// HFUT 合肥工业大学 CAS 登录，需验证码（前端先调 GetCaptcha 获取）
 type HFUT struct{}
 
 func (h *HFUT) Code() string { return code }
 func (h *HFUT) Name() string { return name }
 
-// Login 仅需账号密码，内部自动处理验证码（OCR）
-func (h *HFUT) Login(ctx context.Context, username, password string) (*schools.LoginResult, error) {
+// GetCaptcha 获取验证码图片及 token，前端展示后用户输入，Login 时传入
+func (h *HFUT) GetCaptcha(ctx context.Context) (image []byte, token string, err error) {
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	loginURL := casBase + loginPath + "?service=https%3A%2F%2Fcas.hfut.edu.cn%2Fcas%2Foauth2.0%2FcallbackAuthorize%3Fclient_id%3DBsHfutEduPortal%26redirect_uri%3Dhttps%253A%252F%252Fone.hfut.edu.cn%252Fhome%252Findex%26response_type%3Dcode%26client_name%3DCasOAuthClient"
+
+	jar := &cookieJar{cookies: make(map[string]string)}
+
+	req1, _ := http.NewRequestWithContext(ctx, "GET", loginURL, nil)
+	req1.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/100.0.4896.75")
+	res1, err := client.Do(req1)
+	if err != nil {
+		return nil, "", fmt.Errorf("请求登录页失败: %w", err)
+	}
+	res1.Body.Close()
+	jar.collect(res1.Cookies())
+	cookieStr := jar.string()
+	if cookieStr == "" {
+		return nil, "", fmt.Errorf("登录太过频繁，请稍后再试")
+	}
+
+	req2, _ := http.NewRequestWithContext(ctx, "GET", casBase+vercodePath, nil)
+	req2.Header.Set("Cookie", cookieStr)
+	req2.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/100.0.4896.75")
+	res2, err := client.Do(req2)
+	if err != nil {
+		return nil, "", fmt.Errorf("获取验证码失败: %w", err)
+	}
+	imgData, _ := io.ReadAll(res2.Body)
+	res2.Body.Close()
+	jar.collect(res2.Cookies())
+	cookieStr = jar.string()
+
+	token, err = schools.StoreCaptchaSession(ctx, code, cookieStr)
+	if err != nil {
+		return nil, "", err
+	}
+	return imgData, token, nil
+}
+
+// Login 需 captcha 和 captchaToken（由 GetCaptcha 返回）
+func (h *HFUT) Login(ctx context.Context, username, password, captcha, captchaToken string) (*schools.LoginResult, error) {
 	if username == "" || password == "" {
 		return &schools.LoginResult{Success: false, Message: "账号或密码不能为空"}, nil
+	}
+	if captcha == "" || captchaToken == "" {
+		return &schools.LoginResult{Success: false, Message: "请先获取验证码并填写"}, nil
+	}
+
+	cookieStr, err := schools.GetCaptchaSession(ctx, code, captchaToken)
+	if err != nil {
+		return &schools.LoginResult{Success: false, Message: err.Error()}, nil
 	}
 
 	client := &http.Client{
@@ -42,62 +94,12 @@ func (h *HFUT) Login(ctx context.Context, username, password string) (*schools.L
 			return http.ErrUseLastResponse
 		},
 	}
-
-	const maxAttempts = 3
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		res, err := h.doLogin(ctx, client, username, password)
-		if err != nil {
-			return &schools.LoginResult{Success: false, Message: err.Error()}, nil
-		}
-		if res != nil {
-			return res, nil
-		}
-		// res==nil 表示验证码错误，重试
-		time.Sleep(time.Second)
-	}
-	return &schools.LoginResult{Success: false, Message: "验证码识别失败，请稍后重试"}, nil
-}
-
-func (h *HFUT) doLogin(ctx context.Context, client *http.Client, username, password string) (*schools.LoginResult, error) {
 	loginURL := casBase + loginPath + "?service=https%3A%2F%2Fcas.hfut.edu.cn%2Fcas%2Foauth2.0%2FcallbackAuthorize%3Fclient_id%3DBsHfutEduPortal%26redirect_uri%3Dhttps%253A%252F%252Fone.hfut.edu.cn%252Fhome%252Findex%26response_type%3Dcode%26client_name%3DCasOAuthClient"
 
 	jar := &cookieJar{cookies: make(map[string]string)}
+	jar.collect(parseCookieString(cookieStr))
 
-	// 1. 获取登录页，拿到 session
-	req1, _ := http.NewRequestWithContext(ctx, "GET", loginURL, nil)
-	req1.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/100.0.4896.75")
-	res1, err := client.Do(req1)
-	if err != nil {
-		return nil, fmt.Errorf("请求登录页失败: %w", err)
-	}
-	res1.Body.Close()
-	jar.collect(res1.Cookies())
-	cookieStr := jar.string()
-
-	if cookieStr == "" {
-		return &schools.LoginResult{Success: false, Message: "登录太过频繁，请稍后再试"}, nil
-	}
-
-	// 2. 获取验证码图片
-	req2, _ := http.NewRequestWithContext(ctx, "GET", casBase+vercodePath, nil)
-	req2.Header.Set("Cookie", cookieStr)
-	req2.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/100.0.4896.75")
-	res2, err := client.Do(req2)
-	if err != nil {
-		return nil, fmt.Errorf("获取验证码失败: %w", err)
-	}
-	imgData, _ := io.ReadAll(res2.Body)
-	res2.Body.Close()
-	jar.collect(res2.Cookies())
-	cookieStr = jar.string()
-
-	// 3. OCR 识别验证码
-	captcha, err := recognizeCaptcha(imgData)
-	if err != nil {
-		return nil, fmt.Errorf("验证码识别失败: %w", err)
-	}
-
-	// 4. checkInitVercode 获取加密盐
+	// checkInitVercode 获取加密盐
 	req4, _ := http.NewRequestWithContext(ctx, "GET", casBase+"/cas/checkInitVercode?_="+fmt.Sprint(time.Now().UnixMilli()), nil)
 	req4.Header.Set("Cookie", cookieStr)
 	req4.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/100.0.4896.75")
@@ -119,7 +121,7 @@ func (h *HFUT) doLogin(ctx context.Context, client *http.Client, username, passw
 		return nil, err
 	}
 
-	// 5. checkUserIdenty 验证身份
+	// checkUserIdenty 验证身份
 	checkURL := casBase + "/cas/policy/checkUserIdenty?" + url.Values{
 		"username": {username},
 		"password": {encPwd},
@@ -143,14 +145,10 @@ func (h *HFUT) doLogin(ctx context.Context, client *http.Client, username, passw
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body5, &checkResp); err == nil && !checkResp.Data.AuthFlag {
-		msg := checkResp.Data.Message
-		if strings.Contains(msg, "验证码") || strings.Contains(msg, "不正确") {
-			return nil, nil // 验证码错误，返回 nil 触发重试
-		}
-		return &schools.LoginResult{Success: false, Message: msg}, nil
+		return &schools.LoginResult{Success: false, Message: checkResp.Data.Message}, nil
 	}
 
-	// 6. POST 提交登录
+	// POST 提交登录
 	form := url.Values{
 		"username":    {username},
 		"password":    {encPwd},

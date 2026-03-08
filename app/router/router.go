@@ -38,6 +38,9 @@ func PublicRouter(api *gin.RouterGroup) {
 
 func PrivateRouter(api *gin.RouterGroup) {
 	api.Use(middleware.JWTAuth())
+	// 学校列表与验证码（绑定学校时用）
+	api.GET("/schools", controller.SchoolListForBind)
+	api.GET("/schools/:id/captcha", controller.SchoolCaptcha)
 	userGroup := api.Group("/user")
 	{
 		userGroup.GET("/info", controller.UserInfo)

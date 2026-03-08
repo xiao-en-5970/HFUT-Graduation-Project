@@ -15,6 +15,13 @@ type LoginResult struct {
 type School interface {
 	Code() string // 学校代码，如 hfut
 	Name() string // 学校名称
-	// Login 仅需账号密码，内部处理验证码等
-	Login(ctx context.Context, username, password string) (*LoginResult, error)
+	// Login 登录，captcha/captchaToken 为验证码时必填（由前端先调 GetCaptcha 获取）
+	Login(ctx context.Context, username, password, captcha, captchaToken string) (*LoginResult, error)
+}
+
+// SchoolWithCaptcha 需要验证码的学校，实现此接口
+type SchoolWithCaptcha interface {
+	School
+	// GetCaptcha 获取验证码图片及 token，token 用于后续 Login
+	GetCaptcha(ctx context.Context) (image []byte, token string, err error)
 }

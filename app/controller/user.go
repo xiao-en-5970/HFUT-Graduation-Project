@@ -41,21 +41,23 @@ func UserRegister(ctx *gin.Context) {
 	reply.ReplyOKWithData(ctx, gin.H{"user_id": userId})
 }
 
-// UserSchoolLogin 学校端登录：仅需账号密码，对接学校 CAS 验证（内部处理验证码）
+// UserSchoolLogin 学校端登录：对接学校 CAS，需验证码的学校传 captcha+captcha_token
 // POST /api/v1/user/school-login
-// Body: { "school_code": "hfut", "username": "学号", "password": "密码" }
+// Body: { "school_code": "hfut", "username": "学号", "password": "密码", "captcha": "验证码", "captcha_token": "xxx" }
 func UserSchoolLogin(ctx *gin.Context) {
 	type Req struct {
-		SchoolCode string `json:"school_code" binding:"required"`
-		Username   string `json:"username" binding:"required"`
-		Password   string `json:"password" binding:"required"`
+		SchoolCode   string `json:"school_code" binding:"required"`
+		Username     string `json:"username" binding:"required"`
+		Password     string `json:"password" binding:"required"`
+		Captcha      string `json:"captcha"`
+		CaptchaToken string `json:"captcha_token"`
 	}
 	var req Req
 	if err := ctx.BindJSON(&req); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	res, err := schools.Login(ctx.Request.Context(), req.SchoolCode, req.Username, req.Password)
+	res, err := schools.Login(ctx.Request.Context(), req.SchoolCode, req.Username, req.Password, req.Captcha, req.CaptchaToken)
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
 		return

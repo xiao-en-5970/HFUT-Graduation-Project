@@ -4,6 +4,11 @@
 
 `hfut`
 
+## 表单配置
+
+- **form_fields**: `[{key:"username",label_zh:"学号",label_en:"Student ID"}, {key:"password",label_zh:"密码",label_en:"Password"}, {key:"captcha",label_zh:"验证码",label_en:"Captcha"}]`
+- **captcha_url**: 空，使用后端 `GET /api/v1/schools/:id/captcha` 获取验证码
+
 ## 登录流程
 
 1. **CAS 登录**：`https://cas.hfut.edu.cn`
@@ -21,11 +26,11 @@
 
 ## 绑定学校
 
-用户绑定学校时需提供学校端账号密码，通过 `schools.Login` 验证后写入 `user_cert` 表：
-
-- 接口：`POST /api/v1/user/bind/school`
-- 请求体：`{ "school_id": 1, "username": "学号", "password": "密码" }`
-- 流程：查学校 code → 调用学校登录 → 成功则 Upsert user_cert、更新 user.school_id
+1. **获取学校列表**：`GET /api/v1/schools` → 含 form_fields、captcha_url
+2. **获取验证码**（form_fields 含 captcha 时）：`GET /api/v1/schools/:id/captcha` → `{ image, token }`
+3. **提交绑定**：`POST /api/v1/user/bind/school`
+   - 请求体：`{ "school_id": 1, "username": "学号", "password": "密码", "captcha": "验证码", "captcha_token": "xxx" }`
+   - captcha、captcha_token 在 form_fields 含 captcha 时必填
 
 ## API 文档
 

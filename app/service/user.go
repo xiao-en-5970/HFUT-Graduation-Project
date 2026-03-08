@@ -140,11 +140,13 @@ func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, e
 	return userInfo, nil
 }
 
-// BindSchoolReq 绑定学校请求（需学校端账号密码验证）
+// BindSchoolReq 绑定学校请求（需学校端账号密码验证，部分学校需 captcha+captcha_token）
 type BindSchoolReq struct {
-	SchoolID uint   `json:"school_id" binding:"required"`
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	SchoolID     uint   `json:"school_id" binding:"required"`
+	Username     string `json:"username" binding:"required"`
+	Password     string `json:"password" binding:"required"`
+	Captcha      string `json:"captcha"`
+	CaptchaToken string `json:"captcha_token"`
 }
 
 func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolReq) error {
@@ -156,7 +158,18 @@ func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolRe
 		return errors.New("该学校暂不支持在线认证绑定")
 	}
 
-	res, err := schools.Login(ctx.Request.Context(), *school.Code, req.Username, req.Password)
+	needCaptcha := false
+	for _, f := range school.FormFields {
+		if f == "captcha" {
+			needCaptcha = true
+			break
+		}
+	}
+	if needCaptcha && (req.Captcha == "" || req.CaptchaToken == "") {
+		return errors.New("请先获取验证码并填写")
+	}
+
+	res, err := schools.Login(ctx.Request.Context(), *school.Code, req.Username, req.Password, req.Captcha, req.CaptchaToken)
 	if err != nil {
 		return err
 	}

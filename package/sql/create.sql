@@ -278,6 +278,14 @@ ALTER TABLE schools
     ADD COLUMN IF NOT EXISTS code VARCHAR(32) UNIQUE;
 COMMENT ON COLUMN schools.code IS '学校代码，如 hfut，用于 school-login';
 
+-- 学校表单配置：form_fields 需填字段，captcha_url 验证码图片获取地址（空则用后端 GET /schools/:id/captcha）
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS form_fields jsonb DEFAULT '["username","password"]'::jsonb;
+ALTER TABLE schools ADD COLUMN IF NOT EXISTS captcha_url VARCHAR(512);
+COMMENT ON COLUMN schools.form_fields IS '登录表单字段：username,password,captcha 等';
+COMMENT ON COLUMN schools.captcha_url IS '验证码图片 URL，空则调用后端 GET /schools/:id/captcha';
+
+-- HFUT 需验证码，执行： UPDATE schools SET form_fields = '["username","password","captcha"]'::jsonb WHERE code = 'hfut';
+
 -- 用户认证表：记录用户在某学校的认证信息
 CREATE TABLE IF NOT EXISTS user_cert
 (
