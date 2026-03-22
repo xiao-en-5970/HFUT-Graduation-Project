@@ -79,6 +79,48 @@
         return data;
     }
 
+    /** 买卖双方用户 JWT（与管理员 token 独立，存 localStorage） */
+    const DEMO_SELLER_TOKEN = 'demo_seller_token';
+    const DEMO_BUYER_TOKEN = 'demo_buyer_token';
+    const DEMO_TRADE_ROLE = 'demo_trade_role';
+    const DEMO_ORDER_ID = 'demo_order_id';
+
+    async function userLogin(username, password) {
+        const res = await fetch(API + '/user/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({username, password})
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.code !== 0 && data.code !== 200) {
+            throw new Error(data.message || '登录失败');
+        }
+        return data.data;
+    }
+
+    async function userApi(token, url, options = {}) {
+        if (!token) throw new Error('请先登录卖家或买家用户');
+        const headers = {'Content-Type': 'application/json', ...(options.headers || {})};
+        headers['Authorization'] = 'Bearer ' + token;
+        const res = await fetch(API + url, {...options, headers});
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401 || res.status === 403) {
+            throw new Error(data.message || '用户登录已失效，请重新登录');
+        }
+        if (data.code !== 0 && data.code !== 200) {
+            throw new Error(data.message || '请求失败');
+        }
+        return data;
+    }
+
+    function getDemoTradeRole() {
+        return localStorage.getItem(DEMO_TRADE_ROLE) || 'buyer';
+    }
+
+    function demoTokenForRole(role) {
+        return role === 'seller' ? localStorage.getItem(DEMO_SELLER_TOKEN) : localStorage.getItem(DEMO_BUYER_TOKEN);
+    }
+
   function ensureUploadProgress(overlay) {
     let wrap = overlay.querySelector('.upload-progress-wrap');
     if (!wrap) {
@@ -128,7 +170,7 @@
   const moduleContent = document.getElementById('module-content');
   logoutBtn.addEventListener('click', redirectToLogin);
 
-    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'schools', 'bind-school'];
+    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'trade-demo', 'schools', 'bind-school'];
   function getRoute() {
     const hash = (location.hash || '#/users').slice(2) || 'users';
     return routes.includes(hash) ? hash : 'users';
@@ -143,6 +185,7 @@
     else if (r === 'answers') renderAnswers();
     else if (r === 'goods') renderGoods();
     else if (r === 'orders') renderOrders();
+    else if (r === 'trade-demo') renderTradeDemo();
     else if (r === 'schools') renderSchools();
     else if (r === 'bind-school') renderBindSchool();
   }
@@ -505,7 +548,8 @@
                     g._actions = `<button class="btn btn-success btn-sm" data-good-restore="${g.id}">恢复</button> <button class="btn btn-sm" data-good-edit="${g.id}">编辑</button>`;
                 }
             });
-            const extra = '<button class="btn btn-primary" id="add-good-btn">新建商品</button>';
+            const extra = '<button class="btn btn-primary" id="add-good-btn">新建商品</button> ' +
+                '<a class="btn btn-sm" href="#/trade-demo" title="用买家账号对已上架商品下单">去交易演示下单</a>';
             renderTable('商品管理', columns, list, goodPage, total, 15, (p) => {
                 goodPage = p;
                 renderGoods();
@@ -1034,8 +1078,9 @@
             list.forEach(row => {
                 row._actions = `<button class="btn btn-sm btn-primary" data-order-detail="${row.id}">详情/聊天</button>`;
             });
-            const extra = '<span class="text-muted" style="margin-left:8px">平台不经手资金，详见 doc/ORDER_AND_CHAT.md</span>';
-            renderTable('订单演示（全站）', columns, list, orderPage, total, 15, (p) => {
+            const extra = '<a class="btn btn-primary btn-sm" href="#/trade-demo">交易演示（下单+聊天）</a>' +
+                '<span class="text-muted" style="margin-left:8px">全站只读；模拟买卖请用「交易演示」</span>';
+            renderTable('订单列表（全站只读）', columns, list, orderPage, total, 15, (p) => {
                 orderPage = p;
                 renderOrders();
             }, extra);
@@ -1083,6 +1128,334 @@
         const d = document.createElement('div');
         d.textContent = s;
         return d.innerHTML;
+    }
+
+    /**
+     * 用买卖双方「用户登录」JWT 走通：上架商品 → 买家下单 → 聊天 → 同意 → 送货/收货
+     * 管理员 token 不能调 POST /orders，必须在此页分别登录卖家、买家账号。
+     */
+    async function renderTradeDemo() {
+        moduleContent.innerHTML = '<p class="text-muted">加载中…</p>';
+        const sellerTok = localStorage.getItem(DEMO_SELLER_TOKEN);
+        const buyerTok = localStorage.getItem(DEMO_BUYER_TOKEN);
+        const role = getDemoTradeRole();
+        let orderId = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
+
+        let order = null;
+        let msgs = [];
+        let loadErr = '';
+        const tok = demoTokenForRole(role);
+        if (orderId && tok) {
+            try {
+                const d = await userApi(tok, `/orders/${orderId}`);
+                order = d.data;
+                const dm = await userApi(tok, `/orders/${orderId}/messages?page=1&pageSize=200`);
+                msgs = dm.data?.list || [];
+            } catch (e) {
+                loadErr = e.message || String(e);
+            }
+        }
+
+        const buyerUid = order && order.user_id != null ? Number(order.user_id) : null;
+        const sellerUid = order && order.good && order.good.user_id != null ? Number(order.good.user_id) : null;
+        const gt = order && order.good ? order.good.goods_type : null;
+        const os = order ? Number(order.order_status) : 0;
+
+        const msgHtml = msgs.length
+            ? msgs.map(m => {
+                const sid = Number(m.sender_id);
+                const who = buyerUid != null && sid === buyerUid ? '买家' : (sellerUid != null && sid === sellerUid ? '卖家' : ('用户' + m.sender_id));
+                const imgUrl = String(m.image_url || '').replace(/"/g, '&quot;');
+                const body = Number(m.msg_type) === 2
+                    ? `<div class="trade-msg-img"><img src="${imgUrl}" alt="" class="list-thumb"/></div>`
+                    : `<div class="trade-msg-text">${escapeHtml(m.content || '')}</div>`;
+                return `<div class="trade-msg trade-msg-${who === '买家' ? 'buyer' : 'seller'}"><span class="trade-msg-who">${who}</span><span class="trade-msg-time">${(m.created_at || '').slice(0, 19)}</span>${body}</div>`;
+            }).join('')
+            : '<p class="text-muted">暂无消息（待下单后可发）</p>';
+
+        const roleSel = (r) => role === r ? 'checked' : '';
+
+        const senderAddrVal = order && !loadErr && order.sender_addr ? String(order.sender_addr).replace(/"/g, '&quot;') : '';
+
+        let actionHints = '';
+        if (order && !loadErr) {
+            if (os === 1) {
+                actionHints = '<p class="trade-hint">待下单：双方可聊天；请买卖双方各点一次「同意交易」。卖方可填发货地址（送货上门）。</p>';
+            } else if (os === 2) {
+                actionHints = '<p class="trade-hint">正在派送：卖方可「确认送达」；双方仍可聊天。</p>';
+            } else if (os === 3) {
+                actionHints = gt === 3
+                    ? '<p class="trade-hint">在线商品：买方可直接「确认收货」。</p>'
+                    : '<p class="trade-hint">待买方确认收货：买方可「确认收货」完成订单并扣库存。</p>';
+            } else if (os === 4) {
+                actionHints = '<p class="trade-hint trade-hint-ok">订单已完成。</p>';
+            } else if (os === 5) {
+                actionHints = '<p class="trade-hint">订单已取消。</p>';
+            }
+        }
+
+        moduleContent.innerHTML = `
+<div class="module-header"><h3>交易演示（买卖双方）</h3></div>
+<div class="trade-demo-intro">
+  <p><strong>说明：</strong>管理员登录仅用于进后台；<strong>下单、聊天、确认收货</strong>必须使用<strong>普通用户</strong>的账号密码登录（与 App 相同接口）。买卖双方须<strong>绑定同一学校</strong>，且商品的 <code>user_id</code> 为卖家、<code>school_id</code> 一致。</p>
+  <ol class="trade-steps">
+    <li>在「用户管理」建两个普通用户并绑定同一学校；在「商品管理」新建商品（填卖家 user_id）、保存后点<strong>上架</strong>。</li>
+    <li>下方分别<strong>登录卖家 / 买家</strong>；切换「当前身份」发消息、点同意与确认。</li>
+    <li>买家填商品 ID 与收货地址，点<strong>买家下单</strong>；再按订单状态操作直至完成。</li>
+  </ol>
+</div>
+
+<div class="trade-grid">
+  <div class="trade-card">
+    <h4>卖家登录</h4>
+    <label>用户名 <input type="text" id="td-seller-user" placeholder="卖家用户名" autocomplete="username"></label>
+    <label>密码 <input type="password" id="td-seller-pass" placeholder="密码" autocomplete="current-password"></label>
+    <button type="button" class="btn btn-primary" id="td-login-seller">登录卖家</button>
+    <p class="trade-login-status">${sellerTok ? '<span class="status-badge status-valid">已登录</span>' : '<span class="text-muted">未登录</span>'}</p>
+    <button type="button" class="btn btn-sm" id="td-clear-seller">清除卖家 Token</button>
+  </div>
+  <div class="trade-card">
+    <h4>买家登录</h4>
+    <label>用户名 <input type="text" id="td-buyer-user" placeholder="买家用户名" autocomplete="username"></label>
+    <label>密码 <input type="password" id="td-buyer-pass" placeholder="密码" autocomplete="current-password"></label>
+    <button type="button" class="btn btn-primary" id="td-login-buyer">登录买家</button>
+    <p class="trade-login-status">${buyerTok ? '<span class="status-badge status-valid">已登录</span>' : '<span class="text-muted">未登录</span>'}</p>
+    <button type="button" class="btn btn-sm" id="td-clear-buyer">清除买家 Token</button>
+  </div>
+</div>
+
+<div class="trade-card trade-role-bar">
+  <strong>当前操作身份（发消息、同意等均以此账号调用接口）：</strong>
+  <label class="trade-inline"><input type="radio" name="td-role" value="seller" ${roleSel('seller')}> 卖家</label>
+  <label class="trade-inline"><input type="radio" name="td-role" value="buyer" ${roleSel('buyer')}> 买家</label>
+</div>
+
+<div class="trade-card">
+  <h4>1. 买家下单</h4>
+  <label>商品 ID <input type="number" id="td-goods-id" placeholder="商品管理列表中的 ID" min="1"></label>
+  <label>收货/约定地址 <textarea id="td-receiver" rows="2" placeholder="送货上门必填；自提可空（会用商品自提地址）"></textarea></label>
+  <button type="button" class="btn btn-primary" id="td-create-order">买家下单（我想要）</button>
+  <p class="text-muted">不能买自己发布的商品。</p>
+</div>
+
+<div class="trade-card">
+  <h4>2. 当前订单</h4>
+  <label>订单 ID <input type="number" id="td-order-id" value="${escapeHtml(orderId)}" placeholder="下单成功后自动填入，可手改"></label>
+  <button type="button" class="btn" id="td-save-order-id">保存订单号</button>
+  <button type="button" class="btn btn-primary" id="td-refresh">刷新订单与聊天</button>
+  ${loadErr ? `<p class="error">${escapeHtml(loadErr)}</p>` : ''}
+  ${order && !loadErr ? `
+  <div class="trade-order-detail">
+    <p><strong>状态</strong> ${escapeHtml(String(order.order_status_label || ''))} <code>(${os})</code></p>
+    <p><strong>买家 user_id</strong> ${buyerUid ?? '-'} · <strong>卖家 user_id</strong> ${sellerUid ?? '-'}</p>
+    <p><strong>商品类型</strong> ${gt != null ? (GOODS_TYPE_MAP[gt] || gt) : '-'}</p>
+    <p><strong>收货</strong> ${escapeHtml(order.receiver_addr || '')}</p>
+    <p><strong>发货</strong> ${escapeHtml(order.sender_addr || '')}</p>
+    <p><strong>买方同意</strong> ${(order.buyer_agreed_at || '').slice(0, 19) || '—'} · <strong>卖方同意</strong> ${(order.seller_agreed_at || '').slice(0, 19) || '—'}</p>
+  </div>` : (!orderId ? '<p class="text-muted">请先下单或填写订单号并刷新。</p>' : '')}
+  ${actionHints}
+</div>
+
+<div class="trade-card">
+  <h4>3. 聊天（使用当前身份发送）</h4>
+  <div class="trade-chat-log" id="td-chat-log">${msgHtml}</div>
+  <label>消息 <textarea id="td-msg" rows="2" placeholder="输入文字消息"></textarea></label>
+  <button type="button" class="btn btn-primary" id="td-send-msg">发送消息</button>
+</div>
+
+<div class="trade-card">
+  <h4>4. 履约操作</h4>
+  <div class="trade-actions">
+    <button type="button" class="btn btn-primary" id="td-agree">同意交易（买卖各点一次）</button>
+    <label>卖方发货地址 <input type="text" id="td-sender-addr" value="${senderAddrVal}" placeholder="送货上门时可填" style="min-width:220px"></label>
+    <button type="button" class="btn" id="td-put-sender">保存发货地址（卖方）</button>
+    <button type="button" class="btn" id="td-confirm-delivery">确认送达（卖方·实体商品）</button>
+    <button type="button" class="btn btn-primary" id="td-confirm-receipt">确认收货（买方）</button>
+    <button type="button" class="btn btn-danger" id="td-cancel">取消订单</button>
+  </div>
+  <p class="text-muted">在线商品双方同意后不会出现「确认送达」，买方可直接确认收货。</p>
+</div>`;
+
+        const chatLog = moduleContent.querySelector('#td-chat-log');
+        if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
+
+        moduleContent.querySelector('#td-login-seller')?.addEventListener('click', async () => {
+            const u = moduleContent.querySelector('#td-seller-user').value.trim();
+            const p = moduleContent.querySelector('#td-seller-pass').value;
+            if (!u || !p) {
+                alert('请填写卖家用户名与密码');
+                return;
+            }
+            try {
+                const t = await userLogin(u, p);
+                localStorage.setItem(DEMO_SELLER_TOKEN, t);
+                alert('卖家登录成功');
+                renderTradeDemo();
+            } catch (e) {
+                alert(e.message);
+            }
+        });
+        moduleContent.querySelector('#td-login-buyer')?.addEventListener('click', async () => {
+            const u = moduleContent.querySelector('#td-buyer-user').value.trim();
+            const p = moduleContent.querySelector('#td-buyer-pass').value;
+            if (!u || !p) {
+                alert('请填写买家用户名与密码');
+                return;
+            }
+            try {
+                const t = await userLogin(u, p);
+                localStorage.setItem(DEMO_BUYER_TOKEN, t);
+                alert('买家登录成功');
+                renderTradeDemo();
+            } catch (e) {
+                alert(e.message);
+            }
+        });
+        moduleContent.querySelector('#td-clear-seller')?.addEventListener('click', () => {
+            localStorage.removeItem(DEMO_SELLER_TOKEN);
+            renderTradeDemo();
+        });
+        moduleContent.querySelector('#td-clear-buyer')?.addEventListener('click', () => {
+            localStorage.removeItem(DEMO_BUYER_TOKEN);
+            renderTradeDemo();
+        });
+        moduleContent.querySelectorAll('input[name="td-role"]').forEach(r => {
+            r.addEventListener('change', () => {
+                localStorage.setItem(DEMO_TRADE_ROLE, r.value);
+                renderTradeDemo();
+            });
+        });
+        moduleContent.querySelector('#td-save-order-id')?.addEventListener('click', () => {
+            const v = String(moduleContent.querySelector('#td-order-id').value || '').trim();
+            localStorage.setItem(DEMO_ORDER_ID, v);
+            renderTradeDemo();
+        });
+        moduleContent.querySelector('#td-refresh')?.addEventListener('click', () => renderTradeDemo());
+        moduleContent.querySelector('#td-create-order')?.addEventListener('click', async () => {
+            if (!buyerTok) {
+                alert('请先登录买家');
+                return;
+            }
+            const gid = parseInt(moduleContent.querySelector('#td-goods-id').value || '0', 10);
+            const receiver = moduleContent.querySelector('#td-receiver').value.trim();
+            if (!gid) {
+                alert('请填写商品 ID');
+                return;
+            }
+            try {
+                const d = await userApi(buyerTok, '/orders', {
+                    method: 'POST',
+                    body: JSON.stringify({goods_id: gid, receiver_addr: receiver})
+                });
+                const id = d.data?.id;
+                if (id) {
+                    localStorage.setItem(DEMO_ORDER_ID, String(id));
+                    alert('下单成功，订单号 ' + id);
+                }
+                renderTradeDemo();
+            } catch (e) {
+                alert(e.message);
+            }
+        });
+        moduleContent.querySelector('#td-send-msg')?.addEventListener('click', async () => {
+            const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
+            if (!oid) {
+                alert('请先填写订单号');
+                return;
+            }
+            const t = demoTokenForRole(getDemoTradeRole());
+            const text = moduleContent.querySelector('#td-msg').value.trim();
+            if (!text) {
+                alert('请输入消息');
+                return;
+            }
+            try {
+                await userApi(t, `/orders/${oid}/messages`, {
+                    method: 'POST',
+                    body: JSON.stringify({msg_type: 1, content: text})
+                });
+                moduleContent.querySelector('#td-msg').value = '';
+                renderTradeDemo();
+            } catch (e) {
+                alert(e.message);
+            }
+        });
+        moduleContent.querySelector('#td-agree')?.addEventListener('click', async () => {
+            const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
+            if (!oid) {
+                alert('请先填写订单号');
+                return;
+            }
+            const t = demoTokenForRole(getDemoTradeRole());
+            try {
+                await userApi(t, `/orders/${oid}/agree`, {method: 'POST', body: JSON.stringify({})});
+                renderTradeDemo();
+            } catch (e) {
+                alert(e.message);
+            }
+        });
+        moduleContent.querySelector('#td-put-sender')?.addEventListener('click', async () => {
+            const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
+            if (!oid) {
+                alert('请先填写订单号');
+                return;
+            }
+            const t = localStorage.getItem(DEMO_SELLER_TOKEN);
+            const addr = moduleContent.querySelector('#td-sender-addr').value.trim();
+            if (!addr) {
+                alert('请填写发货地址');
+                return;
+            }
+            try {
+                await userApi(t, `/orders/${oid}`, {method: 'PUT', body: JSON.stringify({sender_addr: addr})});
+                renderTradeDemo();
+            } catch (e) {
+                alert(e.message);
+            }
+        });
+        moduleContent.querySelector('#td-confirm-delivery')?.addEventListener('click', async () => {
+            const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
+            if (!oid) {
+                alert('请先填写订单号');
+                return;
+            }
+            const t = localStorage.getItem(DEMO_SELLER_TOKEN);
+            try {
+                await userApi(t, `/orders/${oid}/confirm-delivery`, {method: 'POST', body: JSON.stringify({})});
+                renderTradeDemo();
+            } catch (e) {
+                alert(e.message);
+            }
+        });
+        moduleContent.querySelector('#td-confirm-receipt')?.addEventListener('click', async () => {
+            const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
+            if (!oid) {
+                alert('请先填写订单号');
+                return;
+            }
+            const t = localStorage.getItem(DEMO_BUYER_TOKEN);
+            try {
+                await userApi(t, `/orders/${oid}/confirm-receipt`, {method: 'POST', body: JSON.stringify({})});
+                renderTradeDemo();
+            } catch (e) {
+                alert(e.message);
+            }
+        });
+        moduleContent.querySelector('#td-cancel')?.addEventListener('click', async () => {
+            const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
+            if (!oid) {
+                alert('请先填写订单号');
+                return;
+            }
+            const t = demoTokenForRole(getDemoTradeRole());
+            if (!confirm('确定取消订单？')) return;
+            try {
+                await userApi(t, `/orders/${oid}/cancel`, {method: 'POST', body: JSON.stringify({})});
+                renderTradeDemo();
+            } catch (e) {
+                alert(e.message);
+            }
+        });
     }
 
   let schoolPage = 1;

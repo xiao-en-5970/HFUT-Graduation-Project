@@ -263,3 +263,219 @@ td { font-size: 0.9rem; }
 .bind-school-already p { margin: 0.5rem 0; }
 .text-muted { color: var(--text-muted); font-size: 0.9rem; }
 .bind-actions { margin-top: 1.5rem; }
+
+/* 交易演示 */
+.content .error {
+    color: #fca5a5;
+    margin: 0.5rem 0;
+}
+
+.trade-demo-intro {
+    background: var(--bg-card);
+    border: 1px solid #2d323c;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+
+.trade-demo-intro code {
+    background: #1f2228;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.trade-steps {
+    margin: 0.75rem 0 0 1.25rem;
+    padding: 0;
+}
+
+.trade-steps li {
+    margin-bottom: 0.35rem;
+}
+
+.trade-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.trade-card {
+    background: var(--bg-card);
+    border: 1px solid #2d323c;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.trade-card h4 {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    color: var(--text-muted);
+}
+
+.trade-card label {
+    display: block;
+    margin-bottom: 0.65rem;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+}
+
+.trade-card input[type="text"],
+.trade-card input[type="number"],
+.trade-card input[type="password"],
+.trade-card textarea {
+    width: 100%;
+    max-width: 420px;
+    margin-top: 0.25rem;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #3d424d;
+    border-radius: 6px;
+    background: var(--bg-dark);
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+.trade-card textarea {
+    min-height: 56px;
+    resize: vertical;
+}
+
+.trade-card .btn {
+    margin-top: 0.35rem;
+    margin-right: 0.5rem;
+}
+
+.trade-login-status {
+    margin: 0.5rem 0;
+    font-size: 0.85rem;
+}
+
+.trade-role-bar .trade-inline {
+    display: inline-block;
+    margin-right: 1rem;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.trade-role-bar input {
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}
+
+.trade-order-detail {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: #1f2228;
+    border-radius: 8px;
+    font-size: 0.88rem;
+}
+
+.trade-order-detail p {
+    margin: 0.35rem 0;
+}
+
+.trade-hint {
+    margin-top: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    background: rgba(99, 102, 241, 0.12);
+    border-radius: 8px;
+    font-size: 0.88rem;
+    color: var(--text);
+}
+
+.trade-hint-ok {
+    background: rgba(34, 197, 94, 0.12);
+    color: #86efac;
+}
+
+.trade-chat-log {
+    max-height: 280px;
+    overflow-y: auto;
+    background: #1a1d23;
+    border: 1px solid #3d424d;
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.trade-msg {
+    margin-bottom: 0.65rem;
+    padding: 0.5rem 0.65rem;
+    border-radius: 8px;
+    font-size: 0.88rem;
+}
+
+.trade-msg-buyer {
+    background: rgba(99, 102, 241, 0.15);
+    border-left: 3px solid var(--accent);
+}
+
+.trade-msg-seller {
+    background: rgba(34, 197, 94, 0.12);
+    border-left: 3px solid var(--success);
+}
+
+.trade-msg-who {
+    font-weight: 600;
+    margin-right: 0.5rem;
+    color: var(--text);
+}
+
+.trade-msg-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.trade-msg-text {
+    margin-top: 0.35rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.trade-msg-img {
+    margin-top: 0.35rem;
+}
+
+.trade-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
+.trade-actions .btn {
+    margin: 0;
+}
+
+.order-detail-meta p {
+    margin: 0.35rem 0;
+    font-size: 0.9rem;
+}
+
+.order-chat-log {
+    max-height: 240px;
+    overflow-y: auto;
+    margin: 0.5rem 0;
+    padding: 0.5rem;
+    background: #1a1d23;
+    border-radius: 8px;
+    font-size: 0.88rem;
+}
+
+.order-msg {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #2d323c;
+}
+
+.order-msg-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 0.25rem;
+}
