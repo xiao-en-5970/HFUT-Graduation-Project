@@ -156,7 +156,7 @@ func AdminGoodDisable(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	st := constant.StatusInvalid
+	st := int16(constant.StatusInvalid)
 	if err := service.Good().AdminUpdate(ctx, id, service.AdminUpdateGoodReq{Status: &st}); err != nil {
 		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在")
@@ -174,7 +174,7 @@ func AdminGoodRestore(ctx *gin.Context) {
 	if !ok {
 		return
 	}
-	st := constant.StatusValid
+	st := int16(constant.StatusValid)
 	if err := service.Good().AdminUpdate(ctx, id, service.AdminUpdateGoodReq{Status: &st}); err != nil {
 		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在")
