@@ -1,7 +1,8 @@
 name: CI/CD
 
 # 分支 push：仅代码检查；tag push：代码检查 + 构建镜像 + 部署
-# cache: false 避免 Artifact storage quota 超限（免费额度有限）
+# setup-go cache: false 避免占用 Actions 缓存额度（与 Artifact 不同，但可减轻账单压力）
+# 使用 Node 24 运行时的 action 版本，避免 Node 20 弃用告警，见 doc/CI_CD.md
 permissions:
   contents: read
   actions: read
@@ -13,6 +14,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  # 在官方 action 尚未全部切到 Node 24 前，显式使用 Node 24 运行 JS actions（2026-06 起默认）
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # 1. 代码检查（分支与 tag 均执行）
@@ -20,9 +23,9 @@ jobs:
     name: 1. 代码检查
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.23"
           cache: false
@@ -43,9 +46,9 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.23"
           cache: false
@@ -58,14 +61,14 @@ jobs:
         run: echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: 登录 GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 构建并推送
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
