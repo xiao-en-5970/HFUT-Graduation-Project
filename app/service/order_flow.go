@@ -111,25 +111,6 @@ func (s *orderService) CreateOrderMessage(ctx *gin.Context, orderID uint, userID
 	return dao.OrderMessage().Create(ctx.Request.Context(), m)
 }
 
-// BuyerClaimPaid 买方表示已线下付款并下单 → 待卖方确认收款
-func (s *orderService) BuyerClaimPaid(ctx *gin.Context, orderID uint, userID uint) error {
-	o, _, isBuyer, _, err := s.resolveOrderParticipant(ctx, orderID, userID)
-	if err != nil {
-		return err
-	}
-	if !isBuyer {
-		return errno.ErrOrderNotParticipant
-	}
-	if o.OrderStatus != constant.OrderStatusPendingBuyerPayment {
-		return errno.ErrOrderInvalidState
-	}
-	now := time.Now()
-	return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, map[string]interface{}{
-		"order_status":    constant.OrderStatusAwaitSellerPaymentConfirm,
-		"buyer_agreed_at": &now,
-	})
-}
-
 // SellerConfirmPayment 卖方确认已收款 → 送货上门/自提进入履约中；在线商品直接进入待买方确认收货
 func (s *orderService) SellerConfirmPayment(ctx *gin.Context, orderID uint, userID uint) error {
 	o, g, _, isSeller, err := s.resolveOrderParticipant(ctx, orderID, userID)
@@ -251,7 +232,7 @@ func (s *orderService) CancelOrder(ctx *gin.Context, orderID uint, userID uint) 
 		return err
 	}
 	switch o.OrderStatus {
-	case constant.OrderStatusPendingBuyerPayment, constant.OrderStatusAwaitSellerPaymentConfirm, constant.OrderStatusFulfillment:
+	case constant.OrderStatusAwaitSellerPaymentConfirm, constant.OrderStatusFulfillment, constant.OrderStatusPendingBuyerConfirm:
 		return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, map[string]interface{}{
 			"order_status": constant.OrderStatusCancelled,
 		})

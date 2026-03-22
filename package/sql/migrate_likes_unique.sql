@@ -27,3 +27,20 @@ WHERE order_status = 3;
 UPDATE orders
 SET order_status = 3
 WHERE order_status = 2;
+
+
+UPDATE orders
+SET order_status = 5
+WHERE order_status = 6;
+UPDATE orders
+SET order_status = 4
+WHERE order_status = 5;
+UPDATE orders
+SET order_status = 3
+WHERE order_status = 4;
+UPDATE orders
+SET order_status = 2
+WHERE order_status = 3;
+UPDATE orders
+SET order_status = 1
+WHERE order_status = 2;

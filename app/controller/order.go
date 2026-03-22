@@ -71,8 +71,6 @@ func OrderList(ctx *gin.Context) {
 
 func orderStatusLabel(st int16, goodsType int16) string {
 	switch st {
-	case constant.OrderStatusPendingBuyerPayment:
-		return "待买方付款下单"
 	case constant.OrderStatusAwaitSellerPaymentConfirm:
 		return "待卖方确认收款"
 	case constant.OrderStatusFulfillment:

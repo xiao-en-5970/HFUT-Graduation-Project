@@ -16,7 +16,7 @@ type Order struct {
 	ReceiverAddr       string         `gorm:"column:receiver_addr;type:varchar(512)" json:"receiver_addr"`                            // 收货地址
 	SenderAddr         string         `gorm:"column:sender_addr;type:varchar(512)" json:"sender_addr"`                                // 发货地址
 	DistanceMeters     *int           `gorm:"column:distance_meters" json:"distance_meters,omitempty"`                                // 发货地与收货地步行规划距离（米），高德 API
-	BuyerAgreedAt      *time.Time     `gorm:"column:buyer_agreed_at" json:"buyer_agreed_at,omitempty"`                                // 买方表示已付款并下单时间
+	BuyerAgreedAt      *time.Time     `gorm:"column:buyer_agreed_at" json:"buyer_agreed_at,omitempty"`                                // 买方下单时间
 	SellerAgreedAt     *time.Time     `gorm:"column:seller_agreed_at" json:"seller_agreed_at,omitempty"`                              // 卖方确认收款时间
 	DeliveryImages     pq.StringArray `gorm:"column:delivery_images;type:varchar(2048)[]" json:"delivery_images,omitempty"`           // 卖方送达凭证图
 	BuyerConfirmImages pq.StringArray `gorm:"column:buyer_confirm_images;type:varchar(2048)[]" json:"buyer_confirm_images,omitempty"` // 买方确认收货时附加图

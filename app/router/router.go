@@ -129,7 +129,7 @@ func PrivateRouter(api *gin.RouterGroup) {
 		goodGroup.POST("/:id/off-shelf", controller.GoodOffShelf)
 		goodGroup.POST("/:id/images", controller.GoodUploadImages)
 	}
-	// 订单模块（平台不经手资金：聊天 + 双方同意后派送 + 确认收货扣库存）
+	// 订单模块（平台不经手资金：下单→卖方确认收款→派送/自提→确认收货扣库存）
 	orderGroup := api.Group("/orders")
 	{
 		orderGroup.POST("", controller.OrderCreate)
@@ -137,7 +137,6 @@ func PrivateRouter(api *gin.RouterGroup) {
 		orderGroup.GET("/sold", controller.OrderListSold)
 		orderGroup.GET("/:id/messages", controller.OrderMessagesList)
 		orderGroup.POST("/:id/messages", controller.OrderMessageCreate)
-		orderGroup.POST("/:id/buyer-claim-paid", controller.OrderBuyerClaimPaid)
 		orderGroup.POST("/:id/seller-confirm-payment", controller.OrderSellerConfirmPayment)
 		orderGroup.POST("/:id/confirm-delivery", controller.OrderConfirmDelivery)
 		orderGroup.POST("/:id/confirm-receipt", controller.OrderConfirmReceipt)

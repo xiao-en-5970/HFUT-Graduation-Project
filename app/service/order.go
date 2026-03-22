@@ -28,12 +28,11 @@ func goodAddrForOrder(g *model.Good) string {
 	return strings.TrimSpace(g.PickupAddr)
 }
 
-// CreateOrderReq 创建订单：默认「待买方付款下单」可聊天；可选 buyer_claim_paid 直接进入待卖方确认收款
+// CreateOrderReq 创建订单：直接进入「待卖方确认收款」；buyer_agreed_at 记下单时间（买方契约）
 type CreateOrderReq struct {
-	GoodsID        uint   `json:"goods_id" binding:"required"`
-	ReceiverAddr   string `json:"receiver_addr"`    // 可选
-	SenderAddr     string `json:"sender_addr"`      // 可选
-	BuyerClaimPaid bool   `json:"buyer_claim_paid"` // 为 true 时表示创建同时已线下付款，进入待卖方确认收款
+	GoodsID      uint   `json:"goods_id" binding:"required"`
+	ReceiverAddr string `json:"receiver_addr"` // 可选
+	SenderAddr   string `json:"sender_addr"`   // 可选
 }
 
 func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req CreateOrderReq) (uint, error) {
@@ -60,17 +59,14 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 	if sender == "" {
 		sender = goodAddrForOrder(good)
 	}
+	now := time.Now()
 	o := &model.Order{
-		UserID:       &uid,
-		GoodsID:      &gid,
-		OrderStatus:  constant.OrderStatusPendingBuyerPayment,
-		ReceiverAddr: receiver,
-		SenderAddr:   sender,
-	}
-	if req.BuyerClaimPaid {
-		now := time.Now()
-		o.OrderStatus = constant.OrderStatusAwaitSellerPaymentConfirm
-		o.BuyerAgreedAt = &now
+		UserID:        &uid,
+		GoodsID:       &gid,
+		OrderStatus:   constant.OrderStatusAwaitSellerPaymentConfirm,
+		ReceiverAddr:  receiver,
+		SenderAddr:    sender,
+		BuyerAgreedAt: &now,
 	}
 	// 仅「送货上门」在买卖地址齐全时计算步行距离；自提/在线不计算
 	if good.GoodsType == constant.GoodsTypeDelivery {
@@ -125,8 +121,7 @@ func (s *orderService) UpdateSellerInfo(ctx *gin.Context, id uint, sellerID uint
 	if err != nil || g == nil || g.UserID == nil || uint(*g.UserID) != sellerID {
 		return errors.New("订单不存在或无权操作")
 	}
-	if o.OrderStatus != constant.OrderStatusPendingBuyerPayment &&
-		o.OrderStatus != constant.OrderStatusAwaitSellerPaymentConfirm &&
+	if o.OrderStatus != constant.OrderStatusAwaitSellerPaymentConfirm &&
 		o.OrderStatus != constant.OrderStatusFulfillment {
 		return errno.ErrOrderInvalidState
 	}
