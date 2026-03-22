@@ -8,14 +8,8 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/config"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/amap"
-)
-
-var (
-	ErrOrderGoodNotFound      = errors.New("商品不存在或已下架")
-	ErrOrderGoodNotOnSale     = errors.New("商品未上架")
-	ErrOrderInsufficientStock = errors.New("库存不足")
-	ErrOrderNotFound          = errors.New("订单不存在")
 )
 
 type orderService struct{}
@@ -29,13 +23,13 @@ type CreateOrderReq struct {
 func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req CreateOrderReq) (uint, error) {
 	good, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), req.GoodsID, schoolID)
 	if err != nil || good == nil {
-		return 0, ErrOrderGoodNotFound
+		return 0, errno.ErrOrderGoodNotFound
 	}
 	if good.GoodStatus != dao.GoodStatusOnSale {
-		return 0, ErrOrderGoodNotOnSale
+		return 0, errno.ErrOrderGoodNotOnSale
 	}
 	if good.Stock < 1 {
-		return 0, ErrOrderInsufficientStock
+		return 0, errno.ErrOrderInsufficientStock
 	}
 	// 不能买自己的商品
 	if good.UserID != nil && uint(*good.UserID) == buyerID {
@@ -88,10 +82,10 @@ func (s *orderService) UpdateStatus(ctx *gin.Context, id uint, orderStatus int16
 func (s *orderService) UpdateSellerInfo(ctx *gin.Context, id uint, sellerID uint, senderAddr string, orderStatus *int16) error {
 	o, err := dao.Order().GetByID(ctx.Request.Context(), id)
 	if err != nil || o == nil {
-		return ErrOrderNotFound
+		return errno.ErrOrderNotFound
 	}
 	if o.GoodsID == nil {
-		return ErrOrderNotFound
+		return errno.ErrOrderNotFound
 	}
 	g, err := dao.Good().GetByID(ctx.Request.Context(), uint(*o.GoodsID))
 	if err != nil || g == nil || g.UserID == nil || uint(*g.UserID) != sellerID {

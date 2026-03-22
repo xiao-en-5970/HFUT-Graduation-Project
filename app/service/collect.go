@@ -1,22 +1,13 @@
 package service
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"gorm.io/gorm"
-)
-
-var (
-	ErrCollectFolderNotFound   = errors.New("收藏夹不存在")
-	ErrCollectFolderNotOwned   = errors.New("无权限操作该收藏夹")
-	ErrCollectArticleNotFound  = errors.New("文章不存在")
-	ErrCollectAlreadyCollected = errors.New("已收藏")
-	ErrCollectNotCollected     = errors.New("未收藏")
 )
 
 type collectService struct{}
@@ -63,7 +54,7 @@ func (s *collectService) resolveCollectID(ctx *gin.Context, userID uint, collect
 	if collectID > 0 {
 		folder, err := dao.Collect().GetByIDAndUser(ctx.Request.Context(), collectID, userID)
 		if err != nil || folder == nil {
-			return 0, ErrCollectFolderNotFound
+			return 0, errno.ErrCollectFolderNotFound
 		}
 		return collectID, nil
 	}
@@ -82,12 +73,12 @@ func (s *collectService) AddArticle(ctx *gin.Context, userID uint, schoolID uint
 	}
 	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 	if err != nil || art == nil {
-		return ErrCollectArticleNotFound
+		return errno.ErrCollectArticleNotFound
 	}
 	if art.PublishStatus == 1 {
 		ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
 		if !ok {
-			return ErrCollectArticleNotFound
+			return errno.ErrCollectArticleNotFound
 		}
 	}
 	// 惰性新建：若存在 status=2 的记录则恢复，否则新建；已收藏则幂等返回成功
@@ -135,7 +126,7 @@ func (s *collectService) AddArticle(ctx *gin.Context, userID uint, schoolID uint
 func (s *collectService) addGoodCollect(ctx *gin.Context, userID uint, schoolID uint, collectID uint, goodID uint) error {
 	g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), goodID, schoolID)
 	if err != nil || g == nil {
-		return ErrCollectArticleNotFound
+		return errno.ErrCollectArticleNotFound
 	}
 	exist, getErr := dao.CollectItem().GetByCollectExt(ctx.Request.Context(), collectID, int(goodID), constant.ExtTypeGoods)
 	if getErr == nil {

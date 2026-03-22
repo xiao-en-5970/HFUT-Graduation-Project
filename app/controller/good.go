@@ -9,6 +9,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
@@ -77,7 +78,7 @@ func GoodGet(ctx *gin.Context) {
 	}
 	g, err := service.Good().Get(ctx, uint(id), userID, schoolID)
 	if err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyNotFound(ctx, errcode.ErrGoodNotFound)
 			return
 		}
@@ -103,7 +104,7 @@ func GoodCreate(ctx *gin.Context) {
 	}
 	id, err := service.Good().Create(ctx, userID, schoolID, req)
 	if err != nil {
-		if errors.Is(err, service.ErrSchoolNotBound) {
+		if errors.Is(err, errno.ErrSchoolNotBound) {
 			reply.ReplyErrWithMessage(ctx, "请先绑定学校")
 			return
 		}
@@ -133,7 +134,7 @@ func GoodUpdate(ctx *gin.Context) {
 		return
 	}
 	if err := service.Good().Update(ctx, uint(id), userID, schoolID, req); err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在或无权限")
 			return
 		}
@@ -157,7 +158,7 @@ func GoodPublish(ctx *gin.Context) {
 		return
 	}
 	if err := service.Good().Publish(ctx, uint(id), userID); err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在或无权限")
 			return
 		}
@@ -181,7 +182,7 @@ func GoodOffShelf(ctx *gin.Context) {
 		return
 	}
 	if err := service.Good().OffShelf(ctx, uint(id), userID); err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在或无权限")
 			return
 		}
@@ -216,7 +217,7 @@ func GoodUploadImages(ctx *gin.Context) {
 	}
 	urls, err := service.Good().UploadImages(ctx, uint(id), userID, files)
 	if err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在或无权限")
 			return
 		}

@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
@@ -42,11 +43,11 @@ func CommentCreate(ctx *gin.Context) {
 	}
 	commentID, err := service.Comment().Create(ctx, userID, schoolID, articleID, extType, req)
 	if err != nil {
-		if errors.Is(err, service.ErrCommentArticleNotFound) {
+		if errors.Is(err, errno.ErrCommentArticleNotFound) {
 			reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 			return
 		}
-		if errors.Is(err, service.ErrCommentParentNotFound) {
+		if errors.Is(err, errno.ErrCommentParentNotFound) {
 			reply.ReplyErrWithMessage(ctx, "父评论不存在")
 			return
 		}
@@ -76,7 +77,7 @@ func CommentList(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
 	list, total, err := service.Comment().ListComments(ctx, userID, schoolID, articleID, extType, page, pageSize)
 	if err != nil {
-		if errors.Is(err, service.ErrCommentArticleNotFound) {
+		if errors.Is(err, errno.ErrCommentArticleNotFound) {
 			reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 			return
 		}
@@ -115,11 +116,11 @@ func CommentListReplies(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
 	list, total, err := service.Comment().ListReplies(ctx, userID, schoolID, articleID, uint(commentID), extType, page, pageSize)
 	if err != nil {
-		if errors.Is(err, service.ErrCommentArticleNotFound) {
+		if errors.Is(err, errno.ErrCommentArticleNotFound) {
 			reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 			return
 		}
-		if errors.Is(err, service.ErrCommentParentNotFound) {
+		if errors.Is(err, errno.ErrCommentParentNotFound) {
 			reply.ReplyErrWithMessage(ctx, "评论不存在")
 			return
 		}

@@ -8,17 +8,10 @@ import (
 	"github.com/lib/pq"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/snowflake"
-)
-
-var (
-	ErrArticleNotFoundOrNoPermission = errors.New("帖子不存在或无权限")
-	ErrSchoolNotBound                = errors.New("请先绑定学校")
-	ErrParentQuestionRequired        = errors.New("回答必须指定父提问 parent_id")
-	ErrParentQuestionNotFound        = errors.New("父提问不存在或非本校")
-	ErrDraftNotFoundOrNoPermission   = errors.New("草稿不存在或无权限")
 )
 
 type articleService struct{}
@@ -47,16 +40,16 @@ type UpdateArticleReq struct {
 // is_public=1 时帖子和提问的 school_id 为 0（全站公开）；回答继承父提问的 school_id
 func (s *articleService) Create(ctx *gin.Context, userID uint, schoolID uint, articleType int, req CreateArticleReq) (uint, error) {
 	if articleType != constant.ArticleTypeAnswer && schoolID == 0 {
-		return 0, ErrSchoolNotBound
+		return 0, errno.ErrSchoolNotBound
 	}
 	var articleSchoolID *int
 	if articleType == constant.ArticleTypeAnswer {
 		if req.ParentID == nil || *req.ParentID == 0 {
-			return 0, ErrParentQuestionRequired
+			return 0, errno.ErrParentQuestionRequired
 		}
 		parent, err := dao.Article().GetByIDWithSchoolOrPublicAndType(ctx.Request.Context(), *req.ParentID, schoolID, constant.ArticleTypeQuestion)
 		if err != nil || parent == nil {
-			return 0, ErrParentQuestionNotFound
+			return 0, errno.ErrParentQuestionNotFound
 		}
 		articleSchoolID = parent.SchoolID
 	} else {
@@ -65,7 +58,7 @@ func (s *articleService) Create(ctx *gin.Context, userID uint, schoolID uint, ar
 			articleSchoolID = &zero
 		} else {
 			if schoolID == 0 {
-				return 0, ErrSchoolNotBound
+				return 0, errno.ErrSchoolNotBound
 			}
 			sid := int(schoolID)
 			articleSchoolID = &sid
@@ -99,14 +92,14 @@ func (s *articleService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID 
 	}
 	if art.Status == constant.StatusDraft {
 		if art.UserID == nil || uint(*art.UserID) != viewerID {
-			return nil, ErrArticleNotFoundOrNoPermission
+			return nil, errno.ErrArticleNotFoundOrNoPermission
 		}
 		return art, nil
 	}
 	if art.PublishStatus == 1 {
 		ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), id, viewerID, schoolID, articleType)
 		if !ok {
-			return nil, ErrArticleNotFoundOrNoPermission
+			return nil, errno.ErrArticleNotFoundOrNoPermission
 		}
 	}
 	return art, nil
@@ -119,7 +112,7 @@ func (s *articleService) Update(ctx *gin.Context, id uint, userID uint, schoolID
 		return err
 	}
 	if !ok {
-		return ErrArticleNotFoundOrNoPermission
+		return errno.ErrArticleNotFoundOrNoPermission
 	}
 	updates := make(map[string]interface{})
 	if req.Title != nil {
@@ -155,7 +148,7 @@ func (s *articleService) UploadImages(ctx *gin.Context, id uint, userID uint, sc
 		return nil, err
 	}
 	if !ok {
-		return nil, ErrArticleNotFoundOrNoPermission
+		return nil, errno.ErrArticleNotFoundOrNoPermission
 	}
 	if len(files) == 0 {
 		return nil, errors.New("至少需要上传一张图片")
@@ -181,7 +174,7 @@ func (s *articleService) Delete(ctx *gin.Context, id uint, userID uint, schoolID
 		return err
 	}
 	if !ok {
-		return ErrArticleNotFoundOrNoPermission
+		return errno.ErrArticleNotFoundOrNoPermission
 	}
 	return dao.Article().SoftDelete(ctx.Request.Context(), id)
 }
@@ -194,13 +187,13 @@ func (s *articleService) List(ctx *gin.Context, viewerSchoolID uint, articleType
 // ListByUser 按用户分页列出文章。自己看自己：含私密(publish_status=1)；看别人：仅公开(publish_status=2)
 func (s *articleService) ListByUser(ctx *gin.Context, targetUserID uint, viewerID uint, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
 	if targetUserID == 0 {
-		return nil, 0, ErrArticleNotFoundOrNoPermission
+		return nil, 0, errno.ErrArticleNotFoundOrNoPermission
 	}
 	onlyPublic := (viewerID != targetUserID)
 	if onlyPublic {
 		// 看别人：目标用户需存在且正常
 		if _, err := dao.User().GetByIDIfValid(ctx.Request.Context(), targetUserID); err != nil {
-			return nil, 0, ErrArticleNotFoundOrNoPermission
+			return nil, 0, errno.ErrArticleNotFoundOrNoPermission
 		}
 	}
 	return dao.Article().ListByUserID(ctx.Request.Context(), targetUserID, articleType, onlyPublic, viewerSchoolID, page, pageSize)
@@ -220,7 +213,7 @@ func (s *articleService) AggregateSearch(ctx *gin.Context, params dao.AggregateS
 func (s *articleService) ListAnswersByQuestionID(ctx *gin.Context, questionID uint, viewerSchoolID uint, page, pageSize int) ([]*model.Article, int64, error) {
 	question, err := dao.Article().GetByIDWithSchoolOrPublicAndType(ctx.Request.Context(), questionID, viewerSchoolID, constant.ArticleTypeQuestion)
 	if err != nil || question == nil {
-		return nil, 0, ErrParentQuestionNotFound
+		return nil, 0, errno.ErrParentQuestionNotFound
 	}
 	return dao.Article().ListByParentID(ctx.Request.Context(), questionID, question.SchoolID, constant.ArticleTypeAnswer, page, pageSize)
 }
@@ -240,7 +233,7 @@ func (s *articleService) PublishDraft(ctx *gin.Context, id uint, userID uint) er
 		return err
 	}
 	if !ok {
-		return ErrDraftNotFoundOrNoPermission
+		return errno.ErrDraftNotFoundOrNoPermission
 	}
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
@@ -35,7 +36,7 @@ func LikeAdd(ctx *gin.Context) {
 		return
 	}
 	if err := service.Like().AddArticle(ctx, userID, schoolID, extID, extType); err != nil {
-		if errors.Is(err, service.ErrLikeArticleNotFound) {
+		if errors.Is(err, errno.ErrLikeArticleNotFound) {
 			reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 			return
 		}
@@ -62,7 +63,7 @@ func LikeRemove(ctx *gin.Context) {
 		return
 	}
 	if err := service.Like().RemoveArticle(ctx, userID, schoolID, extID, extType); err != nil {
-		if errors.Is(err, service.ErrLikeArticleNotFound) {
+		if errors.Is(err, errno.ErrLikeArticleNotFound) {
 			reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 			return
 		}

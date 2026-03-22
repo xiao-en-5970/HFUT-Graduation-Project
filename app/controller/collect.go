@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
@@ -42,7 +43,7 @@ func CollectAdd(ctx *gin.Context) {
 		return
 	}
 	if err := service.Collect().AddArticle(ctx, userID, schoolID, body.CollectID, extID, extType); err != nil {
-		if errors.Is(err, service.ErrCollectArticleNotFound) {
+		if errors.Is(err, errno.ErrCollectArticleNotFound) {
 			reply.ReplyErrWithMessage(ctx, "内容不存在")
 			return
 		}
@@ -70,7 +71,7 @@ func CollectRemove(ctx *gin.Context) {
 	collectIDStr := ctx.DefaultQuery("collect_id", "0")
 	collectID, _ := strconv.ParseUint(collectIDStr, 10, 32)
 	if err := service.Collect().RemoveArticle(ctx, userID, uint(collectID), extID, extType); err != nil {
-		if errors.Is(err, service.ErrCollectFolderNotFound) {
+		if errors.Is(err, errno.ErrCollectFolderNotFound) {
 			reply.ReplyErrWithMessage(ctx, "收藏夹不存在")
 			return
 		}
@@ -153,7 +154,7 @@ func ListCollectItems(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
 	list, total, err := service.Collect().ListItems(ctx, userID, uint(folderID), extType, page, pageSize)
 	if err != nil {
-		if errors.Is(err, service.ErrCollectFolderNotFound) {
+		if errors.Is(err, errno.ErrCollectFolderNotFound) {
 			reply.ReplyErrWithMessage(ctx, "收藏夹不存在")
 			return
 		}

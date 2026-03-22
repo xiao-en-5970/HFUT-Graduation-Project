@@ -1,20 +1,13 @@
 package service
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"gorm.io/gorm"
-)
-
-var (
-	ErrLikeArticleNotFound = errors.New("文章不存在")
-	ErrLikeAlreadyLiked    = errors.New("已点赞")
-	ErrLikeNotLiked        = errors.New("未点赞")
 )
 
 type likeService struct{}
@@ -27,12 +20,12 @@ func (s *likeService) AddArticle(ctx *gin.Context, userID uint, schoolID uint, a
 	}
 	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 	if err != nil || art == nil {
-		return ErrLikeArticleNotFound
+		return errno.ErrLikeArticleNotFound
 	}
 	if art.PublishStatus == 1 {
 		ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
 		if !ok {
-			return ErrLikeArticleNotFound
+			return errno.ErrLikeArticleNotFound
 		}
 	}
 	// 惰性新建：若存在 status=2 的记录则恢复，否则新建；已点赞则幂等返回成功
@@ -81,7 +74,7 @@ func (s *likeService) AddArticle(ctx *gin.Context, userID uint, schoolID uint, a
 func (s *likeService) addGoodLike(ctx *gin.Context, userID uint, schoolID uint, goodID uint) error {
 	g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), goodID, schoolID)
 	if err != nil || g == nil {
-		return ErrLikeArticleNotFound
+		return errno.ErrLikeArticleNotFound
 	}
 	_ = g
 	exist, getErr := dao.Like().GetByUserExt(ctx.Request.Context(), userID, int(goodID), constant.ExtTypeGoods)
@@ -127,7 +120,7 @@ func (s *likeService) RemoveArticle(ctx *gin.Context, userID uint, schoolID uint
 	if extType == constant.ExtTypeGoods {
 		_, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), articleID, schoolID)
 		if err != nil {
-			return ErrLikeArticleNotFound
+			return errno.ErrLikeArticleNotFound
 		}
 		ok, _ := dao.Like().Exists(ctx.Request.Context(), userID, int(articleID), extType)
 		if !ok {
@@ -142,7 +135,7 @@ func (s *likeService) RemoveArticle(ctx *gin.Context, userID uint, schoolID uint
 	}
 	_, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 	if err != nil {
-		return ErrLikeArticleNotFound
+		return errno.ErrLikeArticleNotFound
 	}
 	ok, _ := dao.Like().Exists(ctx.Request.Context(), userID, int(articleID), extType)
 	if !ok {

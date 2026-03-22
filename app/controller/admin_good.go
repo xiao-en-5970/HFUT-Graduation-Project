@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
@@ -77,7 +78,7 @@ func AdminGoodUpdate(ctx *gin.Context) {
 		return
 	}
 	if err := service.Good().AdminUpdate(ctx, id, req); err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在")
 			return
 		}
@@ -94,7 +95,7 @@ func AdminGoodPublish(ctx *gin.Context) {
 		return
 	}
 	if err := service.Good().AdminPublish(ctx, id); err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在")
 			return
 		}
@@ -111,7 +112,7 @@ func AdminGoodOffShelf(ctx *gin.Context) {
 		return
 	}
 	if err := service.Good().AdminOffShelf(ctx, id); err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在")
 			return
 		}
@@ -139,7 +140,7 @@ func AdminGoodUploadImages(ctx *gin.Context) {
 	}
 	urls, err := service.Good().AdminUploadImages(ctx, id, files)
 	if err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在")
 			return
 		}
@@ -157,7 +158,7 @@ func AdminGoodDisable(ctx *gin.Context) {
 	}
 	st := constant.StatusInvalid
 	if err := service.Good().AdminUpdate(ctx, id, service.AdminUpdateGoodReq{Status: &st}); err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在")
 			return
 		}
@@ -175,7 +176,7 @@ func AdminGoodRestore(ctx *gin.Context) {
 	}
 	st := constant.StatusValid
 	if err := service.Good().AdminUpdate(ctx, id, service.AdminUpdateGoodReq{Status: &st}); err != nil {
-		if errors.Is(err, service.ErrGoodNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrGoodNotFoundOrNoPermission) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在")
 			return
 		}

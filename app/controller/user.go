@@ -8,6 +8,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
@@ -253,7 +254,7 @@ func UserListArticlesByType(ctx *gin.Context, articleType int) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
 	list, total, err := service.Article().ListByUser(ctx, uint(targetID), viewerID, schoolID, articleType, page, pageSize)
 	if err != nil {
-		if errors.Is(err, service.ErrArticleNotFoundOrNoPermission) {
+		if errors.Is(err, errno.ErrArticleNotFoundOrNoPermission) {
 			reply.ReplyNotFound(ctx, errcode.ErrUserNotFound)
 			return
 		}

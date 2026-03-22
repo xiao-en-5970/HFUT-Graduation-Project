@@ -9,6 +9,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
@@ -28,15 +29,15 @@ func OrderCreate(ctx *gin.Context) {
 	}
 	id, err := service.Order().Create(ctx, userID, schoolID, req)
 	if err != nil {
-		if errors.Is(err, service.ErrOrderGoodNotFound) {
+		if errors.Is(err, errno.ErrOrderGoodNotFound) {
 			reply.ReplyErrWithMessage(ctx, "商品不存在或已下架")
 			return
 		}
-		if errors.Is(err, service.ErrOrderGoodNotOnSale) {
+		if errors.Is(err, errno.ErrOrderGoodNotOnSale) {
 			reply.ReplyErrWithMessage(ctx, "商品未上架")
 			return
 		}
-		if errors.Is(err, service.ErrOrderInsufficientStock) {
+		if errors.Is(err, errno.ErrOrderInsufficientStock) {
 			reply.ReplyErrWithMessage(ctx, "库存不足")
 			return
 		}

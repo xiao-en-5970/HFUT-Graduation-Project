@@ -1,18 +1,12 @@
 package service
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"gorm.io/gorm"
-)
-
-var (
-	ErrCommentArticleNotFound = errors.New("文章不存在或无权限")
-	ErrCommentParentNotFound  = errors.New("父评论不存在")
 )
 
 type commentService struct{}
@@ -31,21 +25,21 @@ func (s *commentService) Create(ctx *gin.Context, userID uint, schoolID uint, ar
 	if extType == constant.ExtTypeGoods {
 		g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), articleID, schoolID)
 		if err != nil || g == nil {
-			return 0, ErrCommentArticleNotFound
+			return 0, errno.ErrCommentArticleNotFound
 		}
 		_ = g
 	} else {
 		art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 		if err != nil || art == nil {
 			if err == gorm.ErrRecordNotFound {
-				return 0, ErrCommentArticleNotFound
+				return 0, errno.ErrCommentArticleNotFound
 			}
 			return 0, err
 		}
 		if art.PublishStatus == 1 {
 			ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
 			if !ok {
-				return 0, ErrCommentArticleNotFound
+				return 0, errno.ErrCommentArticleNotFound
 			}
 		}
 	}
@@ -65,13 +59,13 @@ func (s *commentService) Create(ctx *gin.Context, userID uint, schoolID uint, ar
 		// 回复：parent_id 为顶层评论 ID
 		parent, err := dao.Comment().GetByID(ctx.Request.Context(), *req.ParentID)
 		if err != nil || parent == nil {
-			return 0, ErrCommentParentNotFound
+			return 0, errno.ErrCommentParentNotFound
 		}
 		if parent.ExtType != extType || parent.ExtID != aid {
-			return 0, ErrCommentParentNotFound
+			return 0, errno.ErrCommentParentNotFound
 		}
 		if parent.Type != constant.CommentTypeTop {
-			return 0, ErrCommentParentNotFound
+			return 0, errno.ErrCommentParentNotFound
 		}
 		pid := int(*req.ParentID)
 		c.ParentID = &pid
@@ -80,10 +74,10 @@ func (s *commentService) Create(ctx *gin.Context, userID uint, schoolID uint, ar
 			// 回复某条回复：校验 reply 属于该 parent
 			replyComment, err := dao.Comment().GetByID(ctx.Request.Context(), *req.ReplyID)
 			if err != nil || replyComment == nil {
-				return 0, ErrCommentParentNotFound
+				return 0, errno.ErrCommentParentNotFound
 			}
 			if replyComment.ParentID == nil || uint(*replyComment.ParentID) != *req.ParentID {
-				return 0, ErrCommentParentNotFound
+				return 0, errno.ErrCommentParentNotFound
 			}
 			rid := int(*req.ReplyID)
 			c.ReplyID = &rid
@@ -99,18 +93,18 @@ func (s *commentService) ListComments(ctx *gin.Context, userID uint, schoolID ui
 	if extType == constant.ExtTypeGoods {
 		g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), articleID, schoolID)
 		if err != nil || g == nil {
-			return nil, 0, ErrCommentArticleNotFound
+			return nil, 0, errno.ErrCommentArticleNotFound
 		}
 		_ = g
 	} else {
 		art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 		if err != nil || art == nil {
-			return nil, 0, ErrCommentArticleNotFound
+			return nil, 0, errno.ErrCommentArticleNotFound
 		}
 		if art.PublishStatus == 1 {
 			ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
 			if !ok {
-				return nil, 0, ErrCommentArticleNotFound
+				return nil, 0, errno.ErrCommentArticleNotFound
 			}
 		}
 	}
@@ -123,24 +117,24 @@ func (s *commentService) ListReplies(ctx *gin.Context, userID uint, schoolID uin
 	if extType == constant.ExtTypeGoods {
 		g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), articleID, schoolID)
 		if err != nil || g == nil {
-			return nil, 0, ErrCommentArticleNotFound
+			return nil, 0, errno.ErrCommentArticleNotFound
 		}
 		_ = g
 	} else {
 		art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 		if err != nil || art == nil {
-			return nil, 0, ErrCommentArticleNotFound
+			return nil, 0, errno.ErrCommentArticleNotFound
 		}
 		if art.PublishStatus == 1 {
 			ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
 			if !ok {
-				return nil, 0, ErrCommentArticleNotFound
+				return nil, 0, errno.ErrCommentArticleNotFound
 			}
 		}
 	}
 	ok, err := dao.Comment().ExistsByExtAndID(ctx.Request.Context(), extType, int(articleID), commentID)
 	if err != nil || !ok {
-		return nil, 0, ErrCommentParentNotFound
+		return nil, 0, errno.ErrCommentParentNotFound
 	}
 	return dao.Comment().ListRepliesByParentID(ctx.Request.Context(), commentID, page, pageSize)
 }

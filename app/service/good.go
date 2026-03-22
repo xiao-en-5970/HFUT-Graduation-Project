@@ -8,15 +8,11 @@ import (
 	"github.com/lib/pq"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/snowflake"
 	"gorm.io/gorm"
-)
-
-var (
-	ErrGoodNotFoundOrNoPermission = errors.New("商品不存在或无权限")
-	ErrSchoolNotBound             = errors.New("请先绑定学校")
 )
 
 type goodService struct{}
@@ -41,7 +37,7 @@ type UpdateGoodReq struct {
 
 func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req CreateGoodReq) (uint, error) {
 	if schoolID == 0 {
-		return 0, ErrSchoolNotBound
+		return 0, errno.ErrSchoolNotBound
 	}
 	if req.Price < 0 {
 		req.Price = 0
@@ -77,7 +73,7 @@ func (s *goodService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID uin
 	g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), id, schoolID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, ErrGoodNotFoundOrNoPermission
+			return nil, errno.ErrGoodNotFoundOrNoPermission
 		}
 		return nil, err
 	}
@@ -88,13 +84,13 @@ func (s *goodService) GetAllowOffShelf(ctx *gin.Context, id uint, viewerID uint,
 	g, err := dao.Good().GetByIDWithSchoolAllowOffShelf(ctx.Request.Context(), id, schoolID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, ErrGoodNotFoundOrNoPermission
+			return nil, errno.ErrGoodNotFoundOrNoPermission
 		}
 		return nil, err
 	}
 	// 下架商品仅卖家本人可见
 	if g.GoodStatus == dao.GoodStatusOffShelf && g.UserID != nil && uint(*g.UserID) != viewerID {
-		return nil, ErrGoodNotFoundOrNoPermission
+		return nil, errno.ErrGoodNotFoundOrNoPermission
 	}
 	return g, nil
 }
@@ -102,7 +98,7 @@ func (s *goodService) GetAllowOffShelf(ctx *gin.Context, id uint, viewerID uint,
 func (s *goodService) Update(ctx *gin.Context, id uint, userID uint, schoolID uint, req UpdateGoodReq) error {
 	ok, err := dao.Good().IsOwnedByUser(ctx.Request.Context(), id, userID)
 	if err != nil || !ok {
-		return ErrGoodNotFoundOrNoPermission
+		return errno.ErrGoodNotFoundOrNoPermission
 	}
 	updates := make(map[string]interface{})
 	if req.Title != nil {
@@ -137,7 +133,7 @@ func (s *goodService) Update(ctx *gin.Context, id uint, userID uint, schoolID ui
 func (s *goodService) Publish(ctx *gin.Context, id uint, userID uint) error {
 	ok, err := dao.Good().IsOwnedByUser(ctx.Request.Context(), id, userID)
 	if err != nil || !ok {
-		return ErrGoodNotFoundOrNoPermission
+		return errno.ErrGoodNotFoundOrNoPermission
 	}
 	return dao.Good().UpdateColumns(ctx.Request.Context(), id, map[string]interface{}{"good_status": dao.GoodStatusOnSale})
 }
@@ -145,7 +141,7 @@ func (s *goodService) Publish(ctx *gin.Context, id uint, userID uint) error {
 func (s *goodService) OffShelf(ctx *gin.Context, id uint, userID uint) error {
 	ok, err := dao.Good().IsOwnedByUser(ctx.Request.Context(), id, userID)
 	if err != nil || !ok {
-		return ErrGoodNotFoundOrNoPermission
+		return errno.ErrGoodNotFoundOrNoPermission
 	}
 	return dao.Good().UpdateColumns(ctx.Request.Context(), id, map[string]interface{}{"good_status": dao.GoodStatusOffShelf})
 }
@@ -179,7 +175,7 @@ func (s *goodService) uploadGoodImages(ctx *gin.Context, id uint, files []*multi
 func (s *goodService) UploadImages(ctx *gin.Context, id uint, userID uint, files []*multipart.FileHeader) ([]string, error) {
 	ok, err := dao.Good().IsOwnedByUser(ctx.Request.Context(), id, userID)
 	if err != nil || !ok {
-		return nil, ErrGoodNotFoundOrNoPermission
+		return nil, errno.ErrGoodNotFoundOrNoPermission
 	}
 	return s.uploadGoodImages(ctx, id, files)
 }
@@ -255,7 +251,7 @@ func (s *goodService) AdminCreate(ctx *gin.Context, req AdminCreateGoodReq) (uin
 func (s *goodService) AdminUpdate(ctx *gin.Context, id uint, req AdminUpdateGoodReq) error {
 	if _, err := dao.Good().GetByIDAdmin(ctx.Request.Context(), id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrGoodNotFoundOrNoPermission
+			return errno.ErrGoodNotFoundOrNoPermission
 		}
 		return err
 	}
@@ -317,7 +313,7 @@ func (s *goodService) AdminUpdate(ctx *gin.Context, id uint, req AdminUpdateGood
 func (s *goodService) AdminPublish(ctx *gin.Context, id uint) error {
 	if _, err := dao.Good().GetByIDAdmin(ctx.Request.Context(), id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrGoodNotFoundOrNoPermission
+			return errno.ErrGoodNotFoundOrNoPermission
 		}
 		return err
 	}
@@ -327,7 +323,7 @@ func (s *goodService) AdminPublish(ctx *gin.Context, id uint) error {
 func (s *goodService) AdminOffShelf(ctx *gin.Context, id uint) error {
 	if _, err := dao.Good().GetByIDAdmin(ctx.Request.Context(), id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrGoodNotFoundOrNoPermission
+			return errno.ErrGoodNotFoundOrNoPermission
 		}
 		return err
 	}
@@ -337,7 +333,7 @@ func (s *goodService) AdminOffShelf(ctx *gin.Context, id uint) error {
 func (s *goodService) AdminUploadImages(ctx *gin.Context, id uint, files []*multipart.FileHeader) ([]string, error) {
 	if _, err := dao.Good().GetByIDAdmin(ctx.Request.Context(), id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrGoodNotFoundOrNoPermission
+			return nil, errno.ErrGoodNotFoundOrNoPermission
 		}
 		return nil, err
 	}

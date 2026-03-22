@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
@@ -83,15 +84,15 @@ func ArticleHandlers(articleType int) struct {
 			}
 			id, err := service.Article().Create(ctx, userID, schoolID, articleType, req)
 			if err != nil {
-				if errors.Is(err, service.ErrSchoolNotBound) {
+				if errors.Is(err, errno.ErrSchoolNotBound) {
 					reply.ReplyErrWithMessage(ctx, "请先绑定学校")
 					return
 				}
-				if errors.Is(err, service.ErrParentQuestionRequired) {
+				if errors.Is(err, errno.ErrParentQuestionRequired) {
 					reply.ReplyErrWithMessage(ctx, "回答必须指定 parent_id 指向提问")
 					return
 				}
-				if errors.Is(err, service.ErrParentQuestionNotFound) {
+				if errors.Is(err, errno.ErrParentQuestionNotFound) {
 					reply.ReplyErrWithMessage(ctx, "父提问不存在或非本校")
 					return
 				}
@@ -115,11 +116,11 @@ func ArticleHandlers(articleType int) struct {
 			}
 			art, err := service.Article().Get(ctx, uint(id), userID, schoolID, articleType)
 			if err != nil {
-				if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, service.ErrArticleNotFoundOrNoPermission) {
+				if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, errno.ErrArticleNotFoundOrNoPermission) {
 					reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 					return
 				}
-				if errors.Is(err, service.ErrSchoolNotBound) {
+				if errors.Is(err, errno.ErrSchoolNotBound) {
 					reply.ReplyErrWithMessage(ctx, "请先绑定学校")
 					return
 				}
@@ -149,7 +150,7 @@ func ArticleHandlers(articleType int) struct {
 				return
 			}
 			if err := service.Article().Update(ctx, uint(id), userID, schoolID, articleType, req); err != nil {
-				if errors.Is(err, service.ErrArticleNotFoundOrNoPermission) {
+				if errors.Is(err, errno.ErrArticleNotFoundOrNoPermission) {
 					reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 					return
 				}
@@ -183,7 +184,7 @@ func ArticleHandlers(articleType int) struct {
 			}
 			urls, err := service.Article().UploadImages(ctx, uint(id), userID, schoolID, articleType, files)
 			if err != nil {
-				if errors.Is(err, service.ErrArticleNotFoundOrNoPermission) {
+				if errors.Is(err, errno.ErrArticleNotFoundOrNoPermission) {
 					reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 					return
 				}
@@ -205,7 +206,7 @@ func ArticleHandlers(articleType int) struct {
 				return
 			}
 			if err := service.Article().PublishDraft(ctx, uint(id), userID); err != nil {
-				if errors.Is(err, service.ErrDraftNotFoundOrNoPermission) {
+				if errors.Is(err, errno.ErrDraftNotFoundOrNoPermission) {
 					reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 					return
 				}
@@ -228,7 +229,7 @@ func ArticleHandlers(articleType int) struct {
 				return
 			}
 			if err := service.Article().Delete(ctx, uint(id), userID, schoolID, articleType); err != nil {
-				if errors.Is(err, service.ErrArticleNotFoundOrNoPermission) {
+				if errors.Is(err, errno.ErrArticleNotFoundOrNoPermission) {
 					reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
 					return
 				}
@@ -260,7 +261,7 @@ func QuestionListAnswers(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
 	list, total, err := service.Article().ListAnswersByQuestionID(ctx, uint(questionID), schoolID, page, pageSize)
 	if err != nil {
-		if errors.Is(err, service.ErrParentQuestionNotFound) {
+		if errors.Is(err, errno.ErrParentQuestionNotFound) {
 			reply.ReplyErrWithMessage(ctx, "提问不存在或非本校")
 			return
 		}
