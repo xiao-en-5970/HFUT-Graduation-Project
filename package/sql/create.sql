@@ -247,7 +247,7 @@ create table orders (
 comment on column orders.user_id is '用户ID';
 comment on column orders.goods_id is '商品ID';
 comment on column orders.status is '1:正常 2:禁用';
-comment on column orders.order_status is '1:待支付 2:已支付 3:已发货 4:已收货 5:已取消';
+comment on column orders.order_status is '1:待下单 2:正在派送 3:待买方确认收货 4:已完成 5:已取消（平台不经手资金）';
 
 ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS receiver_addr VARCHAR(512);
@@ -260,6 +260,36 @@ ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS distance_meters integer;
 COMMENT ON COLUMN orders.distance_meters IS '发货地与收货地步行规划距离（米），高德地图 API 计算';
 
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS buyer_agreed_at TIMESTAMP;
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS seller_agreed_at TIMESTAMP;
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS delivery_images VARCHAR(2048)[];
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS buyer_confirm_images VARCHAR(2048)[];
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;
+COMMENT ON COLUMN orders.buyer_agreed_at IS '买方同意开始线下交易/派送';
+COMMENT ON COLUMN orders.seller_agreed_at IS '卖方同意开始派送';
+COMMENT ON COLUMN orders.delivery_images IS '卖方确认送达时上传的凭证图 URL';
+COMMENT ON COLUMN orders.buyer_confirm_images IS '买方确认收货时附加图 URL';
+COMMENT ON COLUMN orders.completed_at IS '订单完成（确认收货）时间';
+
+CREATE TABLE IF NOT EXISTS order_messages
+(
+    id         SERIAL PRIMARY KEY,
+    order_id   INTEGER  NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
+    sender_id  INTEGER  NOT NULL REFERENCES users (id),
+    msg_type   SMALLINT NOT NULL DEFAULT 1,
+    content    TEXT,
+    image_url  VARCHAR(1024),
+    created_at TIMESTAMP         DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_order_messages_order_id ON order_messages (order_id);
+COMMENT ON TABLE order_messages IS '订单内买卖双方聊天，不经手资金';
+COMMENT ON COLUMN order_messages.msg_type IS '1:文字 2:图片';
+
 -- 为没有 status 字段的表添加 status 字段
 ALTER TABLE schools ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;
 comment on column schools.status is '1:正常 2:禁用';
@@ -270,6 +300,13 @@ comment on column follow.status is '1:正常 2:禁用';
 
 ALTER TABLE goods ADD COLUMN IF NOT EXISTS school_id integer REFERENCES schools(id);
 comment on column goods.school_id is '学校ID';
+
+ALTER TABLE goods
+    ADD COLUMN IF NOT EXISTS goods_type smallint NOT NULL DEFAULT 1;
+ALTER TABLE goods
+    ADD COLUMN IF NOT EXISTS pickup_addr VARCHAR(512);
+COMMENT ON COLUMN goods.goods_type IS '1:送货上门 2:自提 3:在线商品';
+COMMENT ON COLUMN goods.pickup_addr IS '自提类：约定提货地点/说明，下单时可作为默认收货地址';
 
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS school_id integer REFERENCES schools(id);
 comment on column articles.school_id is '学校ID';

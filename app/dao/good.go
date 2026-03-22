@@ -95,6 +95,26 @@ func (s *GoodStore) UpdateColumns(ctx context.Context, id uint, updates map[stri
 	return pgsql.DB.WithContext(ctx).Model(&model.Good{}).Where("id = ?", id).Updates(updates).Error
 }
 
+// DecrementStockAfterSale 成交后库存-1；库存为 0 时标记已售出。须在事务内调用。
+func (s *GoodStore) DecrementStockAfterSale(ctx context.Context, tx *gorm.DB, id uint) error {
+	res := tx.Model(&model.Good{}).Where("id = ? AND stock >= ?", id, 1).
+		UpdateColumn("stock", gorm.Expr("stock - ?", 1))
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	var g model.Good
+	if err := tx.Where("id = ?", id).First(&g).Error; err != nil {
+		return err
+	}
+	if g.Stock == 0 {
+		return tx.Model(&model.Good{}).Where("id = ?", id).Update("good_status", GoodStatusSold).Error
+	}
+	return nil
+}
+
 func (s *GoodStore) IsOwnedByUser(ctx context.Context, id uint, userID uint) (bool, error) {
 	var count int64
 	err := pgsql.DB.WithContext(ctx).Model(&model.Good{}).

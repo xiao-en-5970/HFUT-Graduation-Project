@@ -129,12 +129,18 @@ func PrivateRouter(api *gin.RouterGroup) {
 		goodGroup.POST("/:id/off-shelf", controller.GoodOffShelf)
 		goodGroup.POST("/:id/images", controller.GoodUploadImages)
 	}
-	// 订单模块
+	// 订单模块（平台不经手资金：聊天 + 双方同意后派送 + 确认收货扣库存）
 	orderGroup := api.Group("/orders")
 	{
 		orderGroup.POST("", controller.OrderCreate)
 		orderGroup.GET("", controller.OrderList)
 		orderGroup.GET("/sold", controller.OrderListSold)
+		orderGroup.GET("/:id/messages", controller.OrderMessagesList)
+		orderGroup.POST("/:id/messages", controller.OrderMessageCreate)
+		orderGroup.POST("/:id/agree", controller.OrderAgree)
+		orderGroup.POST("/:id/confirm-delivery", controller.OrderConfirmDelivery)
+		orderGroup.POST("/:id/confirm-receipt", controller.OrderConfirmReceipt)
+		orderGroup.POST("/:id/cancel", controller.OrderCancel)
 		orderGroup.GET("/:id", controller.OrderGet)
 		orderGroup.PUT("/:id", controller.OrderUpdate)
 	}
@@ -191,5 +197,10 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.POST("/goods/:id/images", controller.AdminGoodUploadImages)
 		adminGroup.DELETE("/goods/:id", controller.AdminGoodDisable)
 		adminGroup.POST("/goods/:id/restore", controller.AdminGoodRestore)
+
+		// 订单与聊天（全站）
+		adminGroup.GET("/orders", controller.AdminOrderList)
+		adminGroup.GET("/orders/:id/messages", controller.AdminOrderMessages)
+		adminGroup.GET("/orders/:id", controller.AdminOrderGet)
 	}
 }

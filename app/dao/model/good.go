@@ -16,6 +16,8 @@ type Good struct {
 	Content      string         `gorm:"type:text;not null" json:"content"`                                         // 商品内容
 	Status       int16          `gorm:"type:smallint;not null;default:1" json:"status"`                            // 1:正常 2:禁用
 	GoodStatus   int            `gorm:"column:good_status;type:int;not null;default:1" json:"good_status"`         // 1:在售 2:下架 3:已售出
+	GoodsType    int16          `gorm:"column:goods_type;type:smallint;not null;default:1" json:"goods_type"`      // 1送货上门 2自提 3在线商品
+	PickupAddr   string         `gorm:"column:pickup_addr;type:varchar(512)" json:"pickup_addr,omitempty"`         // 自提约定地址（自提类必填展示）
 	Price        int            `gorm:"type:integer;not null;default:0" json:"price"`                              // 商品价格，单位分
 	MarkedPrice  int            `gorm:"column:marked_price;type:integer;not null;default:0" json:"marked_price"`   // 标价，单位分
 	Stock        int            `gorm:"type:integer;not null;default:0" json:"stock"`                              // 库存数量

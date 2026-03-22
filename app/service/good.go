@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"mime/multipart"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lib/pq"
@@ -20,6 +21,8 @@ type goodService struct{}
 type CreateGoodReq struct {
 	Title       string   `json:"title" binding:"required"`
 	Content     string   `json:"content" binding:"required"`
+	GoodsType   int16    `json:"goods_type"`   // 1送货上门 2自提 3在线，默认1
+	PickupAddr  string   `json:"pickup_addr"`  // 自提类：约定地址
 	Price       int      `json:"price"`        // 价格（分）
 	MarkedPrice int      `json:"marked_price"` // 标价（分）
 	Stock       int      `json:"stock"`        // 库存
@@ -29,6 +32,8 @@ type CreateGoodReq struct {
 type UpdateGoodReq struct {
 	Title       *string   `json:"title"`
 	Content     *string   `json:"content"`
+	GoodsType   *int16    `json:"goods_type"`
+	PickupAddr  *string   `json:"pickup_addr"`
 	Price       *int      `json:"price"`
 	MarkedPrice *int      `json:"marked_price"`
 	Stock       *int      `json:"stock"`
@@ -45,6 +50,10 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 	if req.Stock < 0 {
 		req.Stock = 0
 	}
+	gt := req.GoodsType
+	if gt != constant.GoodsTypeDelivery && gt != constant.GoodsTypePickup && gt != constant.GoodsTypeOnline {
+		gt = constant.GoodsTypeDelivery
+	}
 	uid := int(userID)
 	sid := int(schoolID)
 	g := &model.Good{
@@ -52,6 +61,8 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 		SchoolID:    &sid,
 		Title:       req.Title,
 		Content:     req.Content,
+		GoodsType:   gt,
+		PickupAddr:  strings.TrimSpace(req.PickupAddr),
 		Price:       req.Price,
 		MarkedPrice: req.MarkedPrice,
 		Stock:       req.Stock,
@@ -124,6 +135,15 @@ func (s *goodService) Update(ctx *gin.Context, id uint, userID uint, schoolID ui
 		updates["images"] = pq.StringArray(paths)
 		updates["image_count"] = len(paths)
 	}
+	if req.GoodsType != nil {
+		gt := *req.GoodsType
+		if gt == constant.GoodsTypeDelivery || gt == constant.GoodsTypePickup || gt == constant.GoodsTypeOnline {
+			updates["goods_type"] = gt
+		}
+	}
+	if req.PickupAddr != nil {
+		updates["pickup_addr"] = strings.TrimSpace(*req.PickupAddr)
+	}
 	if len(updates) == 0 {
 		return nil
 	}
@@ -186,6 +206,8 @@ type AdminCreateGoodReq struct {
 	SchoolID    uint     `json:"school_id" binding:"required"`
 	Title       string   `json:"title" binding:"required"`
 	Content     string   `json:"content" binding:"required"`
+	GoodsType   int16    `json:"goods_type"`
+	PickupAddr  string   `json:"pickup_addr"`
 	Price       int      `json:"price"`
 	MarkedPrice int      `json:"marked_price"`
 	Stock       int      `json:"stock"`
@@ -199,6 +221,8 @@ type AdminUpdateGoodReq struct {
 	SchoolID    *uint     `json:"school_id"`
 	Title       *string   `json:"title"`
 	Content     *string   `json:"content"`
+	GoodsType   *int16    `json:"goods_type"`
+	PickupAddr  *string   `json:"pickup_addr"`
 	Price       *int      `json:"price"`
 	MarkedPrice *int      `json:"marked_price"`
 	Stock       *int      `json:"stock"`
@@ -224,6 +248,10 @@ func (s *goodService) AdminCreate(ctx *gin.Context, req AdminCreateGoodReq) (uin
 	if gs != dao.GoodStatusOnSale && gs != dao.GoodStatusOffShelf && gs != dao.GoodStatusSold {
 		gs = dao.GoodStatusOffShelf
 	}
+	gt := req.GoodsType
+	if gt != constant.GoodsTypeDelivery && gt != constant.GoodsTypePickup && gt != constant.GoodsTypeOnline {
+		gt = constant.GoodsTypeDelivery
+	}
 	uid := int(req.UserID)
 	sid := int(req.SchoolID)
 	g := &model.Good{
@@ -231,6 +259,8 @@ func (s *goodService) AdminCreate(ctx *gin.Context, req AdminCreateGoodReq) (uin
 		SchoolID:    &sid,
 		Title:       req.Title,
 		Content:     req.Content,
+		GoodsType:   gt,
+		PickupAddr:  strings.TrimSpace(req.PickupAddr),
 		Price:       req.Price,
 		MarkedPrice: req.MarkedPrice,
 		Stock:       req.Stock,
@@ -300,6 +330,15 @@ func (s *goodService) AdminUpdate(ctx *gin.Context, id uint, req AdminUpdateGood
 		if g == dao.GoodStatusOnSale || g == dao.GoodStatusOffShelf || g == dao.GoodStatusSold {
 			updates["good_status"] = g
 		}
+	}
+	if req.GoodsType != nil {
+		gt := *req.GoodsType
+		if gt == constant.GoodsTypeDelivery || gt == constant.GoodsTypePickup || gt == constant.GoodsTypeOnline {
+			updates["goods_type"] = gt
+		}
+	}
+	if req.PickupAddr != nil {
+		updates["pickup_addr"] = strings.TrimSpace(*req.PickupAddr)
 	}
 	if req.Status != nil && (*req.Status == constant.StatusValid || *req.Status == constant.StatusInvalid) {
 		updates["status"] = *req.Status

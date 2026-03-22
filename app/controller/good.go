@@ -10,6 +10,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
@@ -37,7 +38,9 @@ func enrichGoodWithAuthor(ctx *gin.Context, g *model.Good) map[string]interface{
 	m := map[string]interface{}{
 		"id": g.ID, "user_id": g.UserID, "school_id": g.SchoolID, "title": g.Title, "content": g.Content,
 		"images": oss.TransformImageURLs(g.Images), "image_count": g.ImageCount,
-		"price": g.Price, "marked_price": g.MarkedPrice, "stock": g.Stock,
+		"goods_type": g.GoodsType, "goods_type_label": constant.GoodsTypeLabel(g.GoodsType),
+		"pickup_addr": g.PickupAddr,
+		"price":       g.Price, "marked_price": g.MarkedPrice, "stock": g.Stock,
 		"good_status": g.GoodStatus, "status": g.Status,
 		"like_count": g.LikeCount, "collect_count": g.CollectCount,
 		"created_at": g.CreatedAt, "updated_at": g.UpdatedAt,

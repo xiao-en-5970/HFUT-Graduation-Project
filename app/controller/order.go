@@ -10,6 +10,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
@@ -68,11 +69,33 @@ func OrderList(ctx *gin.Context) {
 	reply.ReplyOKWithData(ctx, gin.H{"list": out, "total": total, "page": page, "page_size": pageSize})
 }
 
+func orderStatusLabel(s int16) string {
+	switch s {
+	case constant.OrderStatusPendingIntent:
+		return "待下单"
+	case constant.OrderStatusDelivering:
+		return "正在派送"
+	case constant.OrderStatusPendingBuyerConfirm:
+		return "待买方确认收货"
+	case constant.OrderStatusCompleted:
+		return "已完成"
+	case constant.OrderStatusCancelled:
+		return "已取消"
+	default:
+		return ""
+	}
+}
+
 func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 	m := map[string]interface{}{
 		"id": o.ID, "user_id": o.UserID, "goods_id": o.GoodsID,
-		"order_status": o.OrderStatus, "receiver_addr": o.ReceiverAddr, "sender_addr": o.SenderAddr,
-		"created_at": o.CreatedAt,
+		"order_status": o.OrderStatus, "order_status_label": orderStatusLabel(o.OrderStatus),
+		"receiver_addr": o.ReceiverAddr, "sender_addr": o.SenderAddr,
+		"buyer_agreed_at": o.BuyerAgreedAt, "seller_agreed_at": o.SellerAgreedAt,
+		"delivery_images":      oss.TransformImageURLs([]string(o.DeliveryImages)),
+		"buyer_confirm_images": oss.TransformImageURLs([]string(o.BuyerConfirmImages)),
+		"completed_at":         o.CompletedAt,
+		"created_at":           o.CreatedAt,
 	}
 	if o.DistanceMeters != nil {
 		m["distance_meters"] = *o.DistanceMeters
@@ -85,6 +108,9 @@ func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 			g.Images = oss.TransformImageURLs(g.Images)
 			m["good"] = map[string]interface{}{
 				"id": g.ID, "title": g.Title, "images": g.Images, "price": g.Price,
+				"user_id":    g.UserID,
+				"goods_type": g.GoodsType, "goods_type_label": constant.GoodsTypeLabel(g.GoodsType),
+				"pickup_addr": g.PickupAddr,
 			}
 		}
 	}
@@ -154,14 +180,17 @@ func OrderUpdate(ctx *gin.Context) {
 		return
 	}
 	var body struct {
-		SenderAddr  string `json:"sender_addr"`
-		OrderStatus *int16 `json:"order_status"`
+		SenderAddr string `json:"sender_addr"`
 	}
 	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	if err := service.Order().UpdateSellerInfo(ctx, uint(id), userID, body.SenderAddr, body.OrderStatus); err != nil {
+	if err := service.Order().UpdateSellerInfo(ctx, uint(id), userID, body.SenderAddr); err != nil {
+		if errors.Is(err, errno.ErrOrderInvalidState) {
+			reply.ReplyErrWithMessage(ctx, "当前订单状态不可修改发货地址")
+			return
+		}
 		reply.ReplyErrWithMessage(ctx, err.Error())
 		return
 	}

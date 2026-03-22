@@ -128,7 +128,7 @@
   const moduleContent = document.getElementById('module-content');
   logoutBtn.addEventListener('click', redirectToLogin);
 
-    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'schools', 'bind-school'];
+    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'schools', 'bind-school'];
   function getRoute() {
     const hash = (location.hash || '#/users').slice(2) || 'users';
     return routes.includes(hash) ? hash : 'users';
@@ -142,6 +142,7 @@
     else if (r === 'questions') renderQuestions();
     else if (r === 'answers') renderAnswers();
     else if (r === 'goods') renderGoods();
+    else if (r === 'orders') renderOrders();
     else if (r === 'schools') renderSchools();
     else if (r === 'bind-school') renderBindSchool();
   }
@@ -172,6 +173,7 @@
   const STATUS_MAP = { 1: '正常', 2: '禁用' };
   const ARTICLE_STATUS_MAP = {1: '正常', 2: '已删除', 3: '草稿'};
     const GOOD_STATUS_MAP = {1: '在售', 2: '下架', 3: '已售出'};
+    const GOODS_TYPE_MAP = {1: '送货上门', 2: '自提', 3: '在线商品'};
 
   /** 列表单图展示（头像/背景），与帖子图片同一套 display 逻辑 */
   function renderListImage(url, title) {
@@ -479,6 +481,8 @@
                 {key: 'images', label: '图片', render: r => renderListImages(r.images)},
                 {key: 'user_id', label: '用户ID', render: r => r.user_id ?? '-'},
                 {key: 'school_id', label: '学校ID', render: r => r.school_id ?? '-'},
+                {key: 'goods_type', label: '类别', render: r => GOODS_TYPE_MAP[r.goods_type] || r.goods_type || '-'},
+                {key: 'pickup_addr', label: '自提地址', render: r => (r.pickup_addr || '-').slice(0, 24)},
                 {key: 'price', label: '价格(分)', render: r => r.price ?? 0},
                 {key: 'stock', label: '库存', render: r => r.stock ?? 0},
                 {key: 'good_status', label: '销售状态', render: r => GOOD_STATUS_MAP[r.good_status] || r.good_status},
@@ -550,6 +554,12 @@
       <label>价格（分）<input type="number" id="g-price" value="${row?.price ?? 0}" min="0"></label>
       <label>标价（分）<input type="number" id="g-marked_price" value="${row?.marked_price ?? 0}" min="0"></label>
       <label>库存 <input type="number" id="g-stock" value="${row?.stock ?? 0}" min="0"></label>
+      <label>商品类别 <select id="g-goods_type">
+        <option value="1">送货上门</option>
+        <option value="2">自提</option>
+        <option value="3">在线商品</option>
+      </select></label>
+      <label>自提地址（自提类填写）<input type="text" id="g-pickup_addr" placeholder="约定提货地点"></label>
       <label>销售状态 <select id="g-good_status">
         <option value="1">在售</option>
         <option value="2">下架</option>
@@ -569,6 +579,8 @@
                 price: parseInt(ov.querySelector('#g-price').value || '0', 10),
                 marked_price: parseInt(ov.querySelector('#g-marked_price').value || '0', 10),
                 stock: parseInt(ov.querySelector('#g-stock').value || '0', 10),
+                goods_type: parseInt(ov.querySelector('#g-goods_type').value, 10),
+                pickup_addr: ov.querySelector('#g-pickup_addr').value.trim(),
                 good_status: parseInt(ov.querySelector('#g-good_status').value, 10)
             };
             if (!payload.user_id || !payload.school_id) throw new Error('请填写用户ID与学校ID');
@@ -599,6 +611,8 @@
                             price: payload.price,
                             marked_price: payload.marked_price,
                             stock: payload.stock,
+                            goods_type: payload.goods_type,
+                            pickup_addr: payload.pickup_addr,
                             good_status: payload.good_status,
                             images
                         })
@@ -614,6 +628,8 @@
                             price: payload.price,
                             marked_price: payload.marked_price,
                             stock: payload.stock,
+                            goods_type: payload.goods_type,
+                            pickup_addr: payload.pickup_addr,
                             good_status: payload.good_status,
                             images: []
                         })
@@ -641,6 +657,8 @@
             ov.querySelector('#g-content').value = row?.content || '';
             const gs = row?.good_status ?? 2;
             ov.querySelector('#g-good_status').value = String(gs);
+            ov.querySelector('#g-goods_type').value = String(row?.goods_type ?? 1);
+            ov.querySelector('#g-pickup_addr').value = row?.pickup_addr || '';
             const listEl = ov.querySelector('#g-images-list');
             const gid = isEdit ? row.id : null;
 
@@ -995,6 +1013,77 @@
       else renderAnswers();
     } catch (e) { alert(e.message); }
   }
+
+    let orderPage = 1;
+
+    async function renderOrders() {
+        moduleContent.innerHTML = '<p>加载中...</p>';
+        try {
+            const data = await api(`/admin/orders?page=${orderPage}&pageSize=15&include_invalid=1`);
+            const list = data.data?.list || [];
+            const total = data.data?.total || 0;
+            const columns = [
+                {key: 'id', label: '订单ID'},
+                {key: 'user_id', label: '买家ID', render: r => r.user_id ?? '-'},
+                {key: 'goods_id', label: '商品ID', render: r => r.goods_id ?? '-'},
+                {key: 'good', label: '商品', render: r => (r.good && r.good.title) ? r.good.title.slice(0, 24) : '-'},
+                {key: 'order_status_label', label: '状态', render: r => r.order_status_label || r.order_status},
+                {key: 'receiver_addr', label: '收货', render: r => (r.receiver_addr || '-').slice(0, 20)},
+                {key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19)},
+            ];
+            list.forEach(row => {
+                row._actions = `<button class="btn btn-sm btn-primary" data-order-detail="${row.id}">详情/聊天</button>`;
+            });
+            const extra = '<span class="text-muted" style="margin-left:8px">平台不经手资金，详见 doc/ORDER_AND_CHAT.md</span>';
+            renderTable('订单演示（全站）', columns, list, orderPage, total, 15, (p) => {
+                orderPage = p;
+                renderOrders();
+            }, extra);
+            moduleContent.querySelectorAll('[data-order-detail]').forEach(btn => {
+                btn.addEventListener('click', () => showOrderDetailModal(parseInt(btn.dataset.orderDetail, 10)));
+            });
+        } catch (e) {
+            moduleContent.innerHTML = '<p class="error">' + e.message + '</p>';
+        }
+    }
+
+    async function showOrderDetailModal(orderId) {
+        try {
+            const [dOrder, dMsg] = await Promise.all([
+                api(`/admin/orders/${orderId}`),
+                api(`/admin/orders/${orderId}/messages?page=1&pageSize=200`)
+            ]);
+            const o = dOrder.data || {};
+            const msgs = dMsg.data?.list || [];
+            const msgHtml = msgs.length
+                ? msgs.map(m => `<div class="order-msg"><span class="order-msg-meta">#${m.id} 用户${m.sender_id} · ${(m.created_at || '').slice(0, 19)}</span>${m.msg_type === 2 ? `<div><img src="${m.image_url || ''}" class="list-thumb" alt=""/></div>` : `<div>${escapeHtml(m.content || '')}</div>`}</div>`).join('')
+                : '<p class="text-muted">暂无消息</p>';
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.innerHTML = `<div class="modal modal-wide"><h4>订单 #${orderId}</h4>
+        <div class="order-detail-meta">
+          <p><strong>状态</strong> ${o.order_status_label || o.order_status} · 买家 user_id: ${o.user_id} · 商品: ${o.good ? o.good.title : o.goods_id}</p>
+          <p><strong>收货</strong> ${escapeHtml(o.receiver_addr || '')}</p>
+          <p><strong>发货</strong> ${escapeHtml(o.sender_addr || '')}</p>
+          <p><strong>双方同意时间</strong> 买方 ${(o.buyer_agreed_at || '').slice(0, 19) || '-'} / 卖方 ${(o.seller_agreed_at || '').slice(0, 19) || '-'}</p>
+          <p><strong>完成时间</strong> ${(o.completed_at || '').slice(0, 19) || '-'}</p>
+        </div>
+        <h5>聊天记录</h5>
+        <div class="order-chat-log">${msgHtml}</div>
+        <div class="modal-actions"><button class="btn btn-primary" id="order-detail-close">关闭</button></div>
+      </div>`;
+            document.body.appendChild(overlay);
+            overlay.querySelector('#order-detail-close').onclick = () => overlay.remove();
+        } catch (e) {
+            alert(e.message);
+        }
+    }
+
+    function escapeHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
 
   let schoolPage = 1;
   async function renderSchools() {

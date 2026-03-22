@@ -21,6 +21,8 @@ var (
 	ErrOrderGoodNotOnSale     = errors.New("商品未上架")
 	ErrOrderInsufficientStock = errors.New("库存不足")
 	ErrOrderNotFound          = errors.New("订单不存在")
+	ErrOrderInvalidState      = errors.New("订单状态不允许此操作")
+	ErrOrderNotParticipant    = errors.New("不是该订单的买方或卖方")
 )
 
 // 评论
