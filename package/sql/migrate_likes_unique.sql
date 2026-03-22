@@ -14,3 +14,16 @@ SET goods_addr = pickup_addr
 WHERE (goods_addr IS NULL OR TRIM(goods_addr) = '')
   AND pickup_addr IS NOT NULL
   AND TRIM(pickup_addr) <> '';
+
+UPDATE orders
+SET order_status = 6
+WHERE order_status = 5;
+UPDATE orders
+SET order_status = 5
+WHERE order_status = 4;
+UPDATE orders
+SET order_status = 4
+WHERE order_status = 3;
+UPDATE orders
+SET order_status = 3
+WHERE order_status = 2;

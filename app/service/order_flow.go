@@ -111,58 +111,46 @@ func (s *orderService) CreateOrderMessage(ctx *gin.Context, orderID uint, userID
 	return dao.OrderMessage().Create(ctx.Request.Context(), m)
 }
 
-// AgreeToDeliver 买卖双方各自点击同意，双方均同意后进入「正在派送」
-func (s *orderService) AgreeToDeliver(ctx *gin.Context, orderID uint, userID uint) error {
-	o, _, isBuyer, isSeller, err := s.resolveOrderParticipant(ctx, orderID, userID)
+// BuyerClaimPaid 买方表示已线下付款并下单 → 待卖方确认收款
+func (s *orderService) BuyerClaimPaid(ctx *gin.Context, orderID uint, userID uint) error {
+	o, _, isBuyer, _, err := s.resolveOrderParticipant(ctx, orderID, userID)
 	if err != nil {
 		return err
 	}
-	if o.OrderStatus != constant.OrderStatusPendingIntent {
+	if !isBuyer {
+		return errno.ErrOrderNotParticipant
+	}
+	if o.OrderStatus != constant.OrderStatusPendingBuyerPayment {
 		return errno.ErrOrderInvalidState
 	}
 	now := time.Now()
-	updates := make(map[string]interface{})
-	if isBuyer {
-		if o.BuyerAgreedAt != nil {
-			return nil // 幂等
-		}
-		updates["buyer_agreed_at"] = &now
-	}
-	if isSeller {
-		if o.SellerAgreedAt != nil {
-			return nil
-		}
-		updates["seller_agreed_at"] = &now
-	}
-	if len(updates) == 0 {
-		return nil
-	}
-	// 先写入本方同意时间
-	if err := dao.Order().UpdateColumns(ctx.Request.Context(), orderID, updates); err != nil {
+	return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, map[string]interface{}{
+		"order_status":    constant.OrderStatusAwaitSellerPaymentConfirm,
+		"buyer_agreed_at": &now,
+	})
+}
+
+// SellerConfirmPayment 卖方确认已收款 → 送货上门/自提进入履约中；在线商品直接进入待买方确认收货
+func (s *orderService) SellerConfirmPayment(ctx *gin.Context, orderID uint, userID uint) error {
+	o, g, _, isSeller, err := s.resolveOrderParticipant(ctx, orderID, userID)
+	if err != nil {
 		return err
 	}
-	o2, err := dao.Order().GetByID(ctx.Request.Context(), orderID)
-	if err != nil || o2 == nil {
-		return err
+	if !isSeller {
+		return errno.ErrOrderNotParticipant
 	}
-	if o2.BuyerAgreedAt != nil && o2.SellerAgreedAt != nil {
-		if o2.GoodsID == nil {
-			return errno.ErrOrderNotFound
-		}
-		g2, err := dao.Good().GetByID(ctx.Request.Context(), uint(*o2.GoodsID))
-		if err != nil || g2 == nil {
-			return err
-		}
-		next := constant.OrderStatusDelivering
-		// 在线商品：无实体派送，双方同意后即视为卖方已发货，进入待买方确认收货
-		if g2.GoodsType == constant.GoodsTypeOnline {
-			next = constant.OrderStatusPendingBuyerConfirm
-		}
-		return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, map[string]interface{}{
-			"order_status": next,
-		})
+	if o.OrderStatus != constant.OrderStatusAwaitSellerPaymentConfirm {
+		return errno.ErrOrderInvalidState
 	}
-	return nil
+	now := time.Now()
+	next := constant.OrderStatusFulfillment
+	if g.GoodsType == constant.GoodsTypeOnline {
+		next = constant.OrderStatusPendingBuyerConfirm
+	}
+	return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, map[string]interface{}{
+		"order_status":     next,
+		"seller_agreed_at": &now,
+	})
 }
 
 // ConfirmDeliveryReq 卖家确认送达
@@ -182,7 +170,7 @@ func (s *orderService) ConfirmDelivery(ctx *gin.Context, orderID uint, sellerID 
 	if g.GoodsType == constant.GoodsTypeOnline {
 		return errno.ErrOrderInvalidState
 	}
-	if o.OrderStatus != constant.OrderStatusDelivering {
+	if o.OrderStatus != constant.OrderStatusFulfillment {
 		return errno.ErrOrderInvalidState
 	}
 	paths := make([]string, 0, len(req.DeliveryImages))
@@ -208,14 +196,18 @@ type ConfirmReceiptReq struct {
 }
 
 func (s *orderService) ConfirmReceipt(ctx *gin.Context, orderID uint, buyerID uint, req ConfirmReceiptReq) error {
-	o, _, isBuyer, _, err := s.resolveOrderParticipant(ctx, orderID, buyerID)
+	o, g, isBuyer, _, err := s.resolveOrderParticipant(ctx, orderID, buyerID)
 	if err != nil {
 		return err
 	}
 	if !isBuyer {
 		return errno.ErrOrderNotParticipant
 	}
-	if o.OrderStatus != constant.OrderStatusPendingBuyerConfirm {
+	canConfirm := o.OrderStatus == constant.OrderStatusPendingBuyerConfirm
+	if !canConfirm && o.OrderStatus == constant.OrderStatusFulfillment && g.GoodsType == constant.GoodsTypePickup {
+		canConfirm = true
+	}
+	if !canConfirm {
 		return errno.ErrOrderInvalidState
 	}
 	if o.GoodsID == nil {
@@ -252,14 +244,14 @@ func (s *orderService) ConfirmReceipt(ctx *gin.Context, orderID uint, buyerID ui
 	})
 }
 
-// CancelOrder 取消订单（买卖双方，仅待下单或正在派送阶段）
+// CancelOrder 取消订单（买卖双方，未完成前可取消的阶段）
 func (s *orderService) CancelOrder(ctx *gin.Context, orderID uint, userID uint) error {
 	o, _, _, _, err := s.resolveOrderParticipant(ctx, orderID, userID)
 	if err != nil {
 		return err
 	}
 	switch o.OrderStatus {
-	case constant.OrderStatusPendingIntent, constant.OrderStatusDelivering:
+	case constant.OrderStatusPendingBuyerPayment, constant.OrderStatusAwaitSellerPaymentConfirm, constant.OrderStatusFulfillment:
 		return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, map[string]interface{}{
 			"order_status": constant.OrderStatusCancelled,
 		})

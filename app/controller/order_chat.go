@@ -69,8 +69,8 @@ func OrderMessageCreate(ctx *gin.Context) {
 	reply.ReplyOK(ctx)
 }
 
-// OrderAgree POST /orders/:id/agree
-func OrderAgree(ctx *gin.Context) {
+// OrderBuyerClaimPaid POST /orders/:id/buyer-claim-paid 买方表示已线下付款并下单
+func OrderBuyerClaimPaid(ctx *gin.Context) {
 	userID := middleware.GetUserID(ctx)
 	if userID == 0 {
 		reply.ReplyUnauthorized(ctx)
@@ -81,13 +81,40 @@ func OrderAgree(ctx *gin.Context) {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	if err := service.Order().AgreeToDeliver(ctx, uint(id), userID); err != nil {
+	if err := service.Order().BuyerClaimPaid(ctx, uint(id), userID); err != nil {
 		if errors.Is(err, errno.ErrOrderNotFound) || errors.Is(err, errno.ErrOrderNotParticipant) {
 			reply.ReplyErrWithMessage(ctx, "订单不存在或无权操作")
 			return
 		}
 		if errors.Is(err, errno.ErrOrderInvalidState) {
-			reply.ReplyErrWithMessage(ctx, "当前状态不可确认同意")
+			reply.ReplyErrWithMessage(ctx, "当前状态不可确认已付款下单")
+			return
+		}
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	reply.ReplyOK(ctx)
+}
+
+// OrderSellerConfirmPayment POST /orders/:id/seller-confirm-payment 卖方确认收款
+func OrderSellerConfirmPayment(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	if err := service.Order().SellerConfirmPayment(ctx, uint(id), userID); err != nil {
+		if errors.Is(err, errno.ErrOrderNotFound) || errors.Is(err, errno.ErrOrderNotParticipant) {
+			reply.ReplyErrWithMessage(ctx, "订单不存在或仅卖方可确认收款")
+			return
+		}
+		if errors.Is(err, errno.ErrOrderInvalidState) {
+			reply.ReplyErrWithMessage(ctx, "当前状态不可确认收款")
 			return
 		}
 		reply.ReplyInternalError(ctx, err)

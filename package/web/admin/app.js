@@ -1113,7 +1113,7 @@
           <p><strong>状态</strong> ${o.order_status_label || o.order_status} · 买家 user_id: ${o.user_id} · 商品: ${o.good ? o.good.title : o.goods_id}</p>
           <p><strong>收货</strong> ${escapeHtml(o.receiver_addr || '')}</p>
           <p><strong>发货</strong> ${escapeHtml(o.sender_addr || '')}</p>
-          <p><strong>双方同意时间</strong> 买方 ${(o.buyer_agreed_at || '').slice(0, 19) || '-'} / 卖方 ${(o.seller_agreed_at || '').slice(0, 19) || '-'}</p>
+          <p><strong>买方已付款下单</strong> ${(o.buyer_agreed_at || '').slice(0, 19) || '-'} · <strong>卖方确认收款</strong> ${(o.seller_agreed_at || '').slice(0, 19) || '-'}</p>
           <p><strong>完成时间</strong> ${(o.completed_at || '').slice(0, 19) || '-'}</p>
         </div>
         <h5>聊天记录</h5>
@@ -1186,16 +1186,22 @@
         let actionHints = '';
         if (order && !loadErr) {
             if (os === 1) {
-                actionHints = '<p class="trade-hint">待下单：双方可聊天；请买卖双方各点一次「同意交易」。卖方可填发货地址（送货上门）。</p>';
+              actionHints = '<p class="trade-hint">待买方付款下单：可聊天；买方可点「已付款下单」（或下单时勾选已付款）。卖方可填发货地址。</p>';
             } else if (os === 2) {
-                actionHints = '<p class="trade-hint">正在派送：卖方可「确认送达」；双方仍可聊天。</p>';
+              actionHints = '<p class="trade-hint">待卖方确认收款：卖方可点「确认收款」后进入派送/自提或（在线）待确认收货。</p>';
             } else if (os === 3) {
-                actionHints = gt === 3
-                    ? '<p class="trade-hint">在线商品：买方可直接「确认收货」。</p>'
-                    : '<p class="trade-hint">待买方确认收货：买方可「确认收货」完成订单并扣库存。</p>';
+              if (gt === 3) {
+                actionHints = '<p class="trade-hint">不应出现：在线商品确认收款后应直接待确认收货。</p>';
+              } else if (gt === 2) {
+                actionHints = '<p class="trade-hint">待买方自提：买方可点「确认收货」表示已提货完成。</p>';
+              } else {
+                actionHints = '<p class="trade-hint">正在派送：卖方可「确认送达」；之后买方「确认收货」。</p>';
+              }
             } else if (os === 4) {
-                actionHints = '<p class="trade-hint trade-hint-ok">订单已完成。</p>';
+              actionHints = '<p class="trade-hint">待买方确认收货：买方可「确认收货」完成订单并扣库存。</p>';
             } else if (os === 5) {
+              actionHints = '<p class="trade-hint trade-hint-ok">订单已完成。</p>';
+            } else if (os === 6) {
                 actionHints = '<p class="trade-hint">订单已取消。</p>';
             }
         }
@@ -1207,7 +1213,7 @@
   <ol class="trade-steps">
     <li>在「用户管理」建两个普通用户并绑定同一学校；在「商品管理」新建商品（填卖家 user_id）、保存后点<strong>上架</strong>。</li>
     <li>下方分别<strong>登录卖家 / 买家</strong>；切换「当前身份」发消息、点同意与确认。</li>
-    <li>买家填商品 ID 与收货地址，点<strong>买家下单</strong>；再按订单状态操作直至完成。</li>
+    <li>买家填商品 ID 与收货地址，点<strong>买家下单</strong>；买方<strong>已付款下单</strong> → 卖方<strong>确认收款</strong> → 按类型派送/自提 → 买方<strong>确认收货</strong>。</li>
   </ol>
 </div>
 
@@ -1240,8 +1246,9 @@
   <h4>1. 买家下单</h4>
   <label>商品 ID <input type="number" id="td-goods-id" placeholder="商品管理列表中的 ID" min="1"></label>
   <label>收货/约定地址 <textarea id="td-receiver" rows="2" placeholder="送货上门必填；自提可空（会用商品自提地址）"></textarea></label>
-  <button type="button" class="btn btn-primary" id="td-create-order">买家下单（我想要）</button>
-  <p class="text-muted">不能买自己发布的商品。</p>
+  <label class="trade-inline"><input type="checkbox" id="td-claim-paid-on-create"> 下单同时表示已线下付款（直接进入待卖方确认收款）</label>
+  <button type="button" class="btn btn-primary" id="td-create-order">买家下单</button>
+  <p class="text-muted">不能买自己发布的商品。未勾选则先进入「待买方付款下单」，需再点「已付款下单」。</p>
 </div>
 
 <div class="trade-card">
@@ -1257,7 +1264,7 @@
     <p><strong>商品类型</strong> ${gt != null ? (GOODS_TYPE_MAP[gt] || gt) : '-'}</p>
     <p><strong>收货</strong> ${escapeHtml(order.receiver_addr || '')}</p>
     <p><strong>发货</strong> ${escapeHtml(order.sender_addr || '')}</p>
-    <p><strong>买方同意</strong> ${(order.buyer_agreed_at || '').slice(0, 19) || '—'} · <strong>卖方同意</strong> ${(order.seller_agreed_at || '').slice(0, 19) || '—'}</p>
+    <p><strong>买方已付款下单</strong> ${(order.buyer_agreed_at || '').slice(0, 19) || '—'} · <strong>卖方确认收款</strong> ${(order.seller_agreed_at || '').slice(0, 19) || '—'}</p>
   </div>` : (!orderId ? '<p class="text-muted">请先下单或填写订单号并刷新。</p>' : '')}
   ${actionHints}
 </div>
@@ -1272,14 +1279,15 @@
 <div class="trade-card">
   <h4>4. 履约操作</h4>
   <div class="trade-actions">
-    <button type="button" class="btn btn-primary" id="td-agree">同意交易（买卖各点一次）</button>
+    <button type="button" class="btn btn-primary" id="td-buyer-claim">买方已付款下单</button>
+    <button type="button" class="btn btn-primary" id="td-seller-confirm">卖方确认收款</button>
     <label>卖方发货地址 <input type="text" id="td-sender-addr" value="${senderAddrVal}" placeholder="送货上门时可填" style="min-width:220px"></label>
     <button type="button" class="btn" id="td-put-sender">保存发货地址（卖方）</button>
-    <button type="button" class="btn" id="td-confirm-delivery">确认送达（卖方·实体商品）</button>
+    <button type="button" class="btn" id="td-confirm-delivery">确认送达（卖方·送货上门）</button>
     <button type="button" class="btn btn-primary" id="td-confirm-receipt">确认收货（买方）</button>
     <button type="button" class="btn btn-danger" id="td-cancel">取消订单</button>
   </div>
-  <p class="text-muted">在线商品双方同意后不会出现「确认送达」，买方可直接确认收货。</p>
+  <p class="text-muted">在线商品：卖方确认收款后进入待买方确认收货，无「确认送达」。自提：确认收款后待买方自提，买方确认收货即完成。</p>
 </div>`;
 
         const chatLog = moduleContent.querySelector('#td-chat-log');
@@ -1349,9 +1357,14 @@
                 return;
             }
             try {
+              const claimPaid = moduleContent.querySelector('#td-claim-paid-on-create')?.checked;
                 const d = await userApi(buyerTok, '/orders', {
                     method: 'POST',
-                    body: JSON.stringify({goods_id: gid, receiver_addr: receiver})
+                  body: JSON.stringify({
+                    goods_id: gid,
+                    receiver_addr: receiver,
+                    buyer_claim_paid: !!claimPaid
+                  })
                 });
                 const id = d.data?.id;
                 if (id) {
@@ -1386,15 +1399,29 @@
                 alert(e.message);
             }
         });
-        moduleContent.querySelector('#td-agree')?.addEventListener('click', async () => {
+      moduleContent.querySelector('#td-buyer-claim')?.addEventListener('click', async () => {
             const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
             if (!oid) {
                 alert('请先填写订单号');
                 return;
             }
-            const t = demoTokenForRole(getDemoTradeRole());
+        const t = localStorage.getItem(DEMO_BUYER_TOKEN);
+        try {
+          await userApi(t, `/orders/${oid}/buyer-claim-paid`, {method: 'POST', body: JSON.stringify({})});
+          renderTradeDemo();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+      moduleContent.querySelector('#td-seller-confirm')?.addEventListener('click', async () => {
+        const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
+        if (!oid) {
+          alert('请先填写订单号');
+          return;
+        }
+        const t = localStorage.getItem(DEMO_SELLER_TOKEN);
             try {
-                await userApi(t, `/orders/${oid}/agree`, {method: 'POST', body: JSON.stringify({})});
+              await userApi(t, `/orders/${oid}/seller-confirm-payment`, {method: 'POST', body: JSON.stringify({})});
                 renderTradeDemo();
             } catch (e) {
                 alert(e.message);
