@@ -15,6 +15,18 @@ import (
 
 type orderService struct{}
 
+// goodAddrForOrder 商品上的统一地址：用于自提默认收货、送货上门默认发货地（与商品 goods_addr / pickup_addr 一致）
+func goodAddrForOrder(g *model.Good) string {
+	if g == nil {
+		return ""
+	}
+	s := strings.TrimSpace(g.GoodsAddr)
+	if s != "" {
+		return s
+	}
+	return strings.TrimSpace(g.PickupAddr)
+}
+
 // CreateOrderReq 「我想要」创建订单：待下单，双方可聊天；收货地址可后补
 type CreateOrderReq struct {
 	GoodsID      uint   `json:"goods_id" binding:"required"`
@@ -40,18 +52,21 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 	gid := int(req.GoodsID)
 	receiver := strings.TrimSpace(req.ReceiverAddr)
 	if receiver == "" && good.GoodsType == constant.GoodsTypePickup {
-		receiver = strings.TrimSpace(good.PickupAddr)
+		receiver = goodAddrForOrder(good)
+	}
+	sender := strings.TrimSpace(req.SenderAddr)
+	if sender == "" {
+		sender = goodAddrForOrder(good)
 	}
 	o := &model.Order{
 		UserID:       &uid,
 		GoodsID:      &gid,
 		OrderStatus:  constant.OrderStatusPendingIntent,
 		ReceiverAddr: receiver,
-		SenderAddr:   strings.TrimSpace(req.SenderAddr),
+		SenderAddr:   sender,
 	}
 	// 仅「送货上门」在买卖地址齐全时计算步行距离；自提/在线不计算
 	if good.GoodsType == constant.GoodsTypeDelivery {
-		sender := strings.TrimSpace(req.SenderAddr)
 		if sender != "" && receiver != "" {
 			if d := computeOrderDistanceMeters(ctx, sender, receiver); d != nil {
 				o.DistanceMeters = d

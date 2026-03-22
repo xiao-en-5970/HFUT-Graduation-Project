@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
@@ -26,6 +27,18 @@ func getUserBrief(ctx *gin.Context, userID uint) (map[string]interface{}, error)
 	}, nil
 }
 
+// effectiveGoodAddr 商品展示用统一地址：优先 goods_addr，兼容仅填过 pickup_addr 的旧数据
+func effectiveGoodAddr(g *model.Good) string {
+	if g == nil {
+		return ""
+	}
+	s := strings.TrimSpace(g.GoodsAddr)
+	if s != "" {
+		return s
+	}
+	return strings.TrimSpace(g.PickupAddr)
+}
+
 func enrichGoodsWithAuthor(ctx *gin.Context, list []*model.Good) []map[string]interface{} {
 	out := make([]map[string]interface{}, len(list))
 	for i, g := range list {
@@ -35,11 +48,13 @@ func enrichGoodsWithAuthor(ctx *gin.Context, list []*model.Good) []map[string]in
 }
 
 func enrichGoodWithAuthor(ctx *gin.Context, g *model.Good) map[string]interface{} {
+	addr := effectiveGoodAddr(g)
 	m := map[string]interface{}{
 		"id": g.ID, "user_id": g.UserID, "school_id": g.SchoolID, "title": g.Title, "content": g.Content,
 		"images": oss.TransformImageURLs(g.Images), "image_count": g.ImageCount,
 		"goods_type": g.GoodsType, "goods_type_label": constant.GoodsTypeLabel(g.GoodsType),
-		"pickup_addr": g.PickupAddr,
+		"goods_addr":  addr,
+		"pickup_addr": addr,
 		"price":       g.Price, "marked_price": g.MarkedPrice, "stock": g.Stock,
 		"good_status": g.GoodStatus, "status": g.Status,
 		"like_count": g.LikeCount, "collect_count": g.CollectCount,

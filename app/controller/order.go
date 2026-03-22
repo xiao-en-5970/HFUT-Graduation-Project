@@ -106,11 +106,13 @@ func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 		g, err := dao.Good().GetByID(ctx.Request.Context(), uint(*o.GoodsID))
 		if err == nil && g != nil {
 			g.Images = oss.TransformImageURLs(g.Images)
+			ga := effectiveGoodAddr(g)
 			m["good"] = map[string]interface{}{
 				"id": g.ID, "title": g.Title, "images": g.Images, "price": g.Price,
 				"user_id":    g.UserID,
 				"goods_type": g.GoodsType, "goods_type_label": constant.GoodsTypeLabel(g.GoodsType),
-				"pickup_addr": g.PickupAddr,
+				"goods_addr":  ga,
+				"pickup_addr": ga,
 			}
 		}
 	}

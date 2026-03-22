@@ -306,7 +306,11 @@ ALTER TABLE goods
 ALTER TABLE goods
     ADD COLUMN IF NOT EXISTS pickup_addr VARCHAR(512);
 COMMENT ON COLUMN goods.goods_type IS '1:送货上门 2:自提 3:在线商品';
-COMMENT ON COLUMN goods.pickup_addr IS '自提类：约定提货地点/说明，下单时可作为默认收货地址';
+COMMENT ON COLUMN goods.pickup_addr IS '与 goods_addr 同步；自提类约定提货点，下单时可作为默认收货地址';
+
+ALTER TABLE goods
+    ADD COLUMN IF NOT EXISTS goods_addr VARCHAR(512);
+COMMENT ON COLUMN goods.goods_addr IS '商品地址：发货地/自提点，用于默认卖方发货地址与自提说明（与 pickup_addr 写入时同步）';
 
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS school_id integer REFERENCES schools(id);
 comment on column articles.school_id is '学校ID';

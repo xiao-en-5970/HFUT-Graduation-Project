@@ -22,7 +22,8 @@ type CreateGoodReq struct {
 	Title       string   `json:"title" binding:"required"`
 	Content     string   `json:"content" binding:"required"`
 	GoodsType   int16    `json:"goods_type"`   // 1送货上门 2自提 3在线，默认1
-	PickupAddr  string   `json:"pickup_addr"`  // 自提类：约定地址
+	GoodsAddr   string   `json:"goods_addr"`   // 商品地址：默认发货地/自提点（优先）
+	PickupAddr  string   `json:"pickup_addr"`  // 兼容旧字段，与 goods_addr 合并存库
 	Price       int      `json:"price"`        // 价格（分）
 	MarkedPrice int      `json:"marked_price"` // 标价（分）
 	Stock       int      `json:"stock"`        // 库存
@@ -33,6 +34,7 @@ type UpdateGoodReq struct {
 	Title       *string   `json:"title"`
 	Content     *string   `json:"content"`
 	GoodsType   *int16    `json:"goods_type"`
+	GoodsAddr   *string   `json:"goods_addr"`
 	PickupAddr  *string   `json:"pickup_addr"`
 	Price       *int      `json:"price"`
 	MarkedPrice *int      `json:"marked_price"`
@@ -56,13 +58,18 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 	}
 	uid := int(userID)
 	sid := int(schoolID)
+	addr := strings.TrimSpace(req.GoodsAddr)
+	if addr == "" {
+		addr = strings.TrimSpace(req.PickupAddr)
+	}
 	g := &model.Good{
 		UserID:      &uid,
 		SchoolID:    &sid,
 		Title:       req.Title,
 		Content:     req.Content,
 		GoodsType:   gt,
-		PickupAddr:  strings.TrimSpace(req.PickupAddr),
+		GoodsAddr:   addr,
+		PickupAddr:  addr,
 		Price:       req.Price,
 		MarkedPrice: req.MarkedPrice,
 		Stock:       req.Stock,
@@ -141,8 +148,16 @@ func (s *goodService) Update(ctx *gin.Context, id uint, userID uint, schoolID ui
 			updates["goods_type"] = gt
 		}
 	}
-	if req.PickupAddr != nil {
-		updates["pickup_addr"] = strings.TrimSpace(*req.PickupAddr)
+	if req.GoodsAddr != nil || req.PickupAddr != nil {
+		addr := ""
+		if req.GoodsAddr != nil {
+			addr = strings.TrimSpace(*req.GoodsAddr)
+		}
+		if addr == "" && req.PickupAddr != nil {
+			addr = strings.TrimSpace(*req.PickupAddr)
+		}
+		updates["goods_addr"] = addr
+		updates["pickup_addr"] = addr
 	}
 	if len(updates) == 0 {
 		return nil
@@ -207,6 +222,7 @@ type AdminCreateGoodReq struct {
 	Title       string   `json:"title" binding:"required"`
 	Content     string   `json:"content" binding:"required"`
 	GoodsType   int16    `json:"goods_type"`
+	GoodsAddr   string   `json:"goods_addr"`
 	PickupAddr  string   `json:"pickup_addr"`
 	Price       int      `json:"price"`
 	MarkedPrice int      `json:"marked_price"`
@@ -222,6 +238,7 @@ type AdminUpdateGoodReq struct {
 	Title       *string   `json:"title"`
 	Content     *string   `json:"content"`
 	GoodsType   *int16    `json:"goods_type"`
+	GoodsAddr   *string   `json:"goods_addr"`
 	PickupAddr  *string   `json:"pickup_addr"`
 	Price       *int      `json:"price"`
 	MarkedPrice *int      `json:"marked_price"`
@@ -254,13 +271,18 @@ func (s *goodService) AdminCreate(ctx *gin.Context, req AdminCreateGoodReq) (uin
 	}
 	uid := int(req.UserID)
 	sid := int(req.SchoolID)
+	addr := strings.TrimSpace(req.GoodsAddr)
+	if addr == "" {
+		addr = strings.TrimSpace(req.PickupAddr)
+	}
 	g := &model.Good{
 		UserID:      &uid,
 		SchoolID:    &sid,
 		Title:       req.Title,
 		Content:     req.Content,
 		GoodsType:   gt,
-		PickupAddr:  strings.TrimSpace(req.PickupAddr),
+		GoodsAddr:   addr,
+		PickupAddr:  addr,
 		Price:       req.Price,
 		MarkedPrice: req.MarkedPrice,
 		Stock:       req.Stock,
@@ -337,8 +359,16 @@ func (s *goodService) AdminUpdate(ctx *gin.Context, id uint, req AdminUpdateGood
 			updates["goods_type"] = gt
 		}
 	}
-	if req.PickupAddr != nil {
-		updates["pickup_addr"] = strings.TrimSpace(*req.PickupAddr)
+	if req.GoodsAddr != nil || req.PickupAddr != nil {
+		addr := ""
+		if req.GoodsAddr != nil {
+			addr = strings.TrimSpace(*req.GoodsAddr)
+		}
+		if addr == "" && req.PickupAddr != nil {
+			addr = strings.TrimSpace(*req.PickupAddr)
+		}
+		updates["goods_addr"] = addr
+		updates["pickup_addr"] = addr
 	}
 	if req.Status != nil && (*req.Status == constant.StatusValid || *req.Status == constant.StatusInvalid) {
 		updates["status"] = *req.Status

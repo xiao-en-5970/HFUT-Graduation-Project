@@ -525,7 +525,7 @@
                 {key: 'user_id', label: '用户ID', render: r => r.user_id ?? '-'},
                 {key: 'school_id', label: '学校ID', render: r => r.school_id ?? '-'},
                 {key: 'goods_type', label: '类别', render: r => GOODS_TYPE_MAP[r.goods_type] || r.goods_type || '-'},
-                {key: 'pickup_addr', label: '自提地址', render: r => (r.pickup_addr || '-').slice(0, 24)},
+              {key: 'goods_addr', label: '商品地址', render: r => (r.goods_addr || r.pickup_addr || '-').slice(0, 28)},
                 {key: 'price', label: '价格(分)', render: r => r.price ?? 0},
                 {key: 'stock', label: '库存', render: r => r.stock ?? 0},
                 {key: 'good_status', label: '销售状态', render: r => GOOD_STATUS_MAP[r.good_status] || r.good_status},
@@ -603,7 +603,7 @@
         <option value="2">自提</option>
         <option value="3">在线商品</option>
       </select></label>
-      <label>自提地址（自提类填写）<input type="text" id="g-pickup_addr" placeholder="约定提货地点"></label>
+      <label>商品地址 <input type="text" id="g-goods_addr" placeholder="发货地/自提点；送货上门可作默认卖方发货地址，自提可作约定提货点"></label>
       <label>销售状态 <select id="g-good_status">
         <option value="1">在售</option>
         <option value="2">下架</option>
@@ -624,7 +624,8 @@
                 marked_price: parseInt(ov.querySelector('#g-marked_price').value || '0', 10),
                 stock: parseInt(ov.querySelector('#g-stock').value || '0', 10),
                 goods_type: parseInt(ov.querySelector('#g-goods_type').value, 10),
-                pickup_addr: ov.querySelector('#g-pickup_addr').value.trim(),
+              goods_addr: ov.querySelector('#g-goods_addr').value.trim(),
+              pickup_addr: ov.querySelector('#g-goods_addr').value.trim(),
                 good_status: parseInt(ov.querySelector('#g-good_status').value, 10)
             };
             if (!payload.user_id || !payload.school_id) throw new Error('请填写用户ID与学校ID');
@@ -656,6 +657,7 @@
                             marked_price: payload.marked_price,
                             stock: payload.stock,
                             goods_type: payload.goods_type,
+                          goods_addr: payload.goods_addr,
                             pickup_addr: payload.pickup_addr,
                             good_status: payload.good_status,
                             images
@@ -673,6 +675,7 @@
                             marked_price: payload.marked_price,
                             stock: payload.stock,
                             goods_type: payload.goods_type,
+                          goods_addr: payload.goods_addr,
                             pickup_addr: payload.pickup_addr,
                             good_status: payload.good_status,
                             images: []
@@ -702,7 +705,7 @@
             const gs = row?.good_status ?? 2;
             ov.querySelector('#g-good_status').value = String(gs);
             ov.querySelector('#g-goods_type').value = String(row?.goods_type ?? 1);
-            ov.querySelector('#g-pickup_addr').value = row?.pickup_addr || '';
+          ov.querySelector('#g-goods_addr').value = row?.goods_addr || row?.pickup_addr || '';
             const listEl = ov.querySelector('#g-images-list');
             const gid = isEdit ? row.id : null;
 
@@ -1175,7 +1178,10 @@
 
         const roleSel = (r) => role === r ? 'checked' : '';
 
-        const senderAddrVal = order && !loadErr && order.sender_addr ? String(order.sender_addr).replace(/"/g, '&quot;') : '';
+      const prefSender = order && !loadErr
+          ? (order.sender_addr || (order.good && (order.good.goods_addr || order.good.pickup_addr)) || '')
+          : '';
+      const senderAddrVal = prefSender ? String(prefSender).replace(/"/g, '&quot;') : '';
 
         let actionHints = '';
         if (order && !loadErr) {
