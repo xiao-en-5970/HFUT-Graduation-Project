@@ -42,6 +42,10 @@ jobs:
     needs: check
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    # docker/build-push-action 默认会把 build record 上传到 GitHub Artifacts（CreateArtifact），
+    # 免费额度易满；关闭后仍推送镜像，仅不再占用 Artifact 存储。见 doc/CI_CD.md
+    env:
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
     permissions:
       contents: read
       packages: write
