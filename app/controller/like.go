@@ -12,9 +12,9 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
-// validLikeExtTypes 点赞支持的 extType：1帖子 2提问 3回答
+// validLikeExtTypes 点赞支持的 extType：1帖子 2提问 3回答 4商品
 var validLikeExtTypes = map[int]bool{
-	constant.ExtTypePost: true, constant.ExtTypeQuestion: true, constant.ExtTypeAnswer: true,
+	constant.ExtTypePost: true, constant.ExtTypeQuestion: true, constant.ExtTypeAnswer: true, constant.ExtTypeGoods: true,
 }
 
 // LikeAdd 统一点赞接口：POST /like/:extType/:id
@@ -31,7 +31,7 @@ func LikeAdd(ctx *gin.Context) {
 		return
 	}
 	if !validLikeExtTypes[extType] {
-		reply.ReplyErrWithMessage(ctx, "extType 无效，点赞仅支持 1帖子 2提问 3回答")
+		reply.ReplyErrWithMessage(ctx, "extType 无效，点赞仅支持 1帖子 2提问 3回答 4商品")
 		return
 	}
 	if err := service.Like().AddArticle(ctx, userID, schoolID, extID, extType); err != nil {
@@ -58,7 +58,7 @@ func LikeRemove(ctx *gin.Context) {
 		return
 	}
 	if !validLikeExtTypes[extType] {
-		reply.ReplyErrWithMessage(ctx, "extType 无效，点赞仅支持 1帖子 2提问 3回答")
+		reply.ReplyErrWithMessage(ctx, "extType 无效，点赞仅支持 1帖子 2提问 3回答 4商品")
 		return
 	}
 	if err := service.Like().RemoveArticle(ctx, userID, schoolID, extID, extType); err != nil {

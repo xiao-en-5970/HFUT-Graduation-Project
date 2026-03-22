@@ -49,6 +49,7 @@ func PrivateRouter(api *gin.RouterGroup) {
 		userGroup.GET("/:id/posts", controller.UserListPosts)
 		userGroup.GET("/:id/questions", controller.UserListQuestions)
 		userGroup.GET("/:id/answers", controller.UserListAnswers)
+		userGroup.GET("/:id/goods", controller.GoodListByUser)
 		userGroup.GET("/:id", controller.UserProfile)
 		userGroup.POST("/update", controller.UserUpdate)
 		userGroup.POST("/bind/school", controller.UserBindSchool)
@@ -117,6 +118,26 @@ func PrivateRouter(api *gin.RouterGroup) {
 		likeGroup.POST("/:extType/:id", controller.LikeAdd)
 		likeGroup.DELETE("/:extType/:id", controller.LikeRemove)
 	}
+	// 商品模块
+	goodGroup := api.Group("/goods")
+	{
+		goodGroup.GET("", controller.GoodList)
+		goodGroup.GET("/:id", controller.GoodGet)
+		goodGroup.POST("", controller.GoodCreate)
+		goodGroup.PUT("/:id", controller.GoodUpdate)
+		goodGroup.POST("/:id/publish", controller.GoodPublish)
+		goodGroup.POST("/:id/off-shelf", controller.GoodOffShelf)
+		goodGroup.POST("/:id/images", controller.GoodUploadImages)
+	}
+	// 订单模块
+	orderGroup := api.Group("/orders")
+	{
+		orderGroup.POST("", controller.OrderCreate)
+		orderGroup.GET("", controller.OrderList)
+		orderGroup.GET("/sold", controller.OrderListSold)
+		orderGroup.GET("/:id", controller.OrderGet)
+		orderGroup.PUT("/:id", controller.OrderUpdate)
+	}
 	// OSS 上传、删除（需 JWT）
 	api.POST("/oss/*path", controller.OSSUpload)
 	api.DELETE("/oss/*path", controller.OSSDelete)
@@ -159,5 +180,16 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.PUT("/schools/:id", controller.AdminSchoolUpdate)
 		adminGroup.DELETE("/schools/:id", controller.AdminSchoolDisable)
 		adminGroup.POST("/schools/:id/restore", controller.AdminSchoolRestore)
+
+		// 商品管理（全站）
+		adminGroup.GET("/goods", controller.AdminGoodList)
+		adminGroup.GET("/goods/:id", controller.AdminGoodGet)
+		adminGroup.POST("/goods", controller.AdminGoodCreate)
+		adminGroup.PUT("/goods/:id", controller.AdminGoodUpdate)
+		adminGroup.POST("/goods/:id/publish", controller.AdminGoodPublish)
+		adminGroup.POST("/goods/:id/off-shelf", controller.AdminGoodOffShelf)
+		adminGroup.POST("/goods/:id/images", controller.AdminGoodUploadImages)
+		adminGroup.DELETE("/goods/:id", controller.AdminGoodDisable)
+		adminGroup.POST("/goods/:id/restore", controller.AdminGoodRestore)
 	}
 }

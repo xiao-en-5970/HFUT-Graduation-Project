@@ -271,6 +271,15 @@ func ArticleImagePathWithSnowflake(articleID uint, snowflakeID int64, ext string
 	return "article/" + strconv.FormatUint(uint64(articleID), 10) + "/img_" + strconv.FormatInt(snowflakeID, 10) + "." + ext
 }
 
+// GoodImagePathWithSnowflake 商品图片存储路径 good/{goodId}/img_{snowflake}.{ext}
+func GoodImagePathWithSnowflake(goodID uint, snowflakeID int64, ext string) string {
+	ext = strings.TrimPrefix(ext, ".")
+	if ext == "" {
+		ext = "jpg"
+	}
+	return "good/" + strconv.FormatUint(uint64(goodID), 10) + "/img_" + strconv.FormatInt(snowflakeID, 10) + "." + ext
+}
+
 // PathForStorage 统一存 .small（缩略图），供数据库存储；若已是 .small 或非图片则原样返回
 func PathForStorage(path string) string {
 	return pathForDisplay(path)

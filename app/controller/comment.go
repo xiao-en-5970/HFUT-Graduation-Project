@@ -13,9 +13,9 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
-// validCommentExtTypes 评论支持的 extType：1帖子 2提问 3回答
+// validCommentExtTypes 评论支持的 extType：1帖子 2提问 3回答 4商品
 var validCommentExtTypes = map[int]bool{
-	constant.ExtTypePost: true, constant.ExtTypeQuestion: true, constant.ExtTypeAnswer: true,
+	constant.ExtTypePost: true, constant.ExtTypeQuestion: true, constant.ExtTypeAnswer: true, constant.ExtTypeGoods: true,
 }
 
 // CommentCreate 统一评论接口：POST /comments/:extType/:id

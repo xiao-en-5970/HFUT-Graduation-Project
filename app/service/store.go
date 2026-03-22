@@ -7,3 +7,5 @@ func Article() *articleService { return &articleService{} }
 func Comment() *commentService { return &commentService{} }
 func Collect() *collectService { return &collectService{} }
 func Like() *likeService       { return &likeService{} }
+func Good() *goodService       { return &goodService{} }
+func Order() *orderService     { return &orderService{} }

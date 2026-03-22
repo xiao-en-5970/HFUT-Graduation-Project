@@ -26,21 +26,27 @@ type CreateCommentReq struct {
 }
 
 // Create 发评论或回复
-// articleID 为文章 ID，extType 为 1帖子/2提问/3回答，需校验文章存在且可见（本校或公开 school_id=0）
+// articleID 为文章/商品 ID，extType 为 1帖子/2提问/3回答/4商品
 func (s *commentService) Create(ctx *gin.Context, userID uint, schoolID uint, articleID uint, extType int, req CreateCommentReq) (uint, error) {
-	// 校验文章存在、可见且类型匹配（schoolID=0 时仅可评公开文章）
-	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
-	if err != nil || art == nil {
-		if err == gorm.ErrRecordNotFound {
+	if extType == constant.ExtTypeGoods {
+		g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), articleID, schoolID)
+		if err != nil || g == nil {
 			return 0, ErrCommentArticleNotFound
 		}
-		return 0, err
-	}
-	// 文章需为公开或用户自己的
-	if art.PublishStatus == 1 {
-		ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
-		if !ok {
-			return 0, ErrCommentArticleNotFound
+		_ = g
+	} else {
+		art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
+		if err != nil || art == nil {
+			if err == gorm.ErrRecordNotFound {
+				return 0, ErrCommentArticleNotFound
+			}
+			return 0, err
+		}
+		if art.PublishStatus == 1 {
+			ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
+			if !ok {
+				return 0, ErrCommentArticleNotFound
+			}
 		}
 	}
 
@@ -87,33 +93,49 @@ func (s *commentService) Create(ctx *gin.Context, userID uint, schoolID uint, ar
 	return dao.Comment().Create(ctx.Request.Context(), c)
 }
 
-// ListComments 某文章的顶层评论列表
-// extType 1帖子 2提问 3回答
+// ListComments 某文章/商品的顶层评论列表
+// extType 1帖子 2提问 3回答 4商品
 func (s *commentService) ListComments(ctx *gin.Context, userID uint, schoolID uint, articleID uint, extType int, page, pageSize int) ([]*model.Comment, int64, error) {
-	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
-	if err != nil || art == nil {
-		return nil, 0, ErrCommentArticleNotFound
-	}
-	if art.PublishStatus == 1 {
-		ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
-		if !ok {
+	if extType == constant.ExtTypeGoods {
+		g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), articleID, schoolID)
+		if err != nil || g == nil {
 			return nil, 0, ErrCommentArticleNotFound
+		}
+		_ = g
+	} else {
+		art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
+		if err != nil || art == nil {
+			return nil, 0, ErrCommentArticleNotFound
+		}
+		if art.PublishStatus == 1 {
+			ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
+			if !ok {
+				return nil, 0, ErrCommentArticleNotFound
+			}
 		}
 	}
 	return dao.Comment().ListTopByExt(ctx.Request.Context(), extType, int(articleID), page, pageSize)
 }
 
 // ListReplies 某评论的回复列表
-// extType 1帖子 2提问 3回答
+// extType 1帖子 2提问 3回答 4商品
 func (s *commentService) ListReplies(ctx *gin.Context, userID uint, schoolID uint, articleID uint, commentID uint, extType int, page, pageSize int) ([]*model.Comment, int64, error) {
-	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
-	if err != nil || art == nil {
-		return nil, 0, ErrCommentArticleNotFound
-	}
-	if art.PublishStatus == 1 {
-		ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
-		if !ok {
+	if extType == constant.ExtTypeGoods {
+		g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), articleID, schoolID)
+		if err != nil || g == nil {
 			return nil, 0, ErrCommentArticleNotFound
+		}
+		_ = g
+	} else {
+		art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
+		if err != nil || art == nil {
+			return nil, 0, ErrCommentArticleNotFound
+		}
+		if art.PublishStatus == 1 {
+			ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), articleID, userID, schoolID, extType)
+			if !ok {
+				return nil, 0, ErrCommentArticleNotFound
+			}
 		}
 	}
 	ok, err := dao.Comment().ExistsByExtAndID(ctx.Request.Context(), extType, int(articleID), commentID)

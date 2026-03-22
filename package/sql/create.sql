@@ -163,6 +163,13 @@ comment on column goods.marked_price is '标价，单位分';
 ALTER TABLE goods ADD COLUMN IF NOT EXISTS image_count integer NOT NULL DEFAULT 0;
 comment on column goods.image_count is '图片数量';
 
+ALTER TABLE goods
+    ADD COLUMN IF NOT EXISTS like_count integer NOT NULL DEFAULT 0;
+ALTER TABLE goods
+    ADD COLUMN IF NOT EXISTS collect_count integer NOT NULL DEFAULT 0;
+comment on column goods.like_count is '点赞次数';
+comment on column goods.collect_count is '收藏次数';
+
 create table tags (
             id SERIAL PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
@@ -241,6 +248,17 @@ comment on column orders.user_id is '用户ID';
 comment on column orders.goods_id is '商品ID';
 comment on column orders.status is '1:正常 2:禁用';
 comment on column orders.order_status is '1:待支付 2:已支付 3:已发货 4:已收货 5:已取消';
+
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS receiver_addr VARCHAR(512);
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS sender_addr VARCHAR(512);
+COMMENT ON COLUMN orders.receiver_addr IS '收货地址';
+COMMENT ON COLUMN orders.sender_addr IS '发货地址';
+
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS distance_meters integer;
+COMMENT ON COLUMN orders.distance_meters IS '发货地与收货地步行规划距离（米），高德地图 API 计算';
 
 -- 为没有 status 字段的表添加 status 字段
 ALTER TABLE schools ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;

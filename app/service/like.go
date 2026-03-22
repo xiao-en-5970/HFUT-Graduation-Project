@@ -19,9 +19,12 @@ var (
 
 type likeService struct{}
 
-// AddArticle 点赞文章
-// extType: 1帖子 2提问 3回答
+// AddArticle 点赞
+// extType: 1帖子 2提问 3回答 4商品
 func (s *likeService) AddArticle(ctx *gin.Context, userID uint, schoolID uint, articleID uint, extType int) error {
+	if extType == constant.ExtTypeGoods {
+		return s.addGoodLike(ctx, userID, schoolID, articleID)
+	}
 	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 	if err != nil || art == nil {
 		return ErrLikeArticleNotFound
@@ -74,16 +77,76 @@ func (s *likeService) AddArticle(ctx *gin.Context, userID uint, schoolID uint, a
 	return nil
 }
 
+// addGoodLike 点赞商品
+func (s *likeService) addGoodLike(ctx *gin.Context, userID uint, schoolID uint, goodID uint) error {
+	g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), goodID, schoolID)
+	if err != nil || g == nil {
+		return ErrLikeArticleNotFound
+	}
+	_ = g
+	exist, getErr := dao.Like().GetByUserExt(ctx.Request.Context(), userID, int(goodID), constant.ExtTypeGoods)
+	if getErr == nil {
+		if exist.Status == constant.StatusValid {
+			return nil
+		}
+		return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			if err := dao.Like().RestoreWithDB(tx, userID, int(goodID), constant.ExtTypeGoods); err != nil {
+				return err
+			}
+			return dao.Good().UpdateLikeCountDB(tx, goodID, 1)
+		})
+	}
+	if getErr != gorm.ErrRecordNotFound {
+		return getErr
+	}
+	uid := int(userID)
+	l := &model.Like{
+		UserID:  &uid,
+		ExtID:   int(goodID),
+		ExtType: constant.ExtTypeGoods,
+		Status:  constant.StatusValid,
+	}
+	err = pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := dao.Like().CreateWithDB(tx, l); err != nil {
+			return err
+		}
+		return dao.Good().UpdateLikeCountDB(tx, goodID, 1)
+	})
+	if err != nil {
+		exist2, _ := dao.Like().GetByUserExt(ctx.Request.Context(), userID, int(goodID), constant.ExtTypeGoods)
+		if exist2 != nil && exist2.Status == constant.StatusValid {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 // RemoveArticle 取消点赞
 func (s *likeService) RemoveArticle(ctx *gin.Context, userID uint, schoolID uint, articleID uint, extType int) error {
+	if extType == constant.ExtTypeGoods {
+		_, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), articleID, schoolID)
+		if err != nil {
+			return ErrLikeArticleNotFound
+		}
+		ok, _ := dao.Like().Exists(ctx.Request.Context(), userID, int(articleID), extType)
+		if !ok {
+			return nil
+		}
+		return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			if err := dao.Like().SoftDeleteWithDB(tx, userID, int(articleID), extType); err != nil {
+				return err
+			}
+			return dao.Good().UpdateLikeCountDB(tx, articleID, -1)
+		})
+	}
 	_, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 	if err != nil {
 		return ErrLikeArticleNotFound
 	}
-	// 惰性删除；未点赞时幂等返回成功
 	ok, _ := dao.Like().Exists(ctx.Request.Context(), userID, int(articleID), extType)
 	if !ok {
-		return nil // 幂等：未点赞，多次取消视为成功
+		return nil
 	}
 	return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
 		if err := dao.Like().SoftDeleteWithDB(tx, userID, int(articleID), extType); err != nil {

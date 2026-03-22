@@ -70,12 +70,15 @@ func (s *collectService) resolveCollectID(ctx *gin.Context, userID uint, collect
 	return s.GetOrCreateDefaultFolder(ctx, userID)
 }
 
-// AddArticle 收藏文章到收藏夹
-// collectID=0 表示默认收藏夹；extType 标明收藏类型（1帖子 2提问 3回答），便于筛选展示
+// AddArticle 收藏到收藏夹
+// collectID=0 表示默认收藏夹；extType 标明收藏类型（1帖子 2提问 3回答 4商品），便于筛选展示
 func (s *collectService) AddArticle(ctx *gin.Context, userID uint, schoolID uint, collectID uint, articleID uint, extType int) error {
 	cid, err := s.resolveCollectID(ctx, userID, collectID)
 	if err != nil {
 		return err
+	}
+	if extType == constant.ExtTypeGoods {
+		return s.addGoodCollect(ctx, userID, schoolID, cid, articleID)
 	}
 	art, err := dao.Article().GetByIDWithSchoolAndType(ctx.Request.Context(), articleID, schoolID, extType)
 	if err != nil || art == nil {
@@ -128,7 +131,50 @@ func (s *collectService) AddArticle(ctx *gin.Context, userID uint, schoolID uint
 	return nil
 }
 
-// RemoveArticle 取消收藏文章
+// addGoodCollect 收藏商品
+func (s *collectService) addGoodCollect(ctx *gin.Context, userID uint, schoolID uint, collectID uint, goodID uint) error {
+	g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), goodID, schoolID)
+	if err != nil || g == nil {
+		return ErrCollectArticleNotFound
+	}
+	exist, getErr := dao.CollectItem().GetByCollectExt(ctx.Request.Context(), collectID, int(goodID), constant.ExtTypeGoods)
+	if getErr == nil {
+		if exist.Status == constant.StatusValid {
+			return nil
+		}
+		return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			if err := dao.CollectItem().RestoreWithDB(tx, collectID, int(goodID), constant.ExtTypeGoods); err != nil {
+				return err
+			}
+			return dao.Good().UpdateCollectCountDB(tx, goodID, 1)
+		})
+	}
+	if getErr != gorm.ErrRecordNotFound {
+		return getErr
+	}
+	item := &model.CollectItem{
+		CollectID: collectID,
+		ExtID:     int(goodID),
+		ExtType:   constant.ExtTypeGoods,
+		Status:    constant.StatusValid,
+	}
+	err = pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := dao.CollectItem().CreateWithDB(tx, item); err != nil {
+			return err
+		}
+		return dao.Good().UpdateCollectCountDB(tx, goodID, 1)
+	})
+	if err != nil {
+		exist2, _ := dao.CollectItem().GetByCollectExt(ctx.Request.Context(), collectID, int(goodID), constant.ExtTypeGoods)
+		if exist2 != nil && exist2.Status == constant.StatusValid {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// RemoveArticle 取消收藏
 func (s *collectService) RemoveArticle(ctx *gin.Context, userID uint, collectID uint, articleID uint, extType int) error {
 	cid, err := s.resolveCollectID(ctx, userID, collectID)
 	if err != nil {
@@ -138,12 +184,17 @@ func (s *collectService) RemoveArticle(ctx *gin.Context, userID uint, collectID 
 	if !ok {
 		return nil // 幂等：未收藏，多次取消视为成功
 	}
-	// 惰性删除
+	updateCount := func(tx *gorm.DB) error {
+		if extType == constant.ExtTypeGoods {
+			return dao.Good().UpdateCollectCountDB(tx, articleID, -1)
+		}
+		return dao.Article().UpdateCollectCountDB(tx, articleID, -1)
+	}
 	return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
 		if err := dao.CollectItem().SoftDeleteWithDB(tx, cid, int(articleID), extType); err != nil {
 			return err
 		}
-		return dao.Article().UpdateCollectCountDB(tx, articleID, -1)
+		return updateCount(tx)
 	})
 }
 

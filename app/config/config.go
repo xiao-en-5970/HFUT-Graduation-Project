@@ -51,6 +51,8 @@ var (
 	SearchCombinedRelevance    float64 // combined 排序：相关度系数，默认 100
 	SearchCombinedPopularity   float64 // combined 排序：热度系数，默认 0.01
 
+	// 高德地图 Web 服务 Key（用于订单发货/收货地址间步行距离等），见 https://console.amap.com/
+	AmapKey string
 )
 
 const defaultEnvPath = "/.env"
@@ -107,6 +109,8 @@ func LoadConfigFrom(path string) error {
 	SearchInteractionDecayDays = getEnvFloat("SEARCH_INTERACTION_DECAY_DAYS", 90)
 	SearchCombinedRelevance = getEnvFloat("SEARCH_COMBINED_RELEVANCE", 100)
 	SearchCombinedPopularity = getEnvFloat("SEARCH_COMBINED_POPULARITY", 0.01)
+
+	AmapKey = getEnv("AMAP_KEY", "")
 
 	return nil
 }

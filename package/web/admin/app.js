@@ -62,6 +62,23 @@
     });
   }
 
+    /** multipart/form-data（如管理端商品图上传） */
+    async function apiForm(url, formData, options = {}) {
+        const token = getToken();
+        const headers = {...(options.headers || {})};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const res = await fetch(API + url, {method: options.method || 'POST', headers, body: formData});
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401 || res.status === 403) {
+            redirectToLogin();
+            throw new Error(data.message || '未授权');
+        }
+        if (data.code !== 0 && data.code !== 200) {
+            throw new Error(data.message || '请求失败');
+        }
+        return data;
+    }
+
   function ensureUploadProgress(overlay) {
     let wrap = overlay.querySelector('.upload-progress-wrap');
     if (!wrap) {
@@ -111,7 +128,7 @@
   const moduleContent = document.getElementById('module-content');
   logoutBtn.addEventListener('click', redirectToLogin);
 
-  const routes = ['users', 'posts', 'questions', 'answers', 'schools', 'bind-school'];
+    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'schools', 'bind-school'];
   function getRoute() {
     const hash = (location.hash || '#/users').slice(2) || 'users';
     return routes.includes(hash) ? hash : 'users';
@@ -124,6 +141,7 @@
     else if (r === 'posts') renderPosts();
     else if (r === 'questions') renderQuestions();
     else if (r === 'answers') renderAnswers();
+    else if (r === 'goods') renderGoods();
     else if (r === 'schools') renderSchools();
     else if (r === 'bind-school') renderBindSchool();
   }
@@ -153,6 +171,7 @@
   const ROLE_MAP = { 1: '普通用户', 2: '管理员', 3: '超级管理员', 4: '匿名用户' };
   const STATUS_MAP = { 1: '正常', 2: '禁用' };
   const ARTICLE_STATUS_MAP = {1: '正常', 2: '已删除', 3: '草稿'};
+    const GOOD_STATUS_MAP = {1: '在售', 2: '下架', 3: '已售出'};
 
   /** 列表单图展示（头像/背景），与帖子图片同一套 display 逻辑 */
   function renderListImage(url, title) {
@@ -441,6 +460,292 @@
       }));
     } catch (e) { moduleContent.innerHTML = '<p class="error">' + e.message + '</p>'; }
   }
+
+    let goodPage = 1;
+
+    async function renderGoods() {
+        moduleContent.innerHTML = '<p>加载中...</p>';
+        try {
+            const data = await api(`/admin/goods?page=${goodPage}&pageSize=15&include_invalid=1`);
+            const list = data.data?.list || [];
+            const total = data.data?.total || 0;
+            const columns = [
+                {key: 'id', label: 'ID'},
+                {
+                    key: 'title',
+                    label: '标题',
+                    render: r => (r.title || '').slice(0, 36) + ((r.title || '').length > 36 ? '...' : '')
+                },
+                {key: 'images', label: '图片', render: r => renderListImages(r.images)},
+                {key: 'user_id', label: '用户ID', render: r => r.user_id ?? '-'},
+                {key: 'school_id', label: '学校ID', render: r => r.school_id ?? '-'},
+                {key: 'price', label: '价格(分)', render: r => r.price ?? 0},
+                {key: 'stock', label: '库存', render: r => r.stock ?? 0},
+                {key: 'good_status', label: '销售状态', render: r => GOOD_STATUS_MAP[r.good_status] || r.good_status},
+                {
+                    key: 'status',
+                    label: '记录',
+                    render: r => `<span class="status-badge status-${r.status === 1 ? 'valid' : 'invalid'}">${r.status === 1 ? '正常' : '已禁用'}</span>`
+                },
+                {key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19)},
+            ];
+            list.forEach(g => {
+                const ok = g.status === 1;
+                if (ok) {
+                    g._actions = `<button class="btn btn-danger btn-sm" data-good-disable="${g.id}">禁用</button> ` +
+                        `<button class="btn btn-sm" data-good-edit="${g.id}">编辑</button> ` +
+                        (g.good_status === 1
+                            ? `<button class="btn btn-sm" data-good-off="${g.id}">下架</button>`
+                            : `<button class="btn btn-primary btn-sm" data-good-pub="${g.id}">上架</button>`);
+                } else {
+                    g._actions = `<button class="btn btn-success btn-sm" data-good-restore="${g.id}">恢复</button> <button class="btn btn-sm" data-good-edit="${g.id}">编辑</button>`;
+                }
+            });
+            const extra = '<button class="btn btn-primary" id="add-good-btn">新建商品</button>';
+            renderTable('商品管理', columns, list, goodPage, total, 15, (p) => {
+                goodPage = p;
+                renderGoods();
+            }, extra);
+
+            document.getElementById('add-good-btn')?.addEventListener('click', () => showGoodModal(null));
+            moduleContent.querySelectorAll('[data-good-disable]').forEach(btn => btn.addEventListener('click', () => goodAction(parseInt(btn.dataset.goodDisable, 10), 'disable')));
+            moduleContent.querySelectorAll('[data-good-restore]').forEach(btn => btn.addEventListener('click', () => goodAction(parseInt(btn.dataset.goodRestore, 10), 'restore')));
+            moduleContent.querySelectorAll('[data-good-pub]').forEach(btn => btn.addEventListener('click', () => goodAction(parseInt(btn.dataset.goodPub, 10), 'publish')));
+            moduleContent.querySelectorAll('[data-good-off]').forEach(btn => btn.addEventListener('click', () => goodAction(parseInt(btn.dataset.goodOff, 10), 'off')));
+            moduleContent.querySelectorAll('[data-good-edit]').forEach(btn => btn.addEventListener('click', () => {
+                const row = list.find(x => String(x.id) === String(btn.dataset.goodEdit));
+                if (!row) {
+                    alert('未找到对应记录');
+                    return;
+                }
+                showGoodModal(row);
+            }));
+        } catch (e) {
+            moduleContent.innerHTML = '<p class="error">' + e.message + '</p>';
+        }
+    }
+
+    async function goodAction(id, action) {
+        try {
+            if (action === 'disable') await api(`/admin/goods/${id}`, {method: 'DELETE'});
+            else if (action === 'restore') await api(`/admin/goods/${id}/restore`, {method: 'POST'});
+            else if (action === 'publish') await api(`/admin/goods/${id}/publish`, {method: 'POST'});
+            else if (action === 'off') await api(`/admin/goods/${id}/off-shelf`, {method: 'POST'});
+            renderGoods();
+        } catch (e) {
+            alert(e.message);
+        }
+    }
+
+    function showGoodModal(row) {
+        const isEdit = row && row.id != null;
+        const uid = row?.user_id ?? '';
+        const sid = row?.school_id ?? '';
+        const initialImgs = row?.images && Array.isArray(row.images) ? [...row.images] : [];
+        showModal(isEdit ? '编辑商品 #' + row.id : '新建商品', `
+      <label>用户ID <input type="number" id="g-user_id" value="${uid}" required></label>
+      <label>学校ID <input type="number" id="g-school_id" value="${sid}" required></label>
+      <label>标题 <input type="text" id="g-title" value=""></label>
+      <label>内容 <textarea id="g-content" rows="4" required></textarea></label>
+      <label>价格（分）<input type="number" id="g-price" value="${row?.price ?? 0}" min="0"></label>
+      <label>标价（分）<input type="number" id="g-marked_price" value="${row?.marked_price ?? 0}" min="0"></label>
+      <label>库存 <input type="number" id="g-stock" value="${row?.stock ?? 0}" min="0"></label>
+      <label>销售状态 <select id="g-good_status">
+        <option value="1">在售</option>
+        <option value="2">下架</option>
+        <option value="3">已售出</option>
+      </select></label>
+      <div class="art-images-editor">
+        <span class="label">图片（可删除、排序、新增）</span>
+        <div id="g-images-list" class="art-images-list"></div>
+        <label class="art-add-label">添加图片 <input type="file" id="g-images-add" accept="image/*" multiple></label>
+      </div>
+    `, async (ov) => {
+            const payload = {
+                user_id: parseInt(ov.querySelector('#g-user_id').value || '0', 10),
+                school_id: parseInt(ov.querySelector('#g-school_id').value || '0', 10),
+                title: ov.querySelector('#g-title').value.trim(),
+                content: ov.querySelector('#g-content').value.trim(),
+                price: parseInt(ov.querySelector('#g-price').value || '0', 10),
+                marked_price: parseInt(ov.querySelector('#g-marked_price').value || '0', 10),
+                stock: parseInt(ov.querySelector('#g-stock').value || '0', 10),
+                good_status: parseInt(ov.querySelector('#g-good_status').value, 10)
+            };
+            if (!payload.user_id || !payload.school_id) throw new Error('请填写用户ID与学校ID');
+            if (!payload.title || !payload.content) throw new Error('请填写标题与内容');
+
+            let images = Array.from(ov.querySelectorAll('#g-images-list .art-img-item:not(.art-img-pending)')).map(el => el.dataset.url).filter(Boolean);
+            const pending = Array.from(ov.querySelectorAll('#g-images-list .art-img-pending')).map(el => el._file).filter(Boolean);
+            const progress = ensureUploadProgress(ov);
+            const confirmBtn = ov.querySelector('#modal-confirm');
+
+            try {
+                confirmBtn.disabled = true;
+                if (isEdit) {
+                    if (pending.length) {
+                        const fd = new FormData();
+                        pending.forEach(f => fd.append('files', f));
+                        progress.show('上传图片...');
+                        const up = await apiForm(`/admin/goods/${row.id}/images`, fd);
+                        (up.data?.urls || []).forEach(u => images.push(u));
+                    }
+                    await api(`/admin/goods/${row.id}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            user_id: payload.user_id,
+                            school_id: payload.school_id,
+                            title: payload.title,
+                            content: payload.content,
+                            price: payload.price,
+                            marked_price: payload.marked_price,
+                            stock: payload.stock,
+                            good_status: payload.good_status,
+                            images
+                        })
+                    });
+                } else {
+                    const createRes = await api('/admin/goods', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            user_id: payload.user_id,
+                            school_id: payload.school_id,
+                            title: payload.title,
+                            content: payload.content,
+                            price: payload.price,
+                            marked_price: payload.marked_price,
+                            stock: payload.stock,
+                            good_status: payload.good_status,
+                            images: []
+                        })
+                    });
+                    const newId = createRes.data?.id;
+                    if (!newId) throw new Error('创建失败');
+                    if (pending.length) {
+                        const fd = new FormData();
+                        pending.forEach(f => fd.append('files', f));
+                        progress.show('上传图片...');
+                        const up = await apiForm(`/admin/goods/${newId}/images`, fd);
+                        const urls = up.data?.urls || [];
+                        if (urls.length) {
+                            await api(`/admin/goods/${newId}`, {method: 'PUT', body: JSON.stringify({images: urls})});
+                        }
+                    }
+                }
+            } finally {
+                progress.hide();
+                confirmBtn.disabled = false;
+            }
+            renderGoods();
+        }, null, (ov) => {
+            ov.querySelector('#g-title').value = row?.title || '';
+            ov.querySelector('#g-content').value = row?.content || '';
+            const gs = row?.good_status ?? 2;
+            ov.querySelector('#g-good_status').value = String(gs);
+            const listEl = ov.querySelector('#g-images-list');
+            const gid = isEdit ? row.id : null;
+
+            function renderImages(urls) {
+                listEl.innerHTML = urls.map((url, i) => `
+          <span class="art-img-item" data-url="${(url || '').replace(/"/g, '&quot;')}" data-idx="${i}">
+            <img src="${url || ''}" alt="图${i + 1}" onerror="this.style.display='none'"/>
+            <button type="button" class="art-img-del" title="删除">×</button>
+            <span class="art-img-move" title="上移">↑</span>
+            <span class="art-img-move" title="下移">↓</span>
+          </span>
+        `).join('');
+                listEl.querySelectorAll('.art-img-del').forEach(btn => {
+                    btn.onclick = () => btn.closest('.art-img-item').remove();
+                });
+                listEl.querySelectorAll('.art-img-move').forEach((span) => {
+                    const item = span.closest('.art-img-item');
+                    const isUp = span.title === '上移';
+                    span.onclick = () => {
+                        if (isUp) {
+                            const prev = item.previousElementSibling;
+                            if (prev) listEl.insertBefore(item, prev);
+                        } else {
+                            const next = item.nextElementSibling;
+                            if (next) listEl.insertBefore(next, item);
+                        }
+                    };
+                });
+            }
+
+            function addImages(urls) {
+                urls.forEach(url => {
+                    const span = document.createElement('span');
+                    span.className = 'art-img-item';
+                    span.dataset.url = url || '';
+                    span.innerHTML = `<img src="${url || ''}" alt="" onerror="this.style.display='none'"/><button type="button" class="art-img-del" title="删除">×</button><span class="art-img-move" title="上移">↑</span><span class="art-img-move" title="下移">↓</span>`;
+                    span.querySelector('.art-img-del').onclick = () => span.remove();
+                    span.querySelectorAll('.art-img-move').forEach((s) => {
+                        s.onclick = () => {
+                            if (s.title === '上移') {
+                                const prev = span.previousElementSibling;
+                                if (prev) listEl.insertBefore(span, prev);
+                            } else {
+                                const next = span.nextElementSibling;
+                                if (next) listEl.insertBefore(next, span);
+                            }
+                        };
+                    });
+                    listEl.appendChild(span);
+                });
+            }
+
+            function addPendingFiles(files) {
+                Array.from(files).forEach(file => {
+                    const url = URL.createObjectURL(file);
+                    const span = document.createElement('span');
+                    span.className = 'art-img-item art-img-pending';
+                    span.dataset.url = '';
+                    span._file = file;
+                    span.innerHTML = `<img src="${url}" alt="" onerror="this.style.display='none'"/><button type="button" class="art-img-del" title="删除">×</button><span class="art-img-move" title="上移">↑</span><span class="art-img-move" title="下移">↓</span>`;
+                    span.querySelector('.art-img-del').onclick = () => {
+                        URL.revokeObjectURL(url);
+                        span.remove();
+                    };
+                    span.querySelectorAll('.art-img-move').forEach((s) => {
+                        s.onclick = () => {
+                            if (s.title === '上移') {
+                                const prev = span.previousElementSibling;
+                                if (prev) listEl.insertBefore(span, prev);
+                            } else {
+                                const next = span.nextElementSibling;
+                                if (next) listEl.insertBefore(next, span);
+                            }
+                        };
+                    });
+                    listEl.appendChild(span);
+                });
+            }
+
+            renderImages(initialImgs);
+
+            ov.addEventListener('change', async function (e) {
+                if (e.target.id !== 'g-images-add' || !e.target.files) return;
+                const files = Array.from(e.target.files || []);
+                e.target.value = '';
+                if (!files.length) return;
+                if (!gid) {
+                    addPendingFiles(files);
+                    return;
+                }
+                const progress = ensureUploadProgress(ov);
+                try {
+                    const fd = new FormData();
+                    files.forEach(f => fd.append('files', f));
+                    progress.show('上传图片...');
+                    const up = await apiForm(`/admin/goods/${gid}/images`, fd);
+                    addImages(up.data?.urls || []);
+                } catch (err) {
+                    alert(err.message);
+                } finally {
+                    progress.hide();
+                }
+            });
+        });
+    }
 
   const TYPE_MAP = { posts: 'posts', questions: 'questions', answers: 'answers' };
 
