@@ -42,8 +42,41 @@ func OrderCreate(ctx *gin.Context) {
 			reply.ReplyErrWithMessage(ctx, "库存不足")
 			return
 		}
-		if errors.Is(err, errno.ErrOrderReceiverLocationRequired) {
-			reply.ReplyErrWithMessage(ctx, "请选择收货地址")
+		if errors.Is(err, errno.ErrUserLocationNotFound) {
+			reply.ReplyErrWithMessage(ctx, "收货地址不存在或已删除")
+			return
+		}
+		reply.ReplyErrWithMessage(ctx, err.Error())
+		return
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"id": id})
+}
+
+// OrderLocationUpdate POST /orders/:id/location 统一更新买方收货地 / 卖方发货地 / 卖方确认或拒绝买方改址
+func OrderLocationUpdate(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	idStr := ctx.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	var req service.OrderLocationUpdateReq
+	if err := ctx.BindJSON(&req); err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	if err := service.Order().OrderLocationUpdate(ctx, uint(id), userID, req); err != nil {
+		if errors.Is(err, errno.ErrOrderNotFound) || errors.Is(err, errno.ErrOrderNotParticipant) {
+			reply.ReplyErrWithMessage(ctx, "订单不存在或无权操作")
+			return
+		}
+		if errors.Is(err, errno.ErrOrderInvalidState) {
+			reply.ReplyErrWithMessage(ctx, "当前状态不可修改地址")
 			return
 		}
 		if errors.Is(err, errno.ErrUserLocationNotFound) {
@@ -53,7 +86,7 @@ func OrderCreate(ctx *gin.Context) {
 		reply.ReplyErrWithMessage(ctx, err.Error())
 		return
 	}
-	reply.ReplyOKWithData(ctx, gin.H{"id": id})
+	reply.ReplyOK(ctx)
 }
 
 // OrderList 我的订单（买家视角）GET /orders
@@ -79,6 +112,8 @@ func OrderList(ctx *gin.Context) {
 
 func orderStatusLabel(st int16, goodsType int16) string {
 	switch st {
+	case constant.OrderStatusAwaitBuyerLocation:
+		return "待买方完善地址与付款"
 	case constant.OrderStatusAwaitSellerPaymentConfirm:
 		return "待卖方确认收款"
 	case constant.OrderStatusFulfillment:
@@ -127,6 +162,22 @@ func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 		m["receiver_lng"] = *o.ReceiverLng
 	} else {
 		m["receiver_lng"] = nil
+	}
+	if o.PendingReceiverUserLocationID != nil {
+		m["pending_receiver_user_location_id"] = *o.PendingReceiverUserLocationID
+	} else {
+		m["pending_receiver_user_location_id"] = nil
+	}
+	m["pending_receiver_addr"] = o.PendingReceiverAddr
+	if o.PendingReceiverLat != nil {
+		m["pending_receiver_lat"] = *o.PendingReceiverLat
+	} else {
+		m["pending_receiver_lat"] = nil
+	}
+	if o.PendingReceiverLng != nil {
+		m["pending_receiver_lng"] = *o.PendingReceiverLng
+	} else {
+		m["pending_receiver_lng"] = nil
 	}
 	if o.SenderLat != nil {
 		m["sender_lat"] = *o.SenderLat

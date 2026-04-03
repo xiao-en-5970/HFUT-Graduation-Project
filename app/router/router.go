@@ -149,6 +149,7 @@ func PrivateRouter(api *gin.RouterGroup) {
 		orderGroup.POST("/:id/confirm-delivery", controller.OrderConfirmDelivery)
 		orderGroup.POST("/:id/confirm-receipt", controller.OrderConfirmReceipt)
 		orderGroup.POST("/:id/cancel", controller.OrderCancel)
+		orderGroup.POST("/:id/location", controller.OrderLocationUpdate)
 		orderGroup.GET("/:id", controller.OrderGet)
 		orderGroup.PUT("/:id", controller.OrderUpdate)
 	}

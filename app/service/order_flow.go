@@ -234,7 +234,7 @@ func (s *orderService) CancelOrder(ctx *gin.Context, orderID uint, userID uint) 
 		return err
 	}
 	switch o.OrderStatus {
-	case constant.OrderStatusAwaitSellerPaymentConfirm, constant.OrderStatusFulfillment, constant.OrderStatusPendingBuyerConfirm:
+	case constant.OrderStatusAwaitBuyerLocation, constant.OrderStatusAwaitSellerPaymentConfirm, constant.OrderStatusFulfillment, constant.OrderStatusPendingBuyerConfirm:
 		return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, map[string]interface{}{
 			"order_status": constant.OrderStatusCancelled,
 		})

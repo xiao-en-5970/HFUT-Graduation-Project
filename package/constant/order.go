@@ -3,6 +3,8 @@ package constant
 // 订单业务状态（平台不经手资金；下单即进入待卖方确认收款，卖方不确认则视为未成交）
 // 流程：下单 → 卖方确认收款 → 派送/自提 → 买方确认收货 → 完成
 const (
+	// OrderStatusAwaitBuyerLocation 买方在商品页「我想要」生成的不完整订单：尚无收货地址与付款凭证，聊天可用
+	OrderStatusAwaitBuyerLocation        int16 = 6
 	OrderStatusAwaitSellerPaymentConfirm int16 = 1 // 待卖方确认收款（买方已下单，契约上视为已付款意向）
 	OrderStatusFulfillment               int16 = 2 // 履约中：送货上门=正在派送；自提=待买方自提
 	OrderStatusPendingBuyerConfirm       int16 = 3 // 待买方确认收货
