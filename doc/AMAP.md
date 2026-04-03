@@ -11,8 +11,7 @@
 | `receiver_addr` / `sender_addr`                           | 文字描述（寝室、楼号等）           |
 | `receiver_lat`+`receiver_lng` / `sender_lat`+`sender_lng` | 地图选点（**GCJ-02**，与高德一致） |
 
-**算距优先级（仅送货上门）**：若收发**两端均提供成对经纬度**，则直接用坐标调用「距离测量」，不再依赖文字地理编码；否则在两段*
-*文字地址均非空**时走地理编码再测距。
+**算距优先级（仅送货上门）**：若收发**两端均提供成对经纬度**，则直接用坐标调用「距离测量」，不再依赖文字地理编码；否则在两段**文字地址均非空**时走地理编码再测距。
 
 数据库迁移：`package/sql/migrate_order_addr_coords.sql`（已有库执行一次）。
 
@@ -21,12 +20,16 @@
 在环境变量或 `.env` 中设置：
 
 ```bash
+# Web 服务（服务端 REST）：省市区、搜索、订单算距 —— 必填才有这些能力
 AMAP_KEY=你的Web服务Key
-# 可选：管理后台「交易演示」内嵌地图选点用（JS API）
+# 浏览器地图（JS API）：与下面安全密钥成对，来自同一应用控制台
 AMAP_WEB_KEY=你的JS端Key
+AMAP_WEB_SECURITY_CODE=你的安全密钥
 ```
 
-未配置 `AMAP_KEY` 时：下单与更新订单**不受影响**，`distance_meters` 为空。未配置 `AMAP_WEB_KEY` 时：后台仍可手动填写经纬度，只是不加载地图。
+**两把 Key 的区别**：`AMAP_KEY` 只留在服务端；`AMAP_WEB_KEY` + `AMAP_WEB_SECURITY_CODE` 通过 `GET /api/v1/config/map` 下发给前端，加载地图前须执行 `window._AMapSecurityConfig = { securityJsCode: '...' }`（已在管理后台 `loadAmapScript` 中处理）。**省市区下拉**只依赖服务端 **`AMAP_KEY`**，与 JS 安全密钥无关。
+
+未配置 `AMAP_KEY` 时：下单不受影响，但**无**省列表、搜索、算距。未配置 `AMAP_WEB_KEY` 或缺少安全密钥时：地图可能空白或无法初始化。
 
 ## 后端封装清单（审计）
 
@@ -39,17 +42,15 @@ AMAP_WEB_KEY=你的JS端Key
 | 行政区（省市区）      | `GET /api/v1/map/district`                 | `app/controller/map_search.go` → `package/amap/district.go` | 否                                                |
 | 输入提示          | `GET /api/v1/map/input-tips`               | `map_search.go` → `package/amap/place.go`                   | 否                                                |
 | POI 关键字搜索     | `GET /api/v1/map/place-text`               | 同上                                                          | 否                                                |
-| 浏览器内嵌地图底图     | `GET /api/v1/config/map` 返回 `amap_web_key` | `app/controller/map_config.go`                              | **仅下发 `AMAP_WEB_KEY`（JS 端 Key），与 Web 服务 Key 分离** |
+| 浏览器内嵌地图底图     | `GET /api/v1/config/map` 返回 `amap_web_key` + `amap_security_js_code` | `app/controller/map_config.go`                              | **不下发 `AMAP_KEY`；仅下发 JS Key 与安全密钥** |
 
-**说明**：管理后台 `loadAmapScript` 仅向 `https://webapi.amap.com/maps` 加载高德 **JS SDK**（浏览器渲染地图的常规方式）；*
-*不得**在管理端或 App 内直接请求 `restapi.amap.com` 并拼接 `AMAP_KEY`。若需原生 App 内嵌高德地图，仍使用移动端 **SDK +
-控制台单独配置的 Key**，与上述 REST 封装相互独立。
+**说明**：管理后台 `loadAmapScript` 先设置 `_AMapSecurityConfig`，再加载 `https://webapi.amap.com/maps`。**不得**在管理端或 App 内直接请求 `restapi.amap.com` 并拼接 `AMAP_KEY`。若需原生 App 内嵌高德地图，仍使用移动端 **SDK + 控制台单独配置的 Key**，与上述 REST 封装相互独立。
 
 ## 接口（均需 JWT；地图类除 `config/map` 外均使用服务端 `AMAP_KEY`）
 
 | 方法  | 路径                       | 说明                                                              |
 |-----|--------------------------|-----------------------------------------------------------------|
-| GET | `/api/v1/config/map`     | 返回 `amap_web_key`，供 **Web/H5** 加载高德 JS 地图                       |
+| GET | `/api/v1/config/map`     | 返回 `amap_web_key`、`amap_security_js_code`，供 **Web/H5** 加载高德 JS 地图 |
 | GET | `/api/v1/map/district`   | **行政区下级**：`keywords` 默认 `100000`（中国）取省列表；换省/市 adcode 取下一级（级联）   |
 | GET | `/api/v1/map/input-tips` | **输入提示**（联想）：`keywords` 必填，`city`（填 adcode 或城市名）、`citylimit` 可选 |
 | GET | `/api/v1/map/place-text` | **POI 关键字搜索**：`keywords` 必填，`city`、`page`、`offset` 可选           |

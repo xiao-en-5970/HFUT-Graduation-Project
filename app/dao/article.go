@@ -91,7 +91,7 @@ func applyVisibility(q *gorm.DB, mode string, viewerSchoolID uint) *gorm.DB {
 	}
 }
 
-// searchConfig 全文检索配置，固定使用中文智能分词
+// searchConfig 全文检索配置名（create.sql 默认 COPY simple；可选 zhparser_search.sql 升级）
 const searchConfig = "chinese_zh"
 
 // GetByIDWithSchoolAndTypeAllowDraft 按ID获取，学校+类型，允许 status=1 或 3

@@ -1,5 +1,5 @@
--- 中文智能分词全文检索迁移（从 simple 升级到 chinese_zh）
--- 若 create.sql 已使用 chinese_zh，则无需执行此脚本
+-- 中文智能分词全文检索（zhparser）：在已用 create.sql 默认 simple 分词的基础上升级
+-- 若未安装 zhparser 或未执行本脚本，全文检索仍可用（english/simple 行为）
 -- 依赖: zhparser 扩展，安装见 doc/ZHPARSER_SETUP.md
 
 CREATE EXTENSION IF NOT EXISTS zhparser;

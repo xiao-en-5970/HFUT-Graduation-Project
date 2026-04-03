@@ -1220,8 +1220,8 @@
         "tags": [
           "配置"
         ],
-        "summary": "高德地图 JS Key（选点）",
-        "description": "返回 `data.amap_web_key`，供前端加载高德 JS API 地图选点。需 JWT；未配置 `AMAP_WEB_KEY` 时为空字符串。",
+        "summary": "高德地图 JS Key + 安全密钥（选点）",
+        "description": "返回 `data.amap_web_key`、`data.amap_security_js_code`。加载地图脚本前须设置 `window._AMapSecurityConfig = { securityJsCode }`。需 JWT；未配置时对应字段为空字符串。",
         "security": [
           {
             "BearerAuth": []
@@ -1229,7 +1229,7 @@
         ],
         "responses": {
           "200": {
-            "description": "data: { amap_web_key }"
+            "description": "data: { amap_web_key, amap_security_js_code }"
           },
           "401": {}
         }

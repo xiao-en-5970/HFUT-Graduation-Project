@@ -30,7 +30,7 @@
 
 | 接口                       | 说明                                                          |
 |--------------------------|-------------------------------------------------------------|
-| `GET /api/v1/config/map` | 返回 `amap_web_key`（需 JWT），供前端高德 JS 地图选点；环境变量 `AMAP_WEB_KEY`。 |
+| `GET /api/v1/config/map` | 返回 `amap_web_key`、`amap_security_js_code`（需 JWT）；环境变量 `AMAP_WEB_KEY`、`AMAP_WEB_SECURITY_CODE`。 |
 
 ### 修改
 

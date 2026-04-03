@@ -98,14 +98,18 @@
 
   let _amapScriptKey = '';
 
-  function loadAmapScript(key) {
+  /** 高德 JS API 2.x 需在加载脚本前设置安全密钥，否则地图不显示 */
+  function loadAmapScript(key, securityJsCode) {
     if (!key) return Promise.reject(new Error('no key'));
-    if (window.AMap && _amapScriptKey === key) return Promise.resolve();
+    const sec = securityJsCode != null ? String(securityJsCode) : '';
+    const cacheKey = key + '\0' + sec;
+    if (window.AMap && _amapScriptKey === cacheKey) return Promise.resolve();
+    window._AMapSecurityConfig = { securityJsCode: sec };
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(key);
       s.onload = () => {
-        _amapScriptKey = key;
+        _amapScriptKey = cacheKey;
         resolve();
       };
       s.onerror = () => reject(new Error('地图脚本加载失败'));
@@ -168,7 +172,19 @@
 
     api('/map/district?keywords=100000&page=1&offset=50').then((d) => {
       fillSelect(prov, d.data?.list || []);
-    }).catch(() => {
+      if (!(d.data?.list || []).length) {
+        const hint = document.createElement('p');
+        hint.className = 'text-muted';
+        hint.style.fontSize = '0.85rem';
+        hint.innerHTML = '省列表为空：请确认服务端已配置 <code>AMAP_KEY</code>（Web 服务 Key），并重启 API。';
+        prov.parentElement.insertBefore(hint, prov);
+      }
+    }).catch((e) => {
+      const err = document.createElement('p');
+      err.className = 'error';
+      err.style.fontSize = '0.85rem';
+      err.textContent = '省列表加载失败：' + (e.message || e) + '（需管理员已登录且服务端配置 AMAP_KEY）';
+      prov.parentElement.insertBefore(err, prov);
     });
 
     prov.addEventListener('change', () => {
@@ -273,13 +289,20 @@
         return data;
     }
 
-  async function fetchAmapWebKey(token) {
-    if (!token) return '';
+  /** 返回 { key, security }；高德要求 key + 安全密钥一起用于浏览器地图 */
+  async function fetchMapJsConfig(token) {
+    if (!token) return { key: '', security: '' };
     try {
       const d = await userApi(token, '/config/map');
-      return (d.data && d.data.amap_web_key) ? String(d.data.amap_web_key) : '';
+      const data = d.data || {};
+      return {
+        key: data.amap_web_key ? String(data.amap_web_key) : '',
+        security: data.amap_security_js_code != null && data.amap_security_js_code !== ''
+          ? String(data.amap_security_js_code)
+          : ''
+      };
     } catch (_) {
-      return '';
+      return { key: '', security: '' };
     }
   }
 
@@ -1342,7 +1365,9 @@
         const gt = order && order.good ? order.good.goods_type : null;
         const os = order ? Number(order.order_status) : 0;
 
-      const mapKey = await fetchAmapWebKey(buyerTok || sellerTok);
+      const mapJs = await fetchMapJsConfig(buyerTok || sellerTok);
+      const mapKey = mapJs.key;
+      const mapSecurity = mapJs.security;
       const rcvLngVal = order && order.receiver_lng != null ? String(order.receiver_lng) : '';
       const rcvLatVal = order && order.receiver_lat != null ? String(order.receiver_lat) : '';
       const sndLngVal = order && order.sender_lng != null ? String(order.sender_lng) : '';
@@ -1441,7 +1466,7 @@
   <label>收货地址（文字） <textarea id="td-receiver" rows="2" placeholder="寝室/楼号等口头描述；可从上一步搜索结果带入"></textarea></label>
   <label>收货经度 <input type="number" step="any" id="td-rcv-lng" placeholder="地图选点自动填入"></label>
   <label>收货纬度 <input type="number" step="any" id="td-rcv-lat" placeholder="地图选点自动填入"></label>
-  ${mapKey ? '<div id="td-map-rcv" class="trade-map" title="点击选收货位置"></div><p class="text-muted">收货地图：点击标记（GCJ-02）</p>' : '<p class="text-muted">登录用户账号且服务端配置 <code>AMAP_WEB_KEY</code> 后可在此页加载地图选收货点。</p>'}
+  ${mapKey ? '<div id="td-map-rcv" class="trade-map" title="点击选收货位置"></div><p class="text-muted">收货地图：点击标记（GCJ-02）' + (!mapSecurity ? ' · <strong>未配置安全密钥</strong>时地图可能空白，请在服务端设置 <code>AMAP_WEB_SECURITY_CODE</code>' : '') + '</p>' : '<p class="text-muted">登录买家/卖家账号且服务端配置 <code>AMAP_WEB_KEY</code> 后可加载地图；须同时配置 <code>AMAP_WEB_SECURITY_CODE</code>（与 Key 同控制台获取）。</p>'}
   <label>发货地址（文字，可选） <textarea id="td-sender-create" rows="1" placeholder="可与商品默认发货地一致；可空"></textarea></label>
   <label>发货经度 <input type="number" step="any" id="td-snd-create-lng"></label>
   <label>发货纬度 <input type="number" step="any" id="td-snd-create-lat"></label>
@@ -1500,13 +1525,14 @@
       setupTradeDistrictCascader(moduleContent);
 
       if (mapKey) {
-        loadAmapScript(mapKey).then(() => {
+        loadAmapScript(mapKey, mapSecurity).then(() => {
           initMapPicker('td-map-rcv', 'td-rcv-lng', 'td-rcv-lat', [117.27, 31.86]);
           initMapPicker('td-map-snd-create', 'td-snd-create-lng', 'td-snd-create-lat', [117.27, 31.86]);
           if (document.getElementById('td-map-snd-fulfill')) {
             initMapPicker('td-map-snd-fulfill', 'td-snd-lng', 'td-snd-lat', [117.27, 31.86]);
           }
-        }).catch(() => {
+        }).catch((e) => {
+          console.warn('地图加载失败', e);
         });
       }
 

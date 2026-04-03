@@ -331,11 +331,9 @@ comment on column articles.school_id is '学校ID';
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS parent_id integer REFERENCES articles(id);
 comment on column articles.parent_id is '父文章ID，仅回答类型(type=3)使用，指向提问';
 
--- 全文检索：tsvector 倒排索引，中文智能分词（依赖 zhparser 扩展，需先安装）
-CREATE EXTENSION IF NOT EXISTS zhparser;
+-- 全文检索：tsvector 倒排索引（基于 simple 分词；需中文分词时安装 zhparser 后执行 package/sql/zhparser_search.sql）
 DROP TEXT SEARCH CONFIGURATION IF EXISTS chinese_zh;
-CREATE TEXT SEARCH CONFIGURATION chinese_zh (PARSER = zhparser);
-ALTER TEXT SEARCH CONFIGURATION chinese_zh ADD MAPPING FOR n,v,a,i,e,l,j WITH simple;
+CREATE TEXT SEARCH CONFIGURATION chinese_zh (COPY = pg_catalog.simple);
 
 -- search_vector：标题权重 A，正文权重 B
 ALTER TABLE articles

@@ -55,6 +55,8 @@ var (
 	AmapKey string
 	// 高德 JS API Key（管理后台/前端地图选点；可与 Web 服务 Key 相同或单独创建并勾选「Web端」）
 	AmapWebKey string
+	// 高德 JS API 安全密钥（与 AMAP_WEB_KEY 成对；加载地图前需 window._AMapSecurityConfig.securityJsCode）
+	AmapWebSecurityCode string
 )
 
 const defaultEnvPath = "/.env"
@@ -114,6 +116,7 @@ func LoadConfigFrom(path string) error {
 
 	AmapKey = getEnv("AMAP_KEY", "")
 	AmapWebKey = getEnv("AMAP_WEB_KEY", "")
+	AmapWebSecurityCode = getEnv("AMAP_WEB_SECURITY_CODE", "")
 
 	return nil
 }
