@@ -252,7 +252,11 @@ func UserListArticlesByType(ctx *gin.Context, articleType int) {
 	schoolID := middleware.GetSchoolID(ctx)
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
-	list, total, err := service.Article().ListByUser(ctx, uint(targetID), viewerID, schoolID, articleType, page, pageSize)
+	sort := ""
+	if ctx.Query("sort") == dao.SortUpdatedAt {
+		sort = dao.SortUpdatedAt
+	}
+	list, total, err := service.Article().ListByUser(ctx, uint(targetID), viewerID, schoolID, articleType, page, pageSize, sort)
 	if err != nil {
 		if errors.Is(err, errno.ErrArticleNotFoundOrNoPermission) {
 			reply.ReplyNotFound(ctx, errcode.ErrUserNotFound)

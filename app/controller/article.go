@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
@@ -14,6 +15,14 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 	"gorm.io/gorm"
 )
+
+// articleListSort 查询参数 sort=updated_at 时按最近更新时间排序，否则按发布时间（created_at）
+func articleListSort(ctx *gin.Context) string {
+	if ctx.Query("sort") == dao.SortUpdatedAt {
+		return dao.SortUpdatedAt
+	}
+	return ""
+}
 
 // ArticleHandlers 返回指定类型的文章 CRUD 处理器（帖子1/提问2/回答3），学校+类型隔离
 func ArticleHandlers(articleType int) struct {
@@ -45,7 +54,7 @@ func ArticleHandlers(articleType int) struct {
 			schoolID := middleware.GetSchoolID(ctx)
 			page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 			pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
-			list, total, err := service.Article().List(ctx, schoolID, articleType, page, pageSize)
+			list, total, err := service.Article().List(ctx, schoolID, articleType, page, pageSize, articleListSort(ctx))
 			if err != nil {
 				reply.ReplyInternalError(ctx, err)
 				return
@@ -60,7 +69,7 @@ func ArticleHandlers(articleType int) struct {
 			keyword := ctx.Query("q")
 			page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 			pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
-			list, total, err := service.Article().Search(ctx, schoolID, articleType, keyword, page, pageSize)
+			list, total, err := service.Article().Search(ctx, schoolID, articleType, keyword, page, pageSize, articleListSort(ctx))
 			if err != nil {
 				reply.ReplyInternalError(ctx, err)
 				return

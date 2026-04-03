@@ -73,7 +73,7 @@ func SearchArticles(ctx *gin.Context) {
 	}
 	if v := ctx.Query("sort"); v != "" {
 		switch v {
-		case dao.SortRelevance, dao.SortPopularity, dao.SortCombined:
+		case dao.SortRelevance, dao.SortPopularity, dao.SortCombined, dao.SortUpdatedAt:
 			params.Sort = v
 		}
 	}

@@ -179,13 +179,13 @@ func (s *articleService) Delete(ctx *gin.Context, id uint, userID uint, schoolID
 	return dao.Article().SoftDelete(ctx.Request.Context(), id)
 }
 
-// List 分页列表，学校可见性（viewerSchoolID=0 仅公开，>0 公开+本校）
-func (s *articleService) List(ctx *gin.Context, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
-	return dao.Article().List(ctx.Request.Context(), viewerSchoolID, articleType, page, pageSize)
+// List 分页列表，学校可见性（viewerSchoolID=0 仅公开，>0 公开+本校）。sort 见 dao.SortUpdatedAt
+func (s *articleService) List(ctx *gin.Context, viewerSchoolID uint, articleType int, page, pageSize int, sort string) ([]*model.Article, int64, error) {
+	return dao.Article().List(ctx.Request.Context(), viewerSchoolID, articleType, page, pageSize, sort)
 }
 
 // ListByUser 按用户分页列出文章。自己看自己：含私密(publish_status=1)；看别人：仅公开(publish_status=2)
-func (s *articleService) ListByUser(ctx *gin.Context, targetUserID uint, viewerID uint, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
+func (s *articleService) ListByUser(ctx *gin.Context, targetUserID uint, viewerID uint, viewerSchoolID uint, articleType int, page, pageSize int, sort string) ([]*model.Article, int64, error) {
 	if targetUserID == 0 {
 		return nil, 0, errno.ErrArticleNotFoundOrNoPermission
 	}
@@ -196,12 +196,12 @@ func (s *articleService) ListByUser(ctx *gin.Context, targetUserID uint, viewerI
 			return nil, 0, errno.ErrArticleNotFoundOrNoPermission
 		}
 	}
-	return dao.Article().ListByUserID(ctx.Request.Context(), targetUserID, articleType, onlyPublic, viewerSchoolID, page, pageSize)
+	return dao.Article().ListByUserID(ctx.Request.Context(), targetUserID, articleType, onlyPublic, viewerSchoolID, page, pageSize, sort)
 }
 
 // Search 全文检索，学校可见性
-func (s *articleService) Search(ctx *gin.Context, viewerSchoolID uint, articleType int, keyword string, page, pageSize int) ([]*model.Article, int64, error) {
-	return dao.Article().Search(ctx.Request.Context(), viewerSchoolID, articleType, keyword, page, pageSize)
+func (s *articleService) Search(ctx *gin.Context, viewerSchoolID uint, articleType int, keyword string, page, pageSize int, sort string) ([]*model.Article, int64, error) {
+	return dao.Article().Search(ctx.Request.Context(), viewerSchoolID, articleType, keyword, page, pageSize, sort)
 }
 
 // AggregateSearch 聚合搜索：帖子+提问+回答，支持筛选与排序

@@ -71,12 +71,21 @@ const (
 	VisibilityAll      = "all"
 )
 
-// SortMode 排序模式：relevance=相关度(标题权重高于正文)，popularity=热度(收藏>点赞>浏览)，combined=综合
+// SortMode 排序模式：relevance=相关度(标题权重高于正文)，popularity=热度(收藏>点赞>浏览)，combined=综合；updated_at=最近更新
 const (
 	SortRelevance  = "relevance"
 	SortPopularity = "popularity"
 	SortCombined   = "combined"
+	SortUpdatedAt  = "updated_at"
 )
+
+// listOrderClause 列表/用户列表：created_at 默认；updated_at 按最近更新时间
+func listOrderClause(sort string) string {
+	if strings.TrimSpace(sort) == SortUpdatedAt {
+		return "updated_at DESC"
+	}
+	return "created_at DESC"
+}
 
 func applyVisibility(q *gorm.DB, mode string, viewerSchoolID uint) *gorm.DB {
 	switch mode {
@@ -178,8 +187,8 @@ func (s *ArticleStore) ListAdmin(ctx context.Context, schoolID uint, articleType
 	return list, total, err
 }
 
-// List 按学校+类型分页列出，类型隔离+学校可见性（viewerSchoolID=0 仅公开，>0 公开或本校）
-func (s *ArticleStore) List(ctx context.Context, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
+// List 按学校+类型分页列出，类型隔离+学校可见性（viewerSchoolID=0 仅公开，>0 公开或本校）。sort 空或非法：created_at；SortUpdatedAt：updated_at
+func (s *ArticleStore) List(ctx context.Context, viewerSchoolID uint, articleType int, page, pageSize int, sort string) ([]*model.Article, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -192,12 +201,12 @@ func (s *ArticleStore) List(ctx context.Context, viewerSchoolID uint, articleTyp
 	q = applySchoolVisibility(q, viewerSchoolID)
 	q.Count(&total)
 	var list []*model.Article
-	err := q.Order("created_at DESC").Limit(pageSize).Offset(offset).Find(&list).Error
+	err := q.Order(listOrderClause(sort)).Limit(pageSize).Offset(offset).Find(&list).Error
 	return list, total, err
 }
 
 // ListByUserID 按用户 ID 分页列出文章，onlyPublic=true 仅公开(publish_status=2)，false 含私密(1,2)
-func (s *ArticleStore) ListByUserID(ctx context.Context, userID uint, articleType int, onlyPublic bool, viewerSchoolID uint, page, pageSize int) ([]*model.Article, int64, error) {
+func (s *ArticleStore) ListByUserID(ctx context.Context, userID uint, articleType int, onlyPublic bool, viewerSchoolID uint, page, pageSize int, sort string) ([]*model.Article, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -216,12 +225,12 @@ func (s *ArticleStore) ListByUserID(ctx context.Context, userID uint, articleTyp
 	var total int64
 	q.Count(&total)
 	var list []*model.Article
-	err := q.Order("created_at DESC").Limit(pageSize).Offset(offset).Find(&list).Error
+	err := q.Order(listOrderClause(sort)).Limit(pageSize).Offset(offset).Find(&list).Error
 	return list, total, err
 }
 
-// Search 全文检索：按类型+学校可见性，相关度+点赞量+收藏量排序
-func (s *ArticleStore) Search(ctx context.Context, viewerSchoolID uint, articleType int, keyword string, page, pageSize int) ([]*model.Article, int64, error) {
+// Search 全文检索：按类型+学校可见性，相关度+点赞量+收藏量排序；sort=updated_at 时按最近更新
+func (s *ArticleStore) Search(ctx context.Context, viewerSchoolID uint, articleType int, keyword string, page, pageSize int, sort string) ([]*model.Article, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -231,7 +240,7 @@ func (s *ArticleStore) Search(ctx context.Context, viewerSchoolID uint, articleT
 	offset := (page - 1) * pageSize
 	keyword = strings.TrimSpace(keyword)
 	if keyword == "" {
-		return s.List(ctx, viewerSchoolID, articleType, page, pageSize)
+		return s.List(ctx, viewerSchoolID, articleType, page, pageSize, sort)
 	}
 	q := pgsql.DB.Model(&model.Article{}).
 		Where("status = ? AND publish_status = ? AND type = ?", constant.StatusValid, 2, articleType).
@@ -240,9 +249,13 @@ func (s *ArticleStore) Search(ctx context.Context, viewerSchoolID uint, articleT
 	var total int64
 	q.Count(&total)
 	var list []*model.Article
-	// 排序：ts_rank 相关度 + 点赞量*0.01 + 收藏量*0.01
-	err := q.Order(gorm.Expr("ts_rank(search_vector, plainto_tsquery(?, ?)) + like_count*0.01 + collect_count*0.01 DESC", searchConfig, keyword)).
-		Limit(pageSize).Offset(offset).Find(&list).Error
+	var err error
+	if strings.TrimSpace(sort) == SortUpdatedAt {
+		err = q.Order("updated_at DESC").Limit(pageSize).Offset(offset).Find(&list).Error
+	} else {
+		err = q.Order(gorm.Expr("ts_rank(search_vector, plainto_tsquery(?, ?)) + like_count*0.01 + collect_count*0.01 DESC", searchConfig, keyword)).
+			Limit(pageSize).Offset(offset).Find(&list).Error
+	}
 	return list, total, err
 }
 
@@ -255,7 +268,7 @@ type AggregateSearchParams struct {
 	TimeRange     string // 7d|30d|90d|all
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
-	Sort          string // relevance|popularity|combined
+	Sort          string // relevance|popularity|combined|updated_at
 	Page          int
 	PageSize      int
 
@@ -343,6 +356,8 @@ func (s *ArticleStore) AggregateSearch(ctx context.Context, p AggregateSearchPar
 
 	hasKeyword := keyword != ""
 	switch p.Sort {
+	case SortUpdatedAt:
+		q = q.Order("updated_at DESC")
 	case SortRelevance:
 		if hasKeyword {
 			q = q.Order(gorm.Expr("ts_rank(search_vector, plainto_tsquery(?, ?)) DESC", searchConfig, keyword))

@@ -918,7 +918,8 @@
             "name": "pageSize",
             "type": "integer",
             "default": 20
-          }
+          },
+          {"in": "query", "name": "sort", "type": "string", "description": "传 `updated_at` 按 updated_at 降序；缺省按 created_at 降序"}
         ],
         "responses": {
           "200": {
@@ -984,7 +985,8 @@
             "name": "pageSize",
             "type": "integer",
             "default": 20
-          }
+          },
+          {"in": "query", "name": "sort", "type": "string", "description": "传 `updated_at` 按 updated_at 降序；缺省按 created_at 降序"}
         ],
         "responses": {
           "200": {
@@ -1050,7 +1052,8 @@
             "name": "pageSize",
             "type": "integer",
             "default": 20
-          }
+          },
+          {"in": "query", "name": "sort", "type": "string", "description": "传 `updated_at` 按 updated_at 降序；缺省按 created_at 降序"}
         ],
         "responses": {
           "200": {
@@ -1263,7 +1266,7 @@
           "回答"
         ],
         "summary": "聚合搜索",
-        "description": "搜索帖子+提问+回答，支持丰富筛选与排序。需 JWT，仅可访问公开或本校内容。\n\n**筛选条件：**\n- type: 0=全部 1=帖子 2=提问 3=回答\n- visibility: public=仅公开 | my_school=仅本校 | all=公开+本校\n- time_range: 7d|30d|90d|all\n- created_after/created_before: YYYY-MM-DD 自定义时间范围\n\n**排序：**\n- relevance: 按关键词相关度\n- popularity: 按热度（收藏、点赞、浏览加权，新帖权重更高）\n- combined: 相关度与热度综合",
+        "description": "搜索帖子+提问+回答，支持丰富筛选与排序。需 JWT，仅可访问公开或本校内容。\n\n**筛选条件：**\n- type: 0=全部 1=帖子 2=提问 3=回答\n- visibility: public=仅公开 | my_school=仅本校 | all=公开+本校\n- time_range: 7d|30d|90d|all\n- created_after/created_before: YYYY-MM-DD 自定义时间范围\n\n**排序：**\n- relevance: 按关键词相关度\n- popularity: 按热度（收藏、点赞、浏览加权，新帖权重更高）\n- combined: 相关度与热度综合\n- updated_at: 按最近更新时间（`articles.updated_at`）",
         "security": [
           {
             "BearerAuth": []
@@ -1327,7 +1330,8 @@
             "enum": [
               "relevance",
               "popularity",
-              "combined"
+              "combined",
+              "updated_at"
             ],
             "default": "relevance"
           },
@@ -1421,11 +1425,12 @@
       "get": {
         "tags": ["帖子"],
         "summary": "帖子列表",
-        "description": "学校可见性：已绑定学校可见本校+全站公开(school_id=0)；未绑定学校仅可见全站公开",
+        "description": "学校可见性：已绑定学校可见本校+全站公开(school_id=0)；未绑定学校仅可见全站公开。`sort=updated_at` 按最近更新时间排序，默认按发布时间。",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "query", "name": "page", "type": "integer", "default": 1},
-          {"in": "query", "name": "pageSize", "type": "integer", "default": 20}
+          {"in": "query", "name": "pageSize", "type": "integer", "default": 20},
+          {"in": "query", "name": "sort", "type": "string", "description": "传 `updated_at` 按 updated_at 降序；缺省按 created_at 降序"}
         ],
         "responses": {
           "200": {"description": "分页列表", "schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]}},
@@ -1448,7 +1453,7 @@
       "get": {
         "tags": ["帖子"],
         "summary": "搜索帖子",
-        "description": "学校可见性同上。q 支持中文关键词搜索，空则返回列表",
+        "description": "学校可见性同上。q 支持中文关键词搜索，空则返回列表。`sort=updated_at`：有关键词时按更新时间排序，无关键词时同列表。",
         "security": [{"BearerAuth": []}],
         "parameters": [
           {
@@ -1468,7 +1473,8 @@
             "name": "pageSize",
             "type": "integer",
             "default": 20
-          }
+          },
+          {"in": "query", "name": "sort", "type": "string", "description": "传 `updated_at` 按 updated_at 降序；缺省按相关度+热度（有关键词）或 created_at（无关键词）"}
         ],
         "responses": {"200": {"schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]}}, "401": {"schema": {"$ref": "#/definitions/Response"}}}
       }
@@ -1616,7 +1622,8 @@
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "query", "name": "page", "type": "integer"},
-          {"in": "query", "name": "pageSize", "type": "integer"}
+          {"in": "query", "name": "pageSize", "type": "integer"},
+          {"in": "query", "name": "sort", "type": "string", "description": "传 `updated_at` 按 updated_at 降序；缺省按 created_at 降序"}
         ],
         "responses": {"200": {"schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]}}, "401": {}}
       },
@@ -1653,7 +1660,8 @@
             "name": "pageSize",
             "type": "integer",
             "default": 20
-          }
+          },
+          {"in": "query", "name": "sort", "type": "string", "description": "传 `updated_at` 按 updated_at 降序；缺省按 created_at 降序（有关键词时仍按相关性排序）"}
         ],
         "responses": {"200": {"schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]}}, "401": {}}
       }
@@ -1800,7 +1808,8 @@
         "security": [{"BearerAuth": []}],
         "parameters": [
           {"in": "query", "name": "page", "type": "integer"},
-          {"in": "query", "name": "pageSize", "type": "integer"}
+          {"in": "query", "name": "pageSize", "type": "integer"},
+          {"in": "query", "name": "sort", "type": "string", "description": "传 `updated_at` 按 updated_at 降序；缺省按 created_at 降序"}
         ],
         "responses": {"200": {"schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]}}, "401": {}}
       },
@@ -1846,7 +1855,8 @@
             "name": "pageSize",
             "type": "integer",
             "default": 20
-          }
+          },
+          {"in": "query", "name": "sort", "type": "string", "description": "传 `updated_at` 按 updated_at 降序；缺省按 created_at 降序（有关键词时仍按相关性排序）"}
         ],
         "responses": {"200": {"schema": {"allOf": [{"$ref": "#/definitions/Response"}, {"properties": {"data": {"$ref": "#/definitions/ArticleListResponse"}}}]}}, "401": {}}
       }

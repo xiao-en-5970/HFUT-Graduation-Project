@@ -6,6 +6,13 @@
 
 ---
 
+## 2026-04-03（帖子列表：按更新时间排序）
+
+- 下列列表接口增加查询参数 **`sort`**：传 **`updated_at`** 时按 **`updated_at` 降序**；缺省按 **`created_at` 降序**。
+- 涉及：`GET /api/v1/post`、`/post/search`、`/question`、`/question/search`、`/answer`、`/answer/search`、`GET /api/v1/search/articles`（聚合搜索）、`GET /api/v1/user/{id}/posts|questions|answers`。
+
+---
+
 ## 2026-04-03（地图瓦片经 API 反向代理）
 
 - `GET /api/v1/config/map` 返回的 `map_tiles_url` 指向本服务 `.../api/v1/map/tiles/{z}/{x}/{y}`；`MAP_TILES_URL` 仅为服务端访问 Martin 的上游地址。
