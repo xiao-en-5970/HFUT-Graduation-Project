@@ -1,5 +1,5 @@
--- 订单聊天官方通知：系统用户 + msg_type 说明（已有库执行一次）
--- 密码为占位 bcrypt；status=1（正常）便于后台展示；登录由应用层拒绝，见 userService.Login
+-- 可选：历史系统用户 __order_official__（旧订单消息外键）；新逻辑不再写入 msg_type=3
+-- 密码为占位 bcrypt；status=1；登录由应用层拒绝，见 userService.Login
 
 INSERT INTO users (username, password, school_id, status, role)
 VALUES (
@@ -16,4 +16,4 @@ UPDATE users
 SET status = 1
 WHERE username = '__order_official__';
 
-COMMENT ON COLUMN order_messages.msg_type IS '1:文字 2:图片 3:官方系统通知';
+COMMENT ON COLUMN order_messages.msg_type IS '1:文字 2:图片 3:历史保留（列表不返回）';

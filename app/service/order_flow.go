@@ -1,10 +1,8 @@
 package service
 
 import (
-	"context"
 	"errors"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,17 +14,6 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"gorm.io/gorm"
-)
-
-const (
-	officialMsgSellerConfirmedPayment  = "【平台通知】卖方已确认收款，订单进入下一环节。"
-	officialMsgSellerConfirmedDelivery = "【平台通知】卖方已确认送达，请买方确认收货。"
-	officialMsgBuyerConfirmedReceipt   = "【平台通知】买方已确认收货，订单已完成。"
-)
-
-var (
-	officialSenderMu     sync.Mutex
-	cachedOfficialSender int
 )
 
 // resolveOrderParticipant 校验 user 为买方或卖方，返回订单与商品
@@ -146,12 +133,7 @@ func (s *orderService) SellerConfirmPayment(ctx *gin.Context, orderID uint, user
 		"order_status":     next,
 		"seller_agreed_at": &now,
 	}
-	return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if err := dao.Order().UpdateColumnsTx(ctx.Request.Context(), tx, orderID, updates); err != nil {
-			return err
-		}
-		return s.createOfficialOrderMessageTx(ctx.Request.Context(), tx, orderID, officialMsgSellerConfirmedPayment)
-	})
+	return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, updates)
 }
 
 // ConfirmDeliveryReq 卖家确认送达
@@ -188,12 +170,7 @@ func (s *orderService) ConfirmDelivery(ctx *gin.Context, orderID uint, sellerID 
 	if len(paths) > 0 {
 		updates["delivery_images"] = pq.StringArray(paths)
 	}
-	return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if err := dao.Order().UpdateColumnsTx(ctx.Request.Context(), tx, orderID, updates); err != nil {
-			return err
-		}
-		return s.createOfficialOrderMessageTx(ctx.Request.Context(), tx, orderID, officialMsgSellerConfirmedDelivery)
-	})
+	return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, updates)
 }
 
 // ConfirmReceiptReq 买家确认收货
@@ -240,9 +217,6 @@ func (s *orderService) ConfirmReceipt(ctx *gin.Context, orderID uint, buyerID ui
 		if err := dao.Order().UpdateColumnsTx(ctx.Request.Context(), tx, orderID, updates); err != nil {
 			return err
 		}
-		if err := s.createOfficialOrderMessageTx(ctx.Request.Context(), tx, orderID, officialMsgBuyerConfirmedReceipt); err != nil {
-			return err
-		}
 		if err := dao.Good().DecrementStockAfterSale(ctx.Request.Context(), tx, gid); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return errno.ErrOrderInsufficientStock
@@ -267,35 +241,4 @@ func (s *orderService) CancelOrder(ctx *gin.Context, orderID uint, userID uint) 
 	default:
 		return errno.ErrOrderInvalidState
 	}
-}
-
-func (s *orderService) officialSenderID(ctx context.Context) (int, error) {
-	officialSenderMu.Lock()
-	defer officialSenderMu.Unlock()
-	if cachedOfficialSender != 0 {
-		return cachedOfficialSender, nil
-	}
-	u, err := dao.User().GetByUsername(ctx, constant.OrderOfficialUsername)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return 0, errno.ErrOrderOfficialNotConfigured
-		}
-		return 0, err
-	}
-	cachedOfficialSender = int(u.ID)
-	return cachedOfficialSender, nil
-}
-
-func (s *orderService) createOfficialOrderMessageTx(ctx context.Context, tx *gorm.DB, orderID uint, content string) error {
-	sid, err := s.officialSenderID(ctx)
-	if err != nil {
-		return err
-	}
-	m := &model.OrderMessage{
-		OrderID:  orderID,
-		SenderID: sid,
-		MsgType:  constant.OrderMsgTypeOfficial,
-		Content:  strings.TrimSpace(content),
-	}
-	return dao.OrderMessage().CreateTx(ctx, tx, m)
 }

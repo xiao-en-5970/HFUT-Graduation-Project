@@ -1306,13 +1306,11 @@
             const msgHtml = msgs.length
                 ? msgs.map(m => {
                     const mt = Number(m.msg_type);
-                    const meta = mt === 3
-                        ? `<span class="order-msg-meta">#${m.id} <strong>官方</strong> · ${(m.created_at || '').slice(0, 19)}</span>`
-                        : `<span class="order-msg-meta">#${m.id} 用户${m.sender_id} · ${(m.created_at || '').slice(0, 19)}</span>`;
+                    const meta = `<span class="order-msg-meta">#${m.id} 用户${m.sender_id} · ${(m.created_at || '').slice(0, 19)}</span>`;
                     const body = mt === 2
                         ? `<div><img src="${m.image_url || ''}" class="list-thumb" alt=""/></div>`
                         : `<div>${escapeHtml(m.content || '')}</div>`;
-                    const cls = mt === 3 ? 'order-msg order-msg-official' : 'order-msg';
+                    const cls = 'order-msg';
                     return `<div class="${cls}">${meta}${body}</div>`;
                 }).join('')
                 : '<p class="text-muted">暂无消息</p>';
@@ -1565,9 +1563,6 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
         const msgHtml = msgs.length
             ? msgs.map(m => {
                 const mt = Number(m.msg_type);
-                if (mt === 3) {
-                    return `<div class="trade-msg trade-msg-official"><span class="trade-msg-who">官方</span><span class="trade-msg-time">${(m.created_at || '').slice(0, 19)}</span><div class="trade-msg-text">${escapeHtml(m.content || '')}</div></div>`;
-                }
                 const sid = Number(m.sender_id);
                 const who = buyerUid != null && sid === buyerUid ? '买家' : (sellerUid != null && sid === sellerUid ? '卖家' : ('用户' + m.sender_id));
                 const imgUrl = String(m.image_url || '').replace(/"/g, '&quot;');
@@ -1635,7 +1630,7 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
 
 <div class="trade-card trade-chat-shared-wrap">
   <h4>订单聊天（双方可见）</h4>
-  <p class="text-muted trade-subsection">卖方确认收款、确认送达或买方确认收货时，会插入<strong>官方</strong>系统消息，买卖双方均可见。</p>
+  <p class="text-muted trade-subsection">聊天仅买卖双方；状态以订单详情为准。</p>
   <div class="trade-chat-log" id="td-chat-log">${msgHtml}</div>
 </div>
 

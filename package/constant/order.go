@@ -14,8 +14,8 @@ const (
 const (
 	OrderMsgTypeText     int16 = 1
 	OrderMsgTypeImage    int16 = 2
-	OrderMsgTypeOfficial int16 = 3 // 官方系统通知（仅服务端写入）
+	OrderMsgTypeOfficial int16 = 3 // 历史保留：旧库可能含 msg_type=3；列表接口已过滤，不再写入
 )
 
-// OrderOfficialUsername 订单聊天官方通知所用系统用户（迁移脚本插入；登录在应用层拒绝）
+// OrderOfficialUsername 历史系统用户；登录在应用层拒绝（占位密码）
 const OrderOfficialUsername = "__order_official__"

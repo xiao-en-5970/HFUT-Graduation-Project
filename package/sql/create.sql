@@ -301,7 +301,7 @@ CREATE TABLE IF NOT EXISTS order_messages
 );
 CREATE INDEX IF NOT EXISTS idx_order_messages_order_id ON order_messages (order_id);
 COMMENT ON TABLE order_messages IS '订单内买卖双方聊天，不经手资金';
-COMMENT ON COLUMN order_messages.msg_type IS '1:文字 2:图片 3:官方系统通知';
+COMMENT ON COLUMN order_messages.msg_type IS '1:文字 2:图片 3:历史保留（列表不返回）';
 
 INSERT INTO users (username, password, school_id, status, role)
 SELECT '__order_official__', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', NULL, 1, 1

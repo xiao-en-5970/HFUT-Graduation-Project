@@ -631,7 +631,7 @@
       "properties": {
         "msg_type": {
           "type": "integer",
-          "description": "1=文字 2=图片；3=官方系统通知（仅服务端在确认收款/送达/收货时写入，客户端勿传）"
+          "description": "1=文字 2=图片；3=历史保留（列表不返回），客户端勿传"
         },
         "content": {
           "type": "string"

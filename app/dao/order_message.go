@@ -5,6 +5,7 @@ import (
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"gorm.io/gorm"
 )
 
@@ -26,7 +27,7 @@ func (s *OrderMessageStore) ListByOrderID(ctx context.Context, orderID uint, pag
 		pageSize = 50
 	}
 	offset := (page - 1) * pageSize
-	q := pgsql.DB.WithContext(ctx).Model(&model.OrderMessage{}).Where("order_id = ?", orderID)
+	q := pgsql.DB.WithContext(ctx).Model(&model.OrderMessage{}).Where("order_id = ? AND msg_type != ?", orderID, constant.OrderMsgTypeOfficial)
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
