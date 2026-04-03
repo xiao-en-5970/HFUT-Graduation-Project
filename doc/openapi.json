@@ -41,6 +41,10 @@
     {
       "name": "订单",
       "description": "买卖双方订单与订单内聊天。下单即 order_status=1（待卖方确认收款）；卖方不确认则视为未成交。无「买方声明已付款」接口"
+    },
+    {
+      "name": "配置",
+      "description": "前端地图等辅助配置"
     }
   ],
   "definitions": {
@@ -485,7 +489,7 @@
       "required": [
         "goods_id"
       ],
-      "description": "创建订单：成功后 order_status=1（待卖方确认收款），buyer_agreed_at=下单时间。不再包含、也不再需要「买方声明已付款」步骤。",
+      "description": "创建订单：成功后 order_status=1（待卖方确认收款），buyer_agreed_at=下单时间。收货/发货各支持「文字 + 地图坐标（GCJ-02，成对）」；送货上门算距时优先用两端坐标。",
       "properties": {
         "goods_id": {
           "type": "integer",
@@ -493,11 +497,31 @@
         },
         "receiver_addr": {
           "type": "string",
-          "description": "收货地址；送货上门建议填写；自提可空（默认商品地址）"
+          "description": "收货文字地址（口头描述）"
+        },
+        "receiver_lat": {
+          "type": "number",
+          "format": "double",
+          "description": "收货地图选点纬度"
+        },
+        "receiver_lng": {
+          "type": "number",
+          "format": "double",
+          "description": "收货地图选点经度"
         },
         "sender_addr": {
           "type": "string",
-          "description": "发货地址；可空，默认商品 goods_addr"
+          "description": "发货文字地址；可空，默认商品 goods_addr"
+        },
+        "sender_lat": {
+          "type": "number",
+          "format": "double",
+          "description": "发货地图选点纬度"
+        },
+        "sender_lng": {
+          "type": "number",
+          "format": "double",
+          "description": "发货地图选点经度"
         }
       }
     },
@@ -516,10 +540,28 @@
           "type": "integer"
         },
         "receiver_addr": {
-          "type": "string"
+          "type": "string",
+          "description": "收货文字地址"
+        },
+        "receiver_lat": {
+          "type": "number",
+          "format": "double"
+        },
+        "receiver_lng": {
+          "type": "number",
+          "format": "double"
         },
         "sender_addr": {
-          "type": "string"
+          "type": "string",
+          "description": "发货文字地址"
+        },
+        "sender_lat": {
+          "type": "number",
+          "format": "double"
+        },
+        "sender_lng": {
+          "type": "number",
+          "format": "double"
         },
         "buyer_agreed_at": {
           "type": "string",
@@ -553,7 +595,7 @@
         },
         "distance_meters": {
           "type": "integer",
-          "description": "送货上门且收发地址齐全时高德步行距离（米），可能为 null"
+          "description": "送货上门步行距离（米）；有两端地图坐标时按坐标算，否则按文字地理编码，可能为 null"
         },
         "order_status": {
           "type": "integer",
@@ -589,7 +631,16 @@
       "properties": {
         "sender_addr": {
           "type": "string",
-          "description": "卖方改发货地址；仅 order_status 为 1 或 2"
+          "description": "卖方改发货文字地址；仅 order_status 为 1 或 2"
+        },
+        "sender_lat": {
+          "type": "number",
+          "format": "double",
+          "description": "与 sender_lng 成对传才写入"
+        },
+        "sender_lng": {
+          "type": "number",
+          "format": "double"
         }
       }
     },
@@ -1161,6 +1212,155 @@
         "responses": {
           "200": {"schema": {"$ref": "#/definitions/Response"}, "examples": {"application/json": {"code": 200, "message": "成功", "data": {"url": "http://api.example.com/api/v1/oss/user/1/background.jpg", "path": "user/1/background.jpg"}}}},
           "401": {"schema": {"$ref": "#/definitions/Response"}}
+        }
+      }
+    },
+    "/api/v1/config/map": {
+      "get": {
+        "tags": [
+          "配置"
+        ],
+        "summary": "高德地图 JS Key（选点）",
+        "description": "返回 `data.amap_web_key`，供前端加载高德 JS API 地图选点。需 JWT；未配置 `AMAP_WEB_KEY` 时为空字符串。",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data: { amap_web_key }"
+          },
+          "401": {}
+        }
+      }
+    },
+    "/api/v1/map/district": {
+      "get": {
+        "tags": [
+          "配置"
+        ],
+        "summary": "行政区下级（省市区级联）",
+        "description": "`keywords` 为 adcode 或名称：默认 `100000` 查中国下一级（省）；再选省 adcode 查市；再选市 adcode 查区县。返回 `data.list[]`：`adcode`、`name`、`center`、`level`。",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "keywords",
+            "type": "string",
+            "description": "默认 100000"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "type": "integer",
+            "default": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data: { list, keywords, page, offset }"
+          },
+          "400": {},
+          "401": {}
+        }
+      }
+    },
+    "/api/v1/map/input-tips": {
+      "get": {
+        "tags": [
+          "配置"
+        ],
+        "summary": "地名输入提示（联想）",
+        "description": "高德输入提示。`keywords` 必填；`city` 可选；`citylimit=1` 时限制在 city 内。返回 `data.list[]`：`name`、`address`、`lng`、`lat`、`has_coord`（GCJ-02）。需配置服务端 `AMAP_KEY`。",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "keywords",
+            "type": "string",
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "type": "string",
+            "description": "城市名或 adcode"
+          },
+          {
+            "in": "query",
+            "name": "citylimit",
+            "type": "string",
+            "description": "1 或 true 时与 city 联用"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data: { list }"
+          },
+          "400": {},
+          "401": {}
+        }
+      }
+    },
+    "/api/v1/map/place-text": {
+      "get": {
+        "tags": [
+          "配置"
+        ],
+        "summary": "POI 关键字搜索",
+        "description": "高德地点搜索，适合「搜地名 → 选一条」。`keywords` 必填；`city`、`page`、`offset` 可选。返回 `data.list` 结构同 input-tips。",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "keywords",
+            "type": "string",
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "type": "string"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "type": "integer",
+            "default": 1
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "type": "integer",
+            "default": 20,
+            "description": "每页条数，最大 50"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data: { list, page, offset }"
+          },
+          "400": {},
+          "401": {}
         }
       }
     },

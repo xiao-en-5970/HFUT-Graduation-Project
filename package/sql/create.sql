@@ -261,6 +261,19 @@ ALTER TABLE orders
 COMMENT ON COLUMN orders.distance_meters IS '发货地与收货地步行规划距离（米），高德地图 API 计算';
 
 ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS receiver_lat DOUBLE PRECISION;
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS receiver_lng DOUBLE PRECISION;
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS sender_lat DOUBLE PRECISION;
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS sender_lng DOUBLE PRECISION;
+COMMENT ON COLUMN orders.receiver_lat IS '收货地图选点纬度 GCJ-02';
+COMMENT ON COLUMN orders.receiver_lng IS '收货地图选点经度 GCJ-02';
+COMMENT ON COLUMN orders.sender_lat IS '发货地图选点纬度 GCJ-02';
+COMMENT ON COLUMN orders.sender_lng IS '发货地图选点经度 GCJ-02';
+
+ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS buyer_agreed_at TIMESTAMP;
 ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS seller_agreed_at TIMESTAMP;

@@ -29,10 +29,22 @@ func goodAddrForOrder(g *model.Good) string {
 }
 
 // CreateOrderReq 创建订单：直接进入「待卖方确认收款」；buyer_agreed_at 记下单时间（买方契约）
+// 收货/发货各含：文字地址 + 地图选点（GCJ-02 经纬度，成对传）；距离优先用两端坐标计算
 type CreateOrderReq struct {
-	GoodsID      uint   `json:"goods_id" binding:"required"`
-	ReceiverAddr string `json:"receiver_addr"` // 可选
-	SenderAddr   string `json:"sender_addr"`   // 可选
+	GoodsID      uint     `json:"goods_id" binding:"required"`
+	ReceiverAddr string   `json:"receiver_addr"`
+	SenderAddr   string   `json:"sender_addr"`
+	ReceiverLat  *float64 `json:"receiver_lat"`
+	ReceiverLng  *float64 `json:"receiver_lng"`
+	SenderLat    *float64 `json:"sender_lat"`
+	SenderLng    *float64 `json:"sender_lng"`
+}
+
+// UpdateSellerAddrReq 卖方更新发货文字与地图坐标（坐标须成对传才写入）
+type UpdateSellerAddrReq struct {
+	SenderAddr string   `json:"sender_addr"`
+	SenderLat  *float64 `json:"sender_lat"`
+	SenderLng  *float64 `json:"sender_lng"`
 }
 
 func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req CreateOrderReq) (uint, error) {
@@ -68,23 +80,45 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 		SenderAddr:    sender,
 		BuyerAgreedAt: &now,
 	}
-	// 仅「送货上门」在买卖地址齐全时计算步行距离；自提/在线不计算
+	if req.ReceiverLat != nil && req.ReceiverLng != nil {
+		o.ReceiverLat = req.ReceiverLat
+		o.ReceiverLng = req.ReceiverLng
+	}
+	if req.SenderLat != nil && req.SenderLng != nil {
+		o.SenderLat = req.SenderLat
+		o.SenderLng = req.SenderLng
+	}
+	// 仅「送货上门」计算步行距离：优先两端地图坐标，否则两段文字地址地理编码
 	if good.GoodsType == constant.GoodsTypeDelivery {
-		if sender != "" && receiver != "" {
-			if d := computeOrderDistanceMeters(ctx, sender, receiver); d != nil {
-				o.DistanceMeters = d
-			}
+		if d := computeOrderDistanceMeters(ctx, sender, receiver, o.SenderLat, o.SenderLng, o.ReceiverLat, o.ReceiverLng); d != nil {
+			o.DistanceMeters = d
 		}
 	}
 	return dao.Order().Create(ctx.Request.Context(), o)
 }
 
-// computeOrderDistanceMeters 发货地→收货地步行规划距离（米）。需配置 AMAP_KEY；地址不全或 API 失败时返回 nil，不阻断下单。
-func computeOrderDistanceMeters(ctx *gin.Context, senderAddr, receiverAddr string) *int {
-	if config.AmapKey == "" || senderAddr == "" || receiverAddr == "" {
+// computeOrderDistanceMeters 发货地→收货地步行规划距离（米）。需配置 AMAP_KEY；失败返回 nil，不阻断下单。
+// 若收发两端各有成对经纬度，直接测距；否则在两段文字地址均非空时走地理编码再测距。
+func computeOrderDistanceMeters(ctx *gin.Context, senderAddr, receiverAddr string, senderLat, senderLng, receiverLat, receiverLng *float64) *int {
+	if config.AmapKey == "" {
 		return nil
 	}
-	m, err := amap.DistanceBetweenAddresses(ctx.Request.Context(), config.AmapKey, senderAddr, receiverAddr)
+	if senderLat != nil && senderLng != nil && receiverLat != nil && receiverLng != nil {
+		from := &amap.GeocodeResult{Lng: *senderLng, Lat: *senderLat}
+		to := &amap.GeocodeResult{Lng: *receiverLng, Lat: *receiverLat}
+		m, err := amap.WalkingDistanceMeters(ctx.Request.Context(), config.AmapKey, from, to)
+		if err != nil {
+			return nil
+		}
+		v := m
+		return &v
+	}
+	sa := strings.TrimSpace(senderAddr)
+	ra := strings.TrimSpace(receiverAddr)
+	if sa == "" || ra == "" {
+		return nil
+	}
+	m, err := amap.DistanceBetweenAddresses(ctx.Request.Context(), config.AmapKey, sa, ra)
 	if err != nil {
 		return nil
 	}
@@ -108,8 +142,8 @@ func (s *orderService) UpdateStatus(ctx *gin.Context, id uint, orderStatus int16
 	return dao.Order().UpdateOrderStatus(ctx.Request.Context(), id, orderStatus)
 }
 
-// UpdateSellerInfo 卖家仅可更新发货地址；订单为待下单/正在派送时可改。不再允许任意改 order_status。
-func (s *orderService) UpdateSellerInfo(ctx *gin.Context, id uint, sellerID uint, senderAddr string) error {
+// UpdateSellerInfo 卖家更新发货文字地址与/或地图坐标；订单为待卖方确认收款或履约中时可改。
+func (s *orderService) UpdateSellerInfo(ctx *gin.Context, id uint, sellerID uint, req UpdateSellerAddrReq) error {
 	o, err := dao.Order().GetByID(ctx.Request.Context(), id)
 	if err != nil || o == nil {
 		return errno.ErrOrderNotFound
@@ -126,18 +160,33 @@ func (s *orderService) UpdateSellerInfo(ctx *gin.Context, id uint, sellerID uint
 		return errno.ErrOrderInvalidState
 	}
 	updates := make(map[string]interface{})
-	senderAddr = strings.TrimSpace(senderAddr)
+	senderAddr := strings.TrimSpace(req.SenderAddr)
 	if senderAddr != "" {
 		updates["sender_addr"] = senderAddr
-		if g.GoodsType == constant.GoodsTypeDelivery {
-			receiver := strings.TrimSpace(o.ReceiverAddr)
-			if d := computeOrderDistanceMeters(ctx, senderAddr, receiver); d != nil {
-				updates["distance_meters"] = *d
-			}
-		}
+	}
+	if req.SenderLat != nil && req.SenderLng != nil {
+		updates["sender_lat"] = *req.SenderLat
+		updates["sender_lng"] = *req.SenderLng
 	}
 	if len(updates) == 0 {
 		return nil
+	}
+	if g.GoodsType == constant.GoodsTypeDelivery {
+		senderStr := strings.TrimSpace(o.SenderAddr)
+		if senderAddr != "" {
+			senderStr = senderAddr
+		}
+		var sLat, sLng *float64
+		if req.SenderLat != nil && req.SenderLng != nil {
+			sLat, sLng = req.SenderLat, req.SenderLng
+		} else {
+			sLat, sLng = o.SenderLat, o.SenderLng
+		}
+		receiverStr := strings.TrimSpace(o.ReceiverAddr)
+		rLat, rLng := o.ReceiverLat, o.ReceiverLng
+		if d := computeOrderDistanceMeters(ctx, senderStr, receiverStr, sLat, sLng, rLat, rLng); d != nil {
+			updates["distance_meters"] = *d
+		}
 	}
 	return dao.Order().UpdateColumns(ctx.Request.Context(), id, updates)
 }

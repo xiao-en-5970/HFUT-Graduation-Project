@@ -270,6 +270,66 @@ td { font-size: 0.9rem; }
     margin: 0.5rem 0;
 }
 
+.trade-map {
+    width: 100%;
+    max-width: 420px;
+    height: 220px;
+    margin: 0.5rem 0 0.25rem;
+    border-radius: 8px;
+    border: 1px solid #3d424d;
+    overflow: hidden;
+}
+
+.trade-subsection {
+    font-size: 0.88rem;
+    margin: 0 0 0.75rem;
+    line-height: 1.5;
+}
+
+.trade-dist-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-end;
+    margin-bottom: 0.75rem;
+}
+
+.trade-dist-row label {
+    margin-bottom: 0;
+}
+
+.trade-dist-row select {
+    min-width: 120px;
+    margin-top: 0.25rem;
+    padding: 0.45rem 0.5rem;
+    border: 1px solid #3d424d;
+    border-radius: 6px;
+    background: var(--bg-dark);
+    color: var(--text);
+    font-size: 0.88rem;
+}
+
+.trade-place-search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.trade-search-results {
+    margin: 0.5rem 0 1rem;
+    max-width: 100%;
+}
+
+.trade-search-results .trade-tip-item {
+    display: inline-block;
+    margin: 0.25rem 0.35rem 0 0;
+    text-align: left;
+    white-space: normal;
+    max-width: 100%;
+}
+
 .trade-demo-intro {
     background: var(--bg-card);
     border: 1px solid #2d323c;

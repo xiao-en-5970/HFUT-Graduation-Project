@@ -105,6 +105,26 @@ func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 	} else {
 		m["distance_meters"] = nil
 	}
+	if o.ReceiverLat != nil {
+		m["receiver_lat"] = *o.ReceiverLat
+	} else {
+		m["receiver_lat"] = nil
+	}
+	if o.ReceiverLng != nil {
+		m["receiver_lng"] = *o.ReceiverLng
+	} else {
+		m["receiver_lng"] = nil
+	}
+	if o.SenderLat != nil {
+		m["sender_lat"] = *o.SenderLat
+	} else {
+		m["sender_lat"] = nil
+	}
+	if o.SenderLng != nil {
+		m["sender_lng"] = *o.SenderLng
+	} else {
+		m["sender_lng"] = nil
+	}
 	if o.GoodsID != nil && *o.GoodsID > 0 {
 		g, err := dao.Good().GetByID(ctx.Request.Context(), uint(*o.GoodsID))
 		if err == nil && g != nil {
@@ -187,14 +207,12 @@ func OrderUpdate(ctx *gin.Context) {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	var body struct {
-		SenderAddr string `json:"sender_addr"`
-	}
+	var body service.UpdateSellerAddrReq
 	if err := ctx.BindJSON(&body); err != nil {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	if err := service.Order().UpdateSellerInfo(ctx, uint(id), userID, body.SenderAddr); err != nil {
+	if err := service.Order().UpdateSellerInfo(ctx, uint(id), userID, body); err != nil {
 		if errors.Is(err, errno.ErrOrderInvalidState) {
 			reply.ReplyErrWithMessage(ctx, "当前订单状态不可修改发货地址")
 			return

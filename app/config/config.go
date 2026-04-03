@@ -53,6 +53,8 @@ var (
 
 	// 高德地图 Web 服务 Key（用于订单发货/收货地址间步行距离等），见 https://console.amap.com/
 	AmapKey string
+	// 高德 JS API Key（管理后台/前端地图选点；可与 Web 服务 Key 相同或单独创建并勾选「Web端」）
+	AmapWebKey string
 )
 
 const defaultEnvPath = "/.env"
@@ -111,6 +113,7 @@ func LoadConfigFrom(path string) error {
 	SearchCombinedPopularity = getEnvFloat("SEARCH_COMBINED_POPULARITY", 0.01)
 
 	AmapKey = getEnv("AMAP_KEY", "")
+	AmapWebKey = getEnv("AMAP_WEB_KEY", "")
 
 	return nil
 }
