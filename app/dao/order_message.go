@@ -5,12 +5,17 @@ import (
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
+	"gorm.io/gorm"
 )
 
 type OrderMessageStore struct{}
 
 func (s *OrderMessageStore) Create(ctx context.Context, m *model.OrderMessage) error {
 	return pgsql.DB.WithContext(ctx).Create(m).Error
+}
+
+func (s *OrderMessageStore) CreateTx(ctx context.Context, tx *gorm.DB, m *model.OrderMessage) error {
+	return tx.WithContext(ctx).Create(m).Error
 }
 
 func (s *OrderMessageStore) ListByOrderID(ctx context.Context, orderID uint, page, pageSize int) ([]*model.OrderMessage, int64, error) {

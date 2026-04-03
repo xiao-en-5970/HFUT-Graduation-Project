@@ -445,6 +445,65 @@ td { font-size: 0.9rem; }
     margin-bottom: 1rem;
 }
 
+/* 交易演示：左买右卖 */
+.trade-demo-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    align-items: start;
+    margin-bottom: 1rem;
+}
+
+@media (max-width: 960px) {
+    .trade-demo-split {
+        grid-template-columns: 1fr;
+    }
+}
+
+.trade-demo-col {
+    min-width: 0;
+}
+
+.trade-demo-col-title {
+    margin: 0 0 0.75rem;
+    font-size: 1.05rem;
+    letter-spacing: 0.02em;
+}
+
+.trade-demo-col-buyer .trade-card-buyer-head,
+.trade-demo-col-buyer .trade-card-order {
+    border-left: 4px solid rgba(99, 102, 241, 0.65);
+}
+
+.trade-demo-col-seller .trade-card-seller-head {
+    border-left: 4px solid rgba(34, 197, 94, 0.65);
+}
+
+.trade-demo-col-seller .trade-card:last-child {
+    border-left: 4px solid rgba(34, 197, 94, 0.45);
+}
+
+.trade-chat-shared-wrap {
+    margin-bottom: 1rem;
+}
+
+.trade-actions-seller {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.trade-actions-seller label,
+.trade-actions-seller .trade-map {
+    max-width: 100%;
+}
+
+.trade-map-fulfill {
+    max-width: 100%;
+    width: 100%;
+    height: min(36vh, 280px);
+    min-height: 180px;
+}
+
 .trade-card {
     background: var(--bg-card);
     border: 1px solid #2d323c;
@@ -561,6 +620,16 @@ td { font-size: 0.9rem; }
     border-left: 3px solid var(--success);
 }
 
+.trade-msg-official {
+    background: rgba(245, 158, 11, 0.12);
+    border-left: 3px solid #f59e0b;
+}
+
+.trade-msg-official .trade-msg-text {
+    text-align: center;
+    font-weight: 500;
+}
+
 .trade-msg-who {
     font-weight: 600;
     margin-right: 0.5rem;
@@ -620,4 +689,10 @@ td { font-size: 0.9rem; }
     color: var(--text-muted);
     display: block;
     margin-bottom: 0.25rem;
+}
+
+.order-msg-official {
+    background: rgba(245, 158, 11, 0.08);
+    border-radius: 6px;
+    padding: 0.35rem 0.5rem;
 }

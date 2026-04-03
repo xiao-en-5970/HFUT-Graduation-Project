@@ -213,7 +213,6 @@
     /** 买卖双方用户 JWT（与管理员 token 独立，存 localStorage） */
     const DEMO_SELLER_TOKEN = 'demo_seller_token';
     const DEMO_BUYER_TOKEN = 'demo_buyer_token';
-    const DEMO_TRADE_ROLE = 'demo_trade_role';
     const DEMO_ORDER_ID = 'demo_order_id';
 
     async function userLogin(username, password) {
@@ -266,14 +265,6 @@
       return { tilesUrl: '' };
     }
   }
-
-    function getDemoTradeRole() {
-        return localStorage.getItem(DEMO_TRADE_ROLE) || 'buyer';
-    }
-
-    function demoTokenForRole(role) {
-        return role === 'seller' ? localStorage.getItem(DEMO_SELLER_TOKEN) : localStorage.getItem(DEMO_BUYER_TOKEN);
-    }
 
   function ensureUploadProgress(overlay) {
     let wrap = overlay.querySelector('.upload-progress-wrap');
@@ -1265,7 +1256,17 @@
             const o = dOrder.data || {};
             const msgs = dMsg.data?.list || [];
             const msgHtml = msgs.length
-                ? msgs.map(m => `<div class="order-msg"><span class="order-msg-meta">#${m.id} 用户${m.sender_id} · ${(m.created_at || '').slice(0, 19)}</span>${m.msg_type === 2 ? `<div><img src="${m.image_url || ''}" class="list-thumb" alt=""/></div>` : `<div>${escapeHtml(m.content || '')}</div>`}</div>`).join('')
+                ? msgs.map(m => {
+                    const mt = Number(m.msg_type);
+                    const meta = mt === 3
+                        ? `<span class="order-msg-meta">#${m.id} <strong>官方</strong> · ${(m.created_at || '').slice(0, 19)}</span>`
+                        : `<span class="order-msg-meta">#${m.id} 用户${m.sender_id} · ${(m.created_at || '').slice(0, 19)}</span>`;
+                    const body = mt === 2
+                        ? `<div><img src="${m.image_url || ''}" class="list-thumb" alt=""/></div>`
+                        : `<div>${escapeHtml(m.content || '')}</div>`;
+                    const cls = mt === 3 ? 'order-msg order-msg-official' : 'order-msg';
+                    return `<div class="${cls}">${meta}${body}</div>`;
+                }).join('')
                 : '<p class="text-muted">暂无消息</p>';
             const overlay = document.createElement('div');
             overlay.className = 'modal-overlay';
@@ -1377,13 +1378,12 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
         moduleContent.innerHTML = '<p class="text-muted">加载中…</p>';
         const sellerTok = localStorage.getItem(DEMO_SELLER_TOKEN);
         const buyerTok = localStorage.getItem(DEMO_BUYER_TOKEN);
-        const role = getDemoTradeRole();
         let orderId = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
 
         let order = null;
         let msgs = [];
         let loadErr = '';
-        const tok = demoTokenForRole(role);
+        const tok = buyerTok || sellerTok;
         if (orderId && tok) {
             try {
                 const d = await userApi(tok, `/orders/${orderId}`);
@@ -1409,17 +1409,19 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
 
         const msgHtml = msgs.length
             ? msgs.map(m => {
+                const mt = Number(m.msg_type);
+                if (mt === 3) {
+                    return `<div class="trade-msg trade-msg-official"><span class="trade-msg-who">官方</span><span class="trade-msg-time">${(m.created_at || '').slice(0, 19)}</span><div class="trade-msg-text">${escapeHtml(m.content || '')}</div></div>`;
+                }
                 const sid = Number(m.sender_id);
                 const who = buyerUid != null && sid === buyerUid ? '买家' : (sellerUid != null && sid === sellerUid ? '卖家' : ('用户' + m.sender_id));
                 const imgUrl = String(m.image_url || '').replace(/"/g, '&quot;');
-                const body = Number(m.msg_type) === 2
+                const body = mt === 2
                     ? `<div class="trade-msg-img"><img src="${imgUrl}" alt="" class="list-thumb"/></div>`
                     : `<div class="trade-msg-text">${escapeHtml(m.content || '')}</div>`;
                 return `<div class="trade-msg trade-msg-${who === '买家' ? 'buyer' : 'seller'}"><span class="trade-msg-who">${who}</span><span class="trade-msg-time">${(m.created_at || '').slice(0, 19)}</span>${body}</div>`;
             }).join('')
             : '<p class="text-muted">暂无消息（待下单后可发）</p>';
-
-        const roleSel = (r) => role === r ? 'checked' : '';
 
       const prefSender = order && !loadErr
           ? (order.sender_addr || (order.good && (order.good.goods_addr || order.good.pickup_addr)) || '')
@@ -1448,71 +1450,22 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
         }
 
         moduleContent.innerHTML = `
-<div class="module-header"><h3>交易演示（买卖双方）</h3></div>
+<div class="module-header"><h3>交易演示（买 / 卖 分栏）</h3></div>
 <div class="trade-demo-intro">
   <p><strong>说明：</strong>管理员登录仅用于进后台；<strong>下单、聊天、确认收货</strong>必须使用<strong>普通用户</strong>的账号密码登录（与 App 相同接口）。买卖双方须<strong>绑定同一学校</strong>，且商品的 <code>user_id</code> 为卖家、<code>school_id</code> 一致。</p>
   <ol class="trade-steps">
     <li>在「用户管理」建两个普通用户并绑定同一学校；在「商品管理」新建商品（填卖家 user_id）、保存后点<strong>上架</strong>。</li>
-    <li>下方分别<strong>登录卖家 / 买家</strong>；切换「当前身份」发消息、点同意与确认。</li>
-    <li>买家填商品 ID 与收货地址，点<strong>买家下单</strong>（直接进入<strong>待卖方确认收款</strong>）→ 卖方<strong>确认收款</strong> → 按类型派送/自提 → 买方<strong>确认收货</strong>。</li>
+    <li>页面<strong>左侧为买方</strong>、<strong>右侧为卖方</strong>：各自登录后，在对应一侧发消息、点按钮（接口仍与 App 一致）。</li>
+    <li>左栏填商品 ID 与收货地址，点<strong>买家下单</strong> → 右栏<strong>确认收款</strong> → 按类型派送/自提 → 左栏<strong>确认收货</strong>。关键节点会插入<strong>官方</strong>聊天提示。</li>
   </ol>
 </div>
 
-<div class="trade-grid">
-  <div class="trade-card">
-    <h4>卖家登录</h4>
-    <label>用户名 <input type="text" id="td-seller-user" placeholder="卖家用户名" autocomplete="username"></label>
-    <label>密码 <input type="password" id="td-seller-pass" placeholder="密码" autocomplete="current-password"></label>
-    <button type="button" class="btn btn-primary" id="td-login-seller">登录卖家</button>
-    <p class="trade-login-status">${sellerTok ? '<span class="status-badge status-valid">已登录</span>' : '<span class="text-muted">未登录</span>'}</p>
-    <button type="button" class="btn btn-sm" id="td-clear-seller">清除卖家 Token</button>
-  </div>
-  <div class="trade-card">
-    <h4>买家登录</h4>
-    <label>用户名 <input type="text" id="td-buyer-user" placeholder="买家用户名" autocomplete="username"></label>
-    <label>密码 <input type="password" id="td-buyer-pass" placeholder="密码" autocomplete="current-password"></label>
-    <button type="button" class="btn btn-primary" id="td-login-buyer">登录买家</button>
-    <p class="trade-login-status">${buyerTok ? '<span class="status-badge status-valid">已登录</span>' : '<span class="text-muted">未登录</span>'}</p>
-    <button type="button" class="btn btn-sm" id="td-clear-buyer">清除买家 Token</button>
-  </div>
-</div>
-
-<div class="trade-card trade-role-bar">
-  <strong>当前操作身份（发消息、同意等均以此账号调用接口）：</strong>
-  <label class="trade-inline"><input type="radio" name="td-role" value="seller" ${roleSel('seller')}> 卖家</label>
-  <label class="trade-inline"><input type="radio" name="td-role" value="buyer" ${roleSel('buyer')}> 买家</label>
-</div>
-
-<div class="trade-card trade-card-order">
-  <h4>1. 买家下单</h4>
-  <p class="text-muted trade-subsection">请先<strong>登录买家</strong>（或至少一方登录以加载地图）。瓦片经 <code>/api/v1/map/tiles</code> 转发；在地图上<strong>点击选收货点</strong>，再填写文字说明。坐标 <strong>WGS84</strong>。</p>
-  <label>商品 ID <input type="number" id="td-goods-id" placeholder="商品管理列表中的 ID" min="1"></label>
-
-  <h5 class="trade-order-map-title">收货位置（地图选点）</h5>
-  ${tilesUrl ? '<div id="td-map-rcv" class="trade-map trade-map-order" title="点击选收货位置"></div><p class="text-muted trade-map-hint">在地图上点击即可写入下方经纬度；可拖动、缩放。浏览器定位需 HTTPS 或 localhost。</p>' : '<p class="error">无法显示地图：请<strong>登录买家或卖家</strong>，并配置服务端 <code>MAP_TILES_URL</code>。</p>'}
-  <div class="trade-order-coords">
-    <label>收货经度 <input type="number" step="any" id="td-rcv-lng" placeholder="地图点击填入" value="${escapeHtml(rcvLngVal)}"></label>
-    <label>收货纬度 <input type="number" step="any" id="td-rcv-lat" placeholder="地图点击填入" value="${escapeHtml(rcvLatVal)}"></label>
-    <button type="button" class="btn btn-sm" id="td-copy-rcv">复制收货坐标</button>
-  </div>
-  <label>详细位置（文字） <textarea id="td-receiver" rows="2" placeholder="寝室、楼号、约定见面点等"></textarea></label>
-
-  <h5 class="trade-order-map-title">发货位置（可选）</h5>
-  <label>发货地址（文字） <textarea id="td-sender-create" rows="1" placeholder="可与商品默认发货地一致；可空"></textarea></label>
-  <div class="trade-order-coords">
-    <label>发货经度 <input type="number" step="any" id="td-snd-create-lng"></label>
-    <label>发货纬度 <input type="number" step="any" id="td-snd-create-lat"></label>
-  </div>
-  ${tilesUrl ? '<div id="td-map-snd-create" class="trade-map trade-map-order trade-map-order-sm" title="点击选发货位置"></div><p class="text-muted">发货地图（可选；送货上门算距建议填写收发坐标）</p>' : ''}
-  <button type="button" class="btn btn-primary" id="td-create-order">买家下单</button>
-  <p class="text-muted">不能买自己发布的商品。下单后即为<strong>待卖方确认收款</strong>。<strong>送货上门算距</strong>需收发两端均有经纬度（<code>GRAPHHOPPER_BASE_URL</code>）。</p>
-</div>
-
 <div class="trade-card">
-  <h4>2. 当前订单</h4>
+  <h4>当前订单</h4>
   <label>订单 ID <input type="number" id="td-order-id" value="${escapeHtml(orderId)}" placeholder="下单成功后自动填入，可手改"></label>
   <button type="button" class="btn" id="td-save-order-id">保存订单号</button>
   <button type="button" class="btn btn-primary" id="td-refresh">刷新订单与聊天</button>
+  <button type="button" class="btn btn-danger" id="td-cancel">取消订单</button>
   ${loadErr ? `<p class="error">${escapeHtml(loadErr)}</p>` : ''}
   ${order && !loadErr ? `
   <div class="trade-order-detail">
@@ -1529,27 +1482,78 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
   ${actionHints}
 </div>
 
-<div class="trade-card">
-  <h4>3. 聊天（使用当前身份发送）</h4>
+<div class="trade-card trade-chat-shared-wrap">
+  <h4>订单聊天（双方可见）</h4>
+  <p class="text-muted trade-subsection">卖方确认收款、确认送达或买方确认收货时，会插入<strong>官方</strong>系统消息，买卖双方均可见。</p>
   <div class="trade-chat-log" id="td-chat-log">${msgHtml}</div>
-  <label>消息 <textarea id="td-msg" rows="2" placeholder="输入文字消息"></textarea></label>
-  <button type="button" class="btn btn-primary" id="td-send-msg">发送消息</button>
 </div>
 
-<div class="trade-card">
-  <h4>4. 履约操作</h4>
-  <div class="trade-actions">
-    <button type="button" class="btn btn-primary" id="td-seller-confirm">卖方确认收款</button>
-    <label>卖方发货地址（文字） <input type="text" id="td-sender-addr" value="${senderAddrVal}" placeholder="送货上门时可填" style="min-width:220px"></label>
-    <label>发货经度 <input type="number" step="any" id="td-snd-lng" value="${escapeHtml(sndLngVal)}"></label>
-    <label>发货纬度 <input type="number" step="any" id="td-snd-lat" value="${escapeHtml(sndLatVal)}"></label>
-    ${tilesUrl ? '<div id="td-map-snd-fulfill" class="trade-map" title="点击更新发货位置"></div>' : ''}
-    <button type="button" class="btn" id="td-put-sender">保存发货地址与地图点（卖方）</button>
-    <button type="button" class="btn" id="td-confirm-delivery">确认送达（卖方·送货上门）</button>
-    <button type="button" class="btn btn-primary" id="td-confirm-receipt">确认收货（买方）</button>
-    <button type="button" class="btn btn-danger" id="td-cancel">取消订单</button>
+<div class="trade-demo-split">
+  <div class="trade-demo-col trade-demo-col-buyer">
+    <div class="trade-card trade-card-buyer-head">
+      <h4 class="trade-demo-col-title">买方</h4>
+      <label>用户名 <input type="text" id="td-buyer-user" placeholder="买家用户名" autocomplete="username"></label>
+      <label>密码 <input type="password" id="td-buyer-pass" placeholder="密码" autocomplete="current-password"></label>
+      <button type="button" class="btn btn-primary" id="td-login-buyer">登录买家</button>
+      <p class="trade-login-status">${buyerTok ? '<span class="status-badge status-valid">已登录</span>' : '<span class="text-muted">未登录</span>'}</p>
+      <button type="button" class="btn btn-sm" id="td-clear-buyer">清除买家 Token</button>
+    </div>
+    <div class="trade-card trade-card-order">
+      <h4>买家下单</h4>
+      <p class="text-muted trade-subsection">请先<strong>登录买家</strong>（或至少一方登录以加载地图）。瓦片经 <code>/api/v1/map/tiles</code> 转发；在地图上<strong>点击选收货点</strong>，再填写文字说明。坐标 <strong>WGS84</strong>。</p>
+      <label>商品 ID <input type="number" id="td-goods-id" placeholder="商品管理列表中的 ID" min="1"></label>
+      <h5 class="trade-order-map-title">收货位置（地图选点）</h5>
+      ${tilesUrl ? '<div id="td-map-rcv" class="trade-map trade-map-order" title="点击选收货位置"></div><p class="text-muted trade-map-hint">在地图上点击即可写入下方经纬度；可拖动、缩放。浏览器定位需 HTTPS 或 localhost。</p>' : '<p class="error">无法显示地图：请<strong>登录买家或卖家</strong>，并配置服务端 <code>MAP_TILES_URL</code>。</p>'}
+      <div class="trade-order-coords">
+        <label>收货经度 <input type="number" step="any" id="td-rcv-lng" placeholder="地图点击填入" value="${escapeHtml(rcvLngVal)}"></label>
+        <label>收货纬度 <input type="number" step="any" id="td-rcv-lat" placeholder="地图点击填入" value="${escapeHtml(rcvLatVal)}"></label>
+        <button type="button" class="btn btn-sm" id="td-copy-rcv">复制收货坐标</button>
+      </div>
+      <label>详细位置（文字） <textarea id="td-receiver" rows="2" placeholder="寝室、楼号、约定见面点等"></textarea></label>
+      <h5 class="trade-order-map-title">发货位置（可选）</h5>
+      <label>发货地址（文字） <textarea id="td-sender-create" rows="1" placeholder="可与商品默认发货地一致；可空"></textarea></label>
+      <div class="trade-order-coords">
+        <label>发货经度 <input type="number" step="any" id="td-snd-create-lng"></label>
+        <label>发货纬度 <input type="number" step="any" id="td-snd-create-lat"></label>
+      </div>
+      ${tilesUrl ? '<div id="td-map-snd-create" class="trade-map trade-map-order trade-map-order-sm" title="点击选发货位置"></div><p class="text-muted">发货地图（可选；送货上门算距建议填写收发坐标）</p>' : ''}
+      <button type="button" class="btn btn-primary" id="td-create-order">买家下单</button>
+      <p class="text-muted">不能买自己发布的商品。下单后即为<strong>待卖方确认收款</strong>。</p>
+    </div>
+    <div class="trade-card">
+      <h4>买方操作</h4>
+      <button type="button" class="btn btn-primary" id="td-confirm-receipt">确认收货</button>
+      <p class="text-muted" style="margin-top:0.75rem">发消息（买方账号）</p>
+      <label><textarea id="td-msg-buyer" rows="2" placeholder="输入文字消息"></textarea></label>
+      <button type="button" class="btn btn-primary" id="td-send-msg-buyer">发送</button>
+    </div>
   </div>
-  <p class="text-muted">在线商品：卖方确认收款后进入待买方确认收货，无「确认送达」。自提：确认收款后待买方自提，买方确认收货即完成。</p>
+  <div class="trade-demo-col trade-demo-col-seller">
+    <div class="trade-card trade-card-seller-head">
+      <h4 class="trade-demo-col-title">卖方</h4>
+      <label>用户名 <input type="text" id="td-seller-user" placeholder="卖家用户名" autocomplete="username"></label>
+      <label>密码 <input type="password" id="td-seller-pass" placeholder="密码" autocomplete="current-password"></label>
+      <button type="button" class="btn btn-primary" id="td-login-seller">登录卖家</button>
+      <p class="trade-login-status">${sellerTok ? '<span class="status-badge status-valid">已登录</span>' : '<span class="text-muted">未登录</span>'}</p>
+      <button type="button" class="btn btn-sm" id="td-clear-seller">清除卖家 Token</button>
+    </div>
+    <div class="trade-card">
+      <h4>卖方履约</h4>
+      <div class="trade-actions trade-actions-seller">
+        <button type="button" class="btn btn-primary" id="td-seller-confirm">确认收款</button>
+        <label>发货地址（文字） <input type="text" id="td-sender-addr" value="${senderAddrVal}" placeholder="送货上门时可填" style="min-width:220px"></label>
+        <label>发货经度 <input type="number" step="any" id="td-snd-lng" value="${escapeHtml(sndLngVal)}"></label>
+        <label>发货纬度 <input type="number" step="any" id="td-snd-lat" value="${escapeHtml(sndLatVal)}"></label>
+        ${tilesUrl ? '<div id="td-map-snd-fulfill" class="trade-map trade-map-fulfill" title="点击更新发货位置"></div>' : ''}
+        <button type="button" class="btn" id="td-put-sender">保存发货地址与地图点</button>
+        <button type="button" class="btn" id="td-confirm-delivery">确认送达（送货上门）</button>
+      </div>
+      <p class="text-muted">在线商品：确认收款后进入待买方确认收货，无「确认送达」。自提：确认收款后待买方自提。</p>
+      <p class="text-muted" style="margin-top:0.75rem">发消息（卖方账号）</p>
+      <label><textarea id="td-msg-seller" rows="2" placeholder="输入文字消息"></textarea></label>
+      <button type="button" class="btn btn-primary" id="td-send-msg-seller">发送</button>
+    </div>
+  </div>
 </div>`;
 
         const chatLog = moduleContent.querySelector('#td-chat-log');
@@ -1607,12 +1611,6 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
         moduleContent.querySelector('#td-clear-buyer')?.addEventListener('click', () => {
             localStorage.removeItem(DEMO_BUYER_TOKEN);
             renderTradeDemo();
-        });
-        moduleContent.querySelectorAll('input[name="td-role"]').forEach(r => {
-            r.addEventListener('change', () => {
-                localStorage.setItem(DEMO_TRADE_ROLE, r.value);
-                renderTradeDemo();
-            });
         });
         moduleContent.querySelector('#td-save-order-id')?.addEventListener('click', () => {
             const v = String(moduleContent.querySelector('#td-order-id').value || '').trim();
@@ -1675,28 +1673,37 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
                 alert(e.message);
             }
         });
-        moduleContent.querySelector('#td-send-msg')?.addEventListener('click', async () => {
+        async function sendOrderChatMessage(token, textareaId, needRoleLabel) {
+            if (!token) {
+                alert(needRoleLabel || '请先登录');
+                return;
+            }
             const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
             if (!oid) {
                 alert('请先填写订单号');
                 return;
             }
-            const t = demoTokenForRole(getDemoTradeRole());
-            const text = moduleContent.querySelector('#td-msg').value.trim();
+            const text = moduleContent.querySelector('#' + textareaId).value.trim();
             if (!text) {
                 alert('请输入消息');
                 return;
             }
             try {
-                await userApi(t, `/orders/${oid}/messages`, {
+                await userApi(token, `/orders/${oid}/messages`, {
                     method: 'POST',
                     body: JSON.stringify({msg_type: 1, content: text})
                 });
-                moduleContent.querySelector('#td-msg').value = '';
+                moduleContent.querySelector('#' + textareaId).value = '';
                 renderTradeDemo();
             } catch (e) {
                 alert(e.message);
             }
+        }
+        moduleContent.querySelector('#td-send-msg-buyer')?.addEventListener('click', () => {
+            sendOrderChatMessage(localStorage.getItem(DEMO_BUYER_TOKEN), 'td-msg-buyer', '请先登录买家');
+        });
+        moduleContent.querySelector('#td-send-msg-seller')?.addEventListener('click', () => {
+            sendOrderChatMessage(localStorage.getItem(DEMO_SELLER_TOKEN), 'td-msg-seller', '请先登录卖家');
         });
       moduleContent.querySelector('#td-seller-confirm')?.addEventListener('click', async () => {
         const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
@@ -1772,7 +1779,11 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
                 alert('请先填写订单号');
                 return;
             }
-            const t = demoTokenForRole(getDemoTradeRole());
+            const t = localStorage.getItem(DEMO_BUYER_TOKEN) || localStorage.getItem(DEMO_SELLER_TOKEN);
+            if (!t) {
+                alert('请先登录买家或卖家');
+                return;
+            }
             if (!confirm('确定取消订单？')) return;
             try {
                 await userApi(t, `/orders/${oid}/cancel`, {method: 'POST', body: JSON.stringify({})});

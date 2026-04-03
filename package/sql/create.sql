@@ -301,7 +301,11 @@ CREATE TABLE IF NOT EXISTS order_messages
 );
 CREATE INDEX IF NOT EXISTS idx_order_messages_order_id ON order_messages (order_id);
 COMMENT ON TABLE order_messages IS '订单内买卖双方聊天，不经手资金';
-COMMENT ON COLUMN order_messages.msg_type IS '1:文字 2:图片';
+COMMENT ON COLUMN order_messages.msg_type IS '1:文字 2:图片 3:官方系统通知';
+
+INSERT INTO users (username, password, school_id, status, role)
+SELECT '__order_official__', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', NULL, 2, 1
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = '__order_official__');
 
 -- 为没有 status 字段的表添加 status 字段
 ALTER TABLE schools ADD COLUMN IF NOT EXISTS status smallint NOT NULL DEFAULT 1;

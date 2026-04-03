@@ -28,7 +28,7 @@
 1. `POST /api/v1/orders` — `{ "goods_id", "receiver_addr"?, "receiver_lat/lng"?, "sender_addr"?, "sender_lat/lng"? }` →
    状态 **1**，并记录 **买方下单时间**（`buyer_agreed_at`）。地图坐标为 **WGS84**；送货上门算距需**两端均有坐标**（服务端 GraphHopper）。
 2. `GET /api/v1/config/map` — 取 Martin `map_tiles_url`，供 MapLibre（需 JWT，`MAP_TILES_URL`）。详见 `doc/AMAP.md`。
-3. `GET/POST /api/v1/orders/:id/messages` — 聊天（未结束前）
+3. `GET/POST /api/v1/orders/:id/messages` — 聊天（未结束前）。`msg_type`：1 文字、2 图片、**3 官方通知**（仅服务端写入）。卖方确认收款、卖方确认送达、买方确认收货时，会向会话插入一条官方文案，买卖双方均可见。需执行 `package/sql/migrate_order_official_message.sql`（或全新库 `create.sql` 已含系统用户 `__order_official__`）。
 4. `POST /api/v1/orders/:id/seller-confirm-payment` — 卖方确认收款 → **2**（在线商品 → **3**）
 5. 送货上门：`POST .../confirm-delivery` → **3**；自提：无此步
 6. `POST .../confirm-receipt` — 买方 → **4**
@@ -40,4 +40,4 @@
 
 ## 管理后台
 
-「交易演示」：`/admin/#/trade-demo`。数据库迁移：若曾使用 **6 档**状态，执行 `migrate_order_status_to_5.sql` 一次。
+「交易演示」：`/admin/#/trade-demo`（页面**左栏买方、右栏卖方**，中间为共享聊天记录）。数据库迁移：若曾使用 **6 档**状态，执行 `migrate_order_status_to_5.sql` 一次；官方聊天用户见上文 `migrate_order_official_message.sql`。

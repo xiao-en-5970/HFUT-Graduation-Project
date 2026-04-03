@@ -117,18 +117,15 @@ jobs:
           ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null || { echo "私钥格式无效"; exit 1; }
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          # docker pull 可能数分钟，SSH 长时间无往返易被 NAT/防火墙断开；客户端定期发保活
-          SSH_OPTS=( -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=12 )
-
           echo "[1/2] 登录 GHCR 并拉取镜像..."
-          ssh "${SSH_OPTS[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" "
             set -e
             echo \"$GHCR_TOKEN\" | docker login ${{ env.REGISTRY }} -u ${{ github.repository_owner }} --password-stdin
             docker pull $IMAGE
           "
 
           echo "[2/2] 替换容器并启动..."
-          ssh "${SSH_OPTS[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "set -e
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${DEPLOY_USER}@${DEPLOY_HOST}" "set -e
             [ -f /.env ] || { echo '::error::需先在宿主机创建 /.env 并填入环境变量'; exit 1; }
             grep -E '^[A-Za-z_][A-Za-z0-9_]*=' /.env > /tmp/.env.docker
             [ -s /tmp/.env.docker ] || { echo '::error::/.env 中无有效 KEY=VALUE 格式行'; exit 1; }

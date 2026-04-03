@@ -1,0 +1,14 @@
+-- 订单聊天官方通知：系统用户 + msg_type 说明（已有库执行一次）
+-- 密码为占位 bcrypt，账号禁用，仅用于 order_messages.sender_id 外键
+
+INSERT INTO users (username, password, school_id, status, role)
+VALUES (
+    '__order_official__',
+    '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    NULL,
+    2,
+    1
+)
+ON CONFLICT (username) DO NOTHING;
+
+COMMENT ON COLUMN order_messages.msg_type IS '1:文字 2:图片 3:官方系统通知';

@@ -39,14 +39,6 @@ record。
 
 本仓库 `setup-go` 已设 `cache: false`，可减少 **缓存** 占用。
 
-## 部署时 `docker pull` 很久后 SSH 断线（Broken pipe）
-
-`docker pull` 常持续数分钟，此阶段 **SSH 隧道上几乎只有 Docker 与 registry 的流量**，中间 NAT/防火墙可能把连接当空闲掐掉，客户端报
-`client_loop: send disconnect: Broken pipe`。
-
-部署步骤里已对 `ssh` 使用 **`ServerAliveInterval` / `ServerAliveCountMax`**（见 `deploy.yml`），让 Runner
-周期性发保活，减轻该问题。若仍偶发，可在部署机 `sshd_config` 中配置 `ClientAliveInterval`，或排查宿主机/云安全组对长连接的限制。
-
 ## 相关链接
 
 - [About billing for GitHub Actions](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions)

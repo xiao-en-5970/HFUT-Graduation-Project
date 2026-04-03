@@ -1,8 +1,10 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,6 +16,17 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"gorm.io/gorm"
+)
+
+const (
+	officialMsgSellerConfirmedPayment  = "【平台通知】卖方已确认收款，订单进入下一环节。"
+	officialMsgSellerConfirmedDelivery = "【平台通知】卖方已确认送达，请买方确认收货。"
+	officialMsgBuyerConfirmedReceipt   = "【平台通知】买方已确认收货，订单已完成。"
+)
+
+var (
+	officialSenderMu     sync.Mutex
+	cachedOfficialSender int
 )
 
 // resolveOrderParticipant 校验 user 为买方或卖方，返回订单与商品
@@ -84,6 +97,9 @@ func (s *orderService) CreateOrderMessage(ctx *gin.Context, orderID uint, userID
 	if o.OrderStatus == constant.OrderStatusCompleted || o.OrderStatus == constant.OrderStatusCancelled {
 		return errno.ErrOrderInvalidState
 	}
+	if req.MsgType == constant.OrderMsgTypeOfficial {
+		return errors.New("不能使用官方消息类型")
+	}
 	if req.MsgType != constant.OrderMsgTypeText && req.MsgType != constant.OrderMsgTypeImage {
 		req.MsgType = constant.OrderMsgTypeText
 	}
@@ -128,9 +144,15 @@ func (s *orderService) SellerConfirmPayment(ctx *gin.Context, orderID uint, user
 	if g.GoodsType == constant.GoodsTypeOnline {
 		next = constant.OrderStatusPendingBuyerConfirm
 	}
-	return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, map[string]interface{}{
+	updates := map[string]interface{}{
 		"order_status":     next,
 		"seller_agreed_at": &now,
+	}
+	return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := dao.Order().UpdateColumnsTx(ctx.Request.Context(), tx, orderID, updates); err != nil {
+			return err
+		}
+		return s.createOfficialOrderMessageTx(ctx.Request.Context(), tx, orderID, officialMsgSellerConfirmedPayment)
 	})
 }
 
@@ -168,7 +190,12 @@ func (s *orderService) ConfirmDelivery(ctx *gin.Context, orderID uint, sellerID 
 	if len(paths) > 0 {
 		updates["delivery_images"] = pq.StringArray(paths)
 	}
-	return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, updates)
+	return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := dao.Order().UpdateColumnsTx(ctx.Request.Context(), tx, orderID, updates); err != nil {
+			return err
+		}
+		return s.createOfficialOrderMessageTx(ctx.Request.Context(), tx, orderID, officialMsgSellerConfirmedDelivery)
+	})
 }
 
 // ConfirmReceiptReq 买家确认收货
@@ -215,6 +242,9 @@ func (s *orderService) ConfirmReceipt(ctx *gin.Context, orderID uint, buyerID ui
 		if err := dao.Order().UpdateColumnsTx(ctx.Request.Context(), tx, orderID, updates); err != nil {
 			return err
 		}
+		if err := s.createOfficialOrderMessageTx(ctx.Request.Context(), tx, orderID, officialMsgBuyerConfirmedReceipt); err != nil {
+			return err
+		}
 		if err := dao.Good().DecrementStockAfterSale(ctx.Request.Context(), tx, gid); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return errno.ErrOrderInsufficientStock
@@ -239,4 +269,35 @@ func (s *orderService) CancelOrder(ctx *gin.Context, orderID uint, userID uint) 
 	default:
 		return errno.ErrOrderInvalidState
 	}
+}
+
+func (s *orderService) officialSenderID(ctx context.Context) (int, error) {
+	officialSenderMu.Lock()
+	defer officialSenderMu.Unlock()
+	if cachedOfficialSender != 0 {
+		return cachedOfficialSender, nil
+	}
+	u, err := dao.User().GetByUsername(ctx, constant.OrderOfficialUsername)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, errors.New("官方账号未配置，请执行 package/sql/migrate_order_official_message.sql")
+		}
+		return 0, err
+	}
+	cachedOfficialSender = int(u.ID)
+	return cachedOfficialSender, nil
+}
+
+func (s *orderService) createOfficialOrderMessageTx(ctx context.Context, tx *gorm.DB, orderID uint, content string) error {
+	sid, err := s.officialSenderID(ctx)
+	if err != nil {
+		return err
+	}
+	m := &model.OrderMessage{
+		OrderID:  orderID,
+		SenderID: sid,
+		MsgType:  constant.OrderMsgTypeOfficial,
+		Content:  strings.TrimSpace(content),
+	}
+	return dao.OrderMessage().CreateTx(ctx, tx, m)
 }
