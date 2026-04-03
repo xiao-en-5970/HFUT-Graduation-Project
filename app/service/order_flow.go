@@ -90,7 +90,7 @@ type CreateOrderMessageReq struct {
 }
 
 func (s *orderService) CreateOrderMessage(ctx *gin.Context, orderID uint, userID uint, req CreateOrderMessageReq) error {
-	o, _, _, _, err := s.resolveOrderParticipant(ctx, orderID, userID)
+	_, _, _, _, err := s.resolveOrderParticipant(ctx, orderID, userID)
 	if err != nil {
 		return err
 	}
