@@ -1,7 +1,6 @@
 # 部署说明
 
-CI/CD 使用 GitHub Actions：打 tag 时先通过代码检查，再将源码 **rsync 到部署机**，在部署机上 **`docker build`**（根目录多阶段
-`Dockerfile`）并 **`docker run`**。镜像**不经过** GitHub Container Registry；构建产物与 Docker **层缓存**均在部署机本地。
+CI/CD 使用 GitHub Actions：打 tag 时先通过代码检查，在 **Actions 上编译** 得到 **`build/app`**，再 **rsync** 到部署机；部署机 **`docker build`** 仅把预编译二进制与后台静态资源打入镜像并 **`docker run`**（部署机**无需**安装 Go）。镜像**不经过** GitHub Container Registry。
 
 详见 `doc/CI_CD.md`。
 

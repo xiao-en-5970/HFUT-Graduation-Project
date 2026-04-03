@@ -1,7 +1,7 @@
 name: CI/CD
 
-# 分支 push：仅代码检查；tag push：代码检查 + rsync 到部署机 + 在部署机构建镜像并运行
-# 镜像在部署机 docker build，层缓存在部署机本地（/var/lib/docker），不再使用 GHCR
+# 分支 push：仅代码检查；tag push：代码检查 + 在 Actions 编译 Linux 二进制 + rsync 到部署机 + 部署机仅打包镜像并运行
+# 部署机 docker build 只做 COPY 二进制与静态资源，无 golang 镜像；层缓存在部署机本地，不再使用 GHCR
 # 使用 Node 24 运行时的 action 版本，避免 Node 20 弃用告警，见 doc/CI_CD.md
 permissions:
   contents: read
@@ -34,7 +34,7 @@ jobs:
       - name: 编译验证
         run: CGO_ENABLED=0 go build -o /dev/null .
 
-  # 2. 部署（仅 tag；在部署机构建镜像，中间层缓存在部署机）
+  # 2. 部署（仅 tag：Actions 产出 build/app，部署机 docker build 打包容器）
   deploy:
     name: 2. 部署
     needs: check
@@ -43,6 +43,16 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.23"
+          cache: false
+
+      - name: 编译 Linux 二进制（部署机只 COPY 进镜像，无需 Go）
+        run: |
+          mkdir -p build
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/app .
 
       - name: 同步代码并在部署机构建、启动
         env:
@@ -81,7 +91,7 @@ jobs:
           REMOTE_DEST=$(printf '%s' "$REMOTE_DEST" | tr -d '\r\n')
           echo "远程目录: $REMOTE_DEST"
 
-          echo "[2/3] rsync 源码..."
+          echo "[2/3] rsync（含 build/app 与 Dockerfile）..."
           "${SSH_BASE[@]}" "mkdir -p $(printf '%q' "$REMOTE_DEST")"
           rsync -az --delete \
             -e "$RSYNC_RSH" \
@@ -89,7 +99,7 @@ jobs:
             --exclude '.github' \
             ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_DEST}/"
 
-          echo "[3/3] docker build（部署机本地缓存层）并启动..."
+          echo "[3/3] docker build（仅打包预编译二进制，部署机本地缓存层）并启动..."
           "${SSH_BASE[@]}" bash -s << EOF
           set -e
           export DEPLOY_PATH='${DEPLOY_PATH}'
