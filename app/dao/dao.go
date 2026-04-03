@@ -11,3 +11,4 @@ func Like() *LikeStore                 { return &LikeStore{} }
 func Good() *GoodStore                 { return &GoodStore{} }
 func Order() *OrderStore               { return &OrderStore{} }
 func OrderMessage() *OrderMessageStore { return &OrderMessageStore{} }
+func UserLocation() *UserLocationStore { return &UserLocationStore{} }

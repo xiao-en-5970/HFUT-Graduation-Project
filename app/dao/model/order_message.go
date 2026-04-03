@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// OrderMessage 订单内买卖双方聊天（与订单绑定，不经过平台资金）
+// OrderMessage 订单内买卖双方聊天（与订单绑定，不经过平台资金；订单结束后仍可发，用于售后）
 type OrderMessage struct {
 	ID        uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	OrderID   uint      `gorm:"column:order_id;index;not null" json:"order_id"`

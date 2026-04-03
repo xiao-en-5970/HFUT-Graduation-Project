@@ -94,9 +94,7 @@ func (s *orderService) CreateOrderMessage(ctx *gin.Context, orderID uint, userID
 	if err != nil {
 		return err
 	}
-	if o.OrderStatus == constant.OrderStatusCompleted || o.OrderStatus == constant.OrderStatusCancelled {
-		return errno.ErrOrderInvalidState
-	}
+	// 已完成/已取消仍允许发消息，便于售后沟通
 	if req.MsgType == constant.OrderMsgTypeOfficial {
 		return errors.New("不能使用官方消息类型")
 	}

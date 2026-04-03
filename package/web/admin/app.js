@@ -315,7 +315,7 @@
   const moduleContent = document.getElementById('module-content');
   logoutBtn.addEventListener('click', redirectToLogin);
 
-    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'map-picker', 'trade-demo', 'schools', 'bind-school'];
+    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'user-locations', 'map-picker', 'trade-demo', 'schools', 'bind-school'];
   function getRoute() {
     const hash = (location.hash || '#/users').slice(2) || 'users';
     return routes.includes(hash) ? hash : 'users';
@@ -331,6 +331,7 @@
     else if (r === 'answers') renderAnswers();
     else if (r === 'goods') renderGoods();
     else if (r === 'orders') renderOrders();
+    else if (r === 'user-locations') renderUserLocations();
     else if (r === 'map-picker') renderAdminMapPicker();
     else if (r === 'trade-demo') renderTradeDemo();
     else if (r === 'schools') renderSchools();
@@ -748,7 +749,7 @@
         }
         const mapBlock = (tilesUrl && adminTok)
             ? `<h5 class="trade-order-map-title">商品位置（地图选点，WGS84）</h5>
-      <p class="text-muted trade-subsection">与上方文字地址一致，表示<strong>发货地</strong>；买家下单时默认用此点作为卖方端坐标（送货上门算距需与收货点成对）。</p>
+      <p class="text-muted trade-subsection">与上方文字地址一致，表示<strong>发货地/自提点</strong>；买家下单时默认用此点作为卖方端坐标（送货上门/自提算距需买方在订单里传成对 receiver_lat/lng）。</p>
       <div id="g-map-goods" class="trade-map trade-map-order-sm" title="点击选发货地"></div>
       <div class="trade-order-coords">
         <label>经度 <input type="number" step="any" id="g-goods-lng" placeholder="地图点击填入" /></label>
@@ -1253,6 +1254,9 @@
   }
 
     let orderPage = 1;
+    let userLocationsPage = 1;
+    let userLocationsUserId = '';
+    let userLocationsAllStatus = false;
 
     async function renderOrders() {
         moduleContent.innerHTML = '<p>加载中...</p>';
@@ -1321,7 +1325,7 @@
           <p><strong>收货（地图 WGS84）</strong> ${formatLngLatPair(o.receiver_lat, o.receiver_lng)}</p>
           <p><strong>发货（文字）</strong> ${escapeHtml(o.sender_addr || '')}</p>
           <p><strong>发货（地图 WGS84）</strong> ${formatLngLatPair(o.sender_lat, o.sender_lng)}</p>
-          <p><strong>收发步行距离</strong> ${formatOrderWalkDistance(o.distance_meters)} <span class="text-muted">（送货上门；两端均有坐标时经 GraphHopper 路网）</span></p>
+          <p><strong>收发步行距离</strong> ${formatOrderWalkDistance(o.distance_meters)} <span class="text-muted">（送货上门/自提；两端均有坐标时经 GraphHopper 路网）</span></p>
           <p><strong>买方下单时间</strong> ${(o.buyer_agreed_at || '').slice(0, 19) || '-'} · <strong>卖方确认收款</strong> ${(o.seller_agreed_at || '').slice(0, 19) || '-'}</p>
           <p><strong>完成时间</strong> ${(o.completed_at || '').slice(0, 19) || '-'}</p>
         </div>
@@ -1340,6 +1344,69 @@
         const d = document.createElement('div');
         d.textContent = s;
         return d.innerHTML;
+    }
+
+    async function renderUserLocations() {
+        moduleContent.innerHTML = '<p>加载中...</p>';
+        try {
+            const q = new URLSearchParams();
+            q.set('page', String(userLocationsPage));
+            q.set('pageSize', '15');
+            if (userLocationsUserId.trim()) q.set('user_id', userLocationsUserId.trim());
+            if (userLocationsAllStatus) q.set('all_status', '1');
+            const data = await api('/admin/user-locations?' + q.toString());
+            const list = data.data?.list || [];
+            const total = data.data?.total || 0;
+            const LOC_STATUS = { 1: '正常', 2: '已删除' };
+            const columns = [
+                { key: 'id', label: 'ID' },
+                { key: 'user_id', label: '用户ID' },
+                { key: 'username', label: '用户名', render: r => escapeHtml(r.username || '—') },
+                { key: 'label', label: '标签', render: r => escapeHtml(String(r.label || '').slice(0, 32)) },
+                { key: 'addr', label: '地址', render: r => escapeHtml(String(r.addr || '').slice(0, 40)) },
+                { key: 'coord', label: '坐标 (WGS84)', render: r => formatLngLatPair(r.lat, r.lng) },
+                { key: 'is_default', label: '默认', render: r => (r.is_default ? '是' : '—') },
+                {
+                    key: 'status',
+                    label: '状态',
+                    render: r => '<span class="status-badge status-' + (r.status === 1 ? 'valid' : 'invalid') + '">' + (LOC_STATUS[r.status] || r.status) + '</span>'
+                },
+                { key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19) }
+            ];
+            list.forEach(row => {
+                row._actions = row.status === 1
+                    ? '<button class="btn btn-danger btn-sm" data-ul-del="' + row.id + '">软删除</button>'
+                    : '<span class="text-muted">—</span>';
+            });
+            const extra = '<div class="filter-row" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">' +
+                '<label>用户ID <input type="number" min="0" id="ul-filter-uid" placeholder="全部" value="' + escapeHtml(userLocationsUserId || '') + '" style="width:7rem"/></label>' +
+                '<label><input type="checkbox" id="ul-filter-all"' + (userLocationsAllStatus ? ' checked' : '') + '/> 含已删除</label>' +
+                '<button type="button" class="btn btn-sm btn-primary" id="ul-filter-apply">应用</button>' +
+                '</div>';
+            renderTable('用户收货地址', columns, list, userLocationsPage, total, 15, (p) => {
+                userLocationsPage = p;
+                renderUserLocations();
+            }, extra);
+            moduleContent.querySelector('#ul-filter-apply')?.addEventListener('click', () => {
+                userLocationsUserId = moduleContent.querySelector('#ul-filter-uid')?.value?.trim() || '';
+                userLocationsAllStatus = !!moduleContent.querySelector('#ul-filter-all')?.checked;
+                userLocationsPage = 1;
+                renderUserLocations();
+            });
+            moduleContent.querySelectorAll('[data-ul-del]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if (!confirm('确定软删除该收货地址？')) return;
+                    try {
+                        await api('/admin/user-locations/' + btn.getAttribute('data-ul-del'), { method: 'DELETE' });
+                        renderUserLocations();
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                });
+            });
+        } catch (e) {
+            moduleContent.innerHTML = '<p class="error">' + escapeHtml(e.message || String(e)) + '</p>';
+        }
     }
 
     /** 管理后台独立地图选点（管理员 JWT + /config/map + 瓦片转发） */
@@ -1480,9 +1547,9 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
             } else if (os === 3) {
               actionHints = '<p class="trade-hint">待买方确认收货：买方可「确认收货」完成订单并扣库存。</p>';
             } else if (os === 4) {
-              actionHints = '<p class="trade-hint trade-hint-ok">订单已完成。</p>';
+              actionHints = '<p class="trade-hint trade-hint-ok">订单已完成；双方仍可发消息（售后沟通）。</p>';
             } else if (os === 5) {
-                actionHints = '<p class="trade-hint">订单已取消。</p>';
+                actionHints = '<p class="trade-hint">订单已取消；双方仍可发消息。</p>';
             }
         }
 
@@ -1513,7 +1580,7 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
     <p><strong>收货（地图）</strong> ${escapeHtml(formatLngLatPair(order.receiver_lat, order.receiver_lng))}</p>
     <p><strong>发货（文字）</strong> ${escapeHtml(order.sender_addr || '')} <span class="text-muted">（默认来自商品）</span></p>
     <p><strong>发货（地图）</strong> ${escapeHtml(formatLngLatPair(order.sender_lat, order.sender_lng))} <span class="text-muted">（默认来自商品坐标）</span></p>
-    <p><strong>收发步行距离</strong> ${escapeHtml(formatOrderWalkDistance(order.distance_meters))} <span class="text-muted">（送货上门；坐标优先）</span></p>
+    <p><strong>收发步行距离</strong> ${escapeHtml(formatOrderWalkDistance(order.distance_meters))} <span class="text-muted">（送货上门/自提；坐标优先）</span></p>
     <p><strong>买方下单时间</strong> ${(order.buyer_agreed_at || '').slice(0, 19) || '—'} · <strong>卖方确认收款</strong> ${(order.seller_agreed_at || '').slice(0, 19) || '—'}</p>
   </div>` : (!orderId ? '<p class="text-muted">请先下单或填写订单号并刷新。</p>' : '')}
   ${actionHints}

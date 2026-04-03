@@ -46,6 +46,11 @@ func PrivateRouter(api *gin.RouterGroup) {
 	{
 		userGroup.GET("/info", controller.UserInfo)
 		userGroup.GET("/logout", controller.UserLogout)
+		userGroup.GET("/locations", controller.UserLocationList)
+		userGroup.POST("/locations", controller.UserLocationCreate)
+		userGroup.PUT("/locations/:id", controller.UserLocationUpdate)
+		userGroup.DELETE("/locations/:id", controller.UserLocationDelete)
+		userGroup.POST("/locations/:id/default", controller.UserLocationSetDefault)
 		userGroup.GET("/:id/posts", controller.UserListPosts)
 		userGroup.GET("/:id/questions", controller.UserListQuestions)
 		userGroup.GET("/:id/answers", controller.UserListAnswers)
@@ -205,5 +210,7 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.GET("/orders", controller.AdminOrderList)
 		adminGroup.GET("/orders/:id/messages", controller.AdminOrderMessages)
 		adminGroup.GET("/orders/:id", controller.AdminOrderGet)
+		adminGroup.GET("/user-locations", controller.AdminUserLocationList)
+		adminGroup.DELETE("/user-locations/:id", controller.AdminUserLocationDelete)
 	}
 }

@@ -59,10 +59,6 @@ func OrderMessageCreate(ctx *gin.Context) {
 			reply.ReplyErrWithMessage(ctx, "订单不存在或无权操作")
 			return
 		}
-		if errors.Is(err, errno.ErrOrderInvalidState) {
-			reply.ReplyErrWithMessage(ctx, "订单已结束，无法发消息")
-			return
-		}
 		reply.ReplyErrWithMessage(ctx, err.Error())
 		return
 	}

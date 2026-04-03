@@ -38,6 +38,9 @@ var (
 	ErrLikeNotLiked        = errors.New("未点赞")
 )
 
+// 收货地址
+var ErrUserLocationNotFound = errors.New("收货地址不存在")
+
 // 收藏
 var (
 	ErrCollectFolderNotFound   = errors.New("收藏夹不存在")

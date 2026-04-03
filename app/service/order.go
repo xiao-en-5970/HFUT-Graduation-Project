@@ -29,7 +29,7 @@ func goodAddrForOrder(g *model.Good) string {
 }
 
 // CreateOrderReq 创建订单：直接进入「待卖方确认收款」；buyer_agreed_at 记下单时间（买方契约）
-// 收货：买方传 receiver_*。发货：未传 sender_* 时由服务端用商品的 goods_addr 与 goods_lat/goods_lng（若有）写入订单；仍可显式传 sender_* 覆盖。
+// 收货：买方传 receiver_*（算距须成对传 receiver_lat/lng，表示买方/收货地图点）。发货：未传 sender_* 时由服务端用商品的 goods_addr 与 goods_lat/goods_lng（若有）写入订单（自提点=商品坐标）；仍可显式传 sender_* 覆盖。
 type CreateOrderReq struct {
 	GoodsID      uint     `json:"goods_id" binding:"required"`
 	ReceiverAddr string   `json:"receiver_addr"`
@@ -81,18 +81,19 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 		BuyerAgreedAt: &now,
 	}
 	if req.ReceiverLat != nil && req.ReceiverLng != nil {
-		o.ReceiverLat = req.ReceiverLat
-		o.ReceiverLng = req.ReceiverLng
+		o.ReceiverLat = copyFloatPtr(*req.ReceiverLat)
+		o.ReceiverLng = copyFloatPtr(*req.ReceiverLng)
 	}
 	if req.SenderLat != nil && req.SenderLng != nil {
-		o.SenderLat = req.SenderLat
-		o.SenderLng = req.SenderLng
+		o.SenderLat = copyFloatPtr(*req.SenderLat)
+		o.SenderLng = copyFloatPtr(*req.SenderLng)
 	} else if good.GoodsLat != nil && good.GoodsLng != nil {
-		o.SenderLat = good.GoodsLat
-		o.SenderLng = good.GoodsLng
+		// 与商品表解耦，避免与 GORM 扫描缓冲共用指针导致落库异常
+		o.SenderLat = copyFloatPtr(*good.GoodsLat)
+		o.SenderLng = copyFloatPtr(*good.GoodsLng)
 	}
-	// 仅「送货上门」计算步行距离：两端均有成对经纬度时经 GraphHopper（需 GRAPHHOPPER_BASE_URL）
-	if good.GoodsType == constant.GoodsTypeDelivery {
+	// 送货上门 / 自提：两端均有成对经纬度时经 GraphHopper 步行路网（需 GRAPHHOPPER_BASE_URL）。自提为「自提点→买方位置」。
+	if good.GoodsType == constant.GoodsTypeDelivery || good.GoodsType == constant.GoodsTypePickup {
 		if d := computeOrderDistanceMeters(ctx, sender, receiver, o.SenderLat, o.SenderLng, o.ReceiverLat, o.ReceiverLng); d != nil {
 			o.DistanceMeters = d
 		}
@@ -100,7 +101,12 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 	return dao.Order().Create(ctx.Request.Context(), o)
 }
 
-// computeOrderDistanceMeters 发货地→收货地步行路径距离（米，GraphHopper foot）。需 GRAPHHOPPER_BASE_URL；仅当两端均有成对经纬度时计算；失败返回 nil。
+func copyFloatPtr(f float64) *float64 {
+	v := f
+	return &v
+}
+
+// computeOrderDistanceMeters 发货/自提点→收货（买方）步行路径距离（米，GraphHopper foot）。需 GRAPHHOPPER_BASE_URL；仅当两端均有成对经纬度时计算；失败返回 nil。
 func computeOrderDistanceMeters(ctx *gin.Context, senderAddr, receiverAddr string, senderLat, senderLng, receiverLat, receiverLng *float64) *int {
 	_ = senderAddr
 	_ = receiverAddr
@@ -167,7 +173,7 @@ func (s *orderService) UpdateSellerInfo(ctx *gin.Context, id uint, sellerID uint
 	if len(updates) == 0 {
 		return nil
 	}
-	if g.GoodsType == constant.GoodsTypeDelivery {
+	if g.GoodsType == constant.GoodsTypeDelivery || g.GoodsType == constant.GoodsTypePickup {
 		senderStr := strings.TrimSpace(o.SenderAddr)
 		if senderAddr != "" {
 			senderStr = senderAddr

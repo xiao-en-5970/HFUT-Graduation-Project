@@ -17,7 +17,7 @@
   },
   "tags": [
     {"name": "系统", "description": "健康检查"},
-    {"name": "用户", "description": "注册、登录、个人信息"},
+    {"name": "用户", "description": "注册、登录、个人信息、收货地址"},
     {"name": "帖子", "description": "type=1 普通文章"},
     {"name": "提问", "description": "type=2 问答"},
     {"name": "回答", "description": "type=3 回答，创建需 parent_id"},
@@ -68,6 +68,27 @@
         {"$ref": "#/definitions/Response"},
         {"properties": {"code": {"example": 400}, "message": {"example": "参数错误"}}}
       ]
+    },
+    "UserLocationCreateBody": {
+      "type": "object",
+      "required": ["addr"],
+      "properties": {
+        "label": {"type": "string", "description": "标签，如寝室、家"},
+        "addr": {"type": "string", "description": "文字地址"},
+        "lat": {"type": "number", "format": "double", "description": "WGS84 纬度，与 lng 成对"},
+        "lng": {"type": "number", "format": "double", "description": "WGS84 经度"},
+        "is_default": {"type": "boolean", "description": "是否设为默认"}
+      }
+    },
+    "UserLocationUpdateBody": {
+      "type": "object",
+      "properties": {
+        "label": {"type": "string"},
+        "addr": {"type": "string"},
+        "lat": {"type": "number", "format": "double"},
+        "lng": {"type": "number", "format": "double"},
+        "is_default": {"type": "boolean", "description": "传 true 设为默认"}
+      }
     },
     "ArticleCreate": {
       "type": "object",
@@ -489,7 +510,7 @@
       "required": [
         "goods_id"
       ],
-      "description": "创建订单：成功后 order_status=1（待卖方确认收款），buyer_agreed_at=下单时间。收货/发货各支持「文字 + 地图坐标（WGS84，成对）」；送货上门算距需两端均有坐标，服务端 GraphHopper 步行路网。",
+      "description": "创建订单：成功后 order_status=1（待卖方确认收款），buyer_agreed_at=下单时间。收货/发货各支持「文字 + 地图坐标（WGS84，成对）」。送货上门/自提算距：需商品有 goods_lat/lng（默认写入订单 sender_*）且买方传成对 receiver_lat/lng；服务端 GraphHopper 步行路网；需 GRAPHHOPPER_BASE_URL。",
       "properties": {
         "goods_id": {
           "type": "integer",
@@ -595,7 +616,7 @@
         },
         "distance_meters": {
           "type": "integer",
-          "description": "送货上门步行距离（米）；有两端地图坐标时按坐标算，否则按文字地理编码，可能为 null"
+          "description": "送货上门/自提步行距离（米）：自提点或发货地→买方；两端均有坐标时 GraphHopper foot；未配置服务或缺坐标则为 null"
         },
         "order_status": {
           "type": "integer",
@@ -1085,6 +1106,61 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/user/locations": {
+      "get": {
+        "tags": ["用户"],
+        "summary": "收货地址列表",
+        "description": "当前用户未软删除的收货地址；默认项在前。需 JWT。",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {"description": "data: { list: UserLocation[] }"}
+        }
+      },
+      "post": {
+        "tags": ["用户"],
+        "summary": "新增收货地址",
+        "description": "addr 必填；lat/lng 须成对或均省略。首条地址自动为默认；is_default 为 true 时会取消其他默认。",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{
+          "in": "body",
+          "name": "body",
+          "schema": {"$ref": "#/definitions/UserLocationCreateBody"}
+        }],
+        "responses": {
+          "200": {"description": "data: { id }"}
+        }
+      }
+    },
+    "/api/v1/user/locations/:id": {
+      "put": {
+        "tags": ["用户"],
+        "summary": "更新收货地址",
+        "description": "部分更新；is_default 为 true 时设为默认并取消同用户其他默认。更新坐标时 lat 与 lng 须同时传入。",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"in": "path", "name": "id", "type": "integer", "required": true},
+          {"in": "body", "name": "body", "schema": {"$ref": "#/definitions/UserLocationUpdateBody"}}
+        ],
+        "responses": {"200": {"schema": {"$ref": "#/definitions/Response"}}}
+      },
+      "delete": {
+        "tags": ["用户"],
+        "summary": "删除收货地址（软删除）",
+        "description": "status 置为 2；若删的是默认地址，自动将最近更新的一条标为默认（若仍有其他地址）。",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"in": "path", "name": "id", "type": "integer", "required": true}],
+        "responses": {"200": {"schema": {"$ref": "#/definitions/Response"}}}
+      }
+    },
+    "/api/v1/user/locations/:id/default": {
+      "post": {
+        "tags": ["用户"],
+        "summary": "设为默认收货地址",
+        "security": [{"BearerAuth": []}],
+        "parameters": [{"in": "path", "name": "id", "type": "integer", "required": true}],
+        "responses": {"200": {"schema": {"$ref": "#/definitions/Response"}}}
       }
     },
     "/api/v1/user/update": {
@@ -2477,7 +2553,7 @@
           "订单"
         ],
         "summary": "订单聊天记录",
-        "description": "买卖双方；order_status 为 4 或 5 时仍可拉取历史（发消息会拒绝）",
+        "description": "买卖双方；已完成/已取消仍可拉取历史",
         "security": [
           {
             "BearerAuth": []
@@ -2516,7 +2592,7 @@
           "订单"
         ],
         "summary": "发送订单消息",
-        "description": "已完成或已取消订单不可发送（服务端返回「订单已结束」）",
+        "description": "订单任意状态下买卖双方均可发消息（含已完成/已取消，便于售后）",
         "security": [
           {
             "BearerAuth": []

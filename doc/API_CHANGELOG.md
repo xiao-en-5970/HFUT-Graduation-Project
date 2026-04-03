@@ -6,6 +6,21 @@
 
 ---
 
+## 2026-04-03（用户收货地址 user_locations）
+
+- 新增表 **`user_locations`**：多地址、`is_default` 默认、`status` 1 正常 2 软删除；迁移脚本 `package/sql/migrate_user_location.sql`。
+- 接口（需 JWT，须放在 `/user/:id` 之前已满足）：`GET/POST /api/v1/user/locations`，`PUT/DELETE /api/v1/user/locations/:id`，`POST /api/v1/user/locations/:id/default`。
+- 管理端：`GET /api/v1/admin/user-locations`（`user_id`、`all_status` 筛选分页）、`DELETE /api/v1/admin/user-locations/:id` 软删除；后台侧栏 **收货地址**。
+
+---
+
+## 2026-04-03（订单：自提也算步行距离）
+
+- `POST /api/v1/orders`：商品类型为**自提**时，与送货上门相同，在收发两端均有成对经纬度且配置 `GRAPHHOPPER_BASE_URL` 时写入 `distance_meters`（自提点→买方）。
+- 下单时从商品复制 `goods_lat`/`goods_lng` 到订单 `sender_lat`/`sender_lng` 时改为**数值拷贝**，避免指针与查询缓冲共用导致坐标未落库。
+
+---
+
 ## 2026-04-03（帖子列表：按更新时间排序）
 
 - 下列列表接口增加查询参数 **`sort`**：传 **`updated_at`** 时按 **`updated_at` 降序**；缺省按 **`created_at` 降序**。
