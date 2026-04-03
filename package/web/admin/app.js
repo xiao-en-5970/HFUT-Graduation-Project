@@ -79,6 +79,15 @@
         return data;
     }
 
+    /** 发货地→收货地步行规划距离（米），对应接口 distance_meters */
+    function formatOrderWalkDistance(m) {
+        if (m == null || m === '') return '—';
+        const n = Number(m);
+        if (Number.isNaN(n)) return '—';
+        if (n < 1000) return n + ' m';
+        return (n / 1000).toFixed(2) + ' km（' + n + ' m）';
+    }
+
     /** 买卖双方用户 JWT（与管理员 token 独立，存 localStorage） */
     const DEMO_SELLER_TOKEN = 'demo_seller_token';
     const DEMO_BUYER_TOKEN = 'demo_buyer_token';
@@ -1076,6 +1085,11 @@
                 {key: 'good', label: '商品', render: r => (r.good && r.good.title) ? r.good.title.slice(0, 24) : '-'},
                 {key: 'order_status_label', label: '状态', render: r => r.order_status_label || r.order_status},
                 {key: 'receiver_addr', label: '收货', render: r => (r.receiver_addr || '-').slice(0, 20)},
+                {
+                    key: 'distance_meters',
+                    label: '收发距离',
+                    render: r => formatOrderWalkDistance(r.distance_meters)
+                },
                 {key: 'created_at', label: '创建时间', render: r => (r.created_at || '').slice(0, 19)},
             ];
             list.forEach(row => {
@@ -1113,6 +1127,7 @@
           <p><strong>状态</strong> ${o.order_status_label || o.order_status} · 买家 user_id: ${o.user_id} · 商品: ${o.good ? o.good.title : o.goods_id}</p>
           <p><strong>收货</strong> ${escapeHtml(o.receiver_addr || '')}</p>
           <p><strong>发货</strong> ${escapeHtml(o.sender_addr || '')}</p>
+          <p><strong>收发步行距离</strong> ${formatOrderWalkDistance(o.distance_meters)} <span class="text-muted">（高德步行规划；仅送货上门且收发地址齐全、服务端配置 AMAP_KEY 时有值）</span></p>
           <p><strong>买方下单时间</strong> ${(o.buyer_agreed_at || '').slice(0, 19) || '-'} · <strong>卖方确认收款</strong> ${(o.seller_agreed_at || '').slice(0, 19) || '-'}</p>
           <p><strong>完成时间</strong> ${(o.completed_at || '').slice(0, 19) || '-'}</p>
         </div>
@@ -1261,6 +1276,7 @@
     <p><strong>商品类型</strong> ${gt != null ? (GOODS_TYPE_MAP[gt] || gt) : '-'}</p>
     <p><strong>收货</strong> ${escapeHtml(order.receiver_addr || '')}</p>
     <p><strong>发货</strong> ${escapeHtml(order.sender_addr || '')}</p>
+    <p><strong>收发步行距离</strong> ${escapeHtml(formatOrderWalkDistance(order.distance_meters))} <span class="text-muted">（高德规划，送货上门有值）</span></p>
     <p><strong>买方下单时间</strong> ${(order.buyer_agreed_at || '').slice(0, 19) || '—'} · <strong>卖方确认收款</strong> ${(order.seller_agreed_at || '').slice(0, 19) || '—'}</p>
   </div>` : (!orderId ? '<p class="text-muted">请先下单或填写订单号并刷新。</p>' : '')}
   ${actionHints}
