@@ -1,19 +1,17 @@
 # 地图与订单距离（自托管）
 
-已改为 **Martin 矢量瓦片** + **MapLibre** 浏览器选点 + **GraphHopper** 服务端算步行距离，**不再使用高德**。
+已改为 **Martin 矢量瓦片** + **MapLibre** 浏览器选点；订单 **`distance_meters`** 由服务端按两端经纬度计算 **Haversine
+球面直线距离**，**不再使用高德**。
 
 ## 坐标系
 
-订单中的 `receiver_lat` / `receiver_lng`、`sender_lat` / `sender_lng` 均为 **WGS84**，与 OSM / Martin / GraphHopper 一致。
+订单中的 `receiver_lat` / `receiver_lng`、`sender_lat` / `sender_lng` 均为 **WGS84**，与 OSM / Martin 一致。
 
 ## 环境变量
 
 ```bash
 # Martin：仅本 Go 进程访问（内网），勿暴露给浏览器
 MAP_TILES_URL=http://127.0.0.1:50001/tiles
-
-# GraphHopper：仅服务端调用 /route；前端不可见
-GRAPHHOPPER_BASE_URL=http://127.0.0.1:50002
 ```
 
 ## API
@@ -30,4 +28,4 @@ GRAPHHOPPER_BASE_URL=http://127.0.0.1:50002
 
 ## 部署参考
 
-瓦片与算路服务搭建见独立仓库 `map-project`（Martin、`tiles.mbtiles`、GraphHopper、`anhui-*.osm.pbf`）。
+瓦片服务搭建见独立仓库 `map-project`（Martin、`tiles.mbtiles`、`anhui-*.osm.pbf` 等）。

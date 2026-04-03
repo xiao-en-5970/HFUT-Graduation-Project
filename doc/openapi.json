@@ -511,7 +511,7 @@
         "goods_id",
         "user_location_id"
       ],
-      "description": "创建订单：成功后 order_status=1（待卖方确认收款），buyer_agreed_at=下单时间。收货须从买方地址簿 `GET /user/locations` 选一条 `user_location_id`（服务端快照写入 receiver_* 与 receiver_user_location_id）。送货上门/自提算距：商品有 goods_lat/lng（默认 sender_*）且地址簿有成对 lat/lng 时 GraphHopper；需 GRAPHHOPPER_BASE_URL。",
+      "description": "创建订单：成功后 order_status=1（待卖方确认收款），buyer_agreed_at=下单时间。收货须从买方地址簿 `GET /user/locations` 选一条 `user_location_id`（服务端快照写入 receiver_* 与 receiver_user_location_id）。送货上门/自提算距：两端均有成对经纬度时 Haversine 直线距离（米）。",
       "properties": {
         "goods_id": {
           "type": "integer",
@@ -611,7 +611,7 @@
         },
         "distance_meters": {
           "type": "integer",
-          "description": "送货上门/自提步行距离（米）：自提点或发货地→买方；两端均有坐标时 GraphHopper foot；未配置服务或缺坐标则为 null"
+          "description": "送货上门/自提：收发两端均有成对经纬度时的 Haversine 球面直线距离（米）；缺任一端坐标则为 null"
         },
         "order_status": {
           "type": "integer",

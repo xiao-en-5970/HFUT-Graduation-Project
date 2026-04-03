@@ -24,6 +24,8 @@ var (
 	ErrOrderInvalidState             = errors.New("订单状态不允许此操作")
 	ErrOrderNotParticipant           = errors.New("不是该订单的买方或卖方")
 	ErrOrderReceiverLocationRequired = errors.New("请选择收货地址")
+	// ErrOrderOfficialNotConfigured 未执行 migrate_order_official_message.sql，无法插入订单官方通知
+	ErrOrderOfficialNotConfigured = errors.New("订单官方通知账号未配置，请在数据库执行 package/sql/migrate_order_official_message.sql")
 )
 
 // 评论

@@ -6,6 +6,19 @@
 
 ---
 
+## 2026-04-03（订单：官方账号未配置时 400）
+
+- 卖方确认收款 / 确认送达 / 买方确认收货 会插入**官方系统消息**；若库中无 `__order_official__` 用户（未执行
+  `migrate_order_official_message.sql`），原返回 **HTTP 500**；现改为 **HTTP 400**，`code=2705`，提示执行迁移。
+
+---
+
+## 2026-04-03（订单：距离仅用 Haversine 直线）
+
+- `distance_meters`：在**发货/收货两端均有成对经纬度**时，由服务端计算 **Haversine 球面直线距离**（米）；不再调用步行路网。
+
+---
+
 ## 2026-04-03（下单必选地址簿；订单 receiver_user_location_id）
 
 - **Breaking：** `POST /api/v1/orders` 必填 **`user_location_id`**（买方 `user_locations` 有效记录）；不再接受直接传
@@ -23,9 +36,10 @@
 
 ---
 
-## 2026-04-03（订单：自提也算步行距离）
+## 2026-04-03（订单：自提也算直线距离）
 
-- `POST /api/v1/orders`：商品类型为**自提**时，与送货上门相同，在收发两端均有成对经纬度且配置 `GRAPHHOPPER_BASE_URL` 时写入 `distance_meters`（自提点→买方）。
+- `POST /api/v1/orders`：商品类型为**自提**时，与送货上门相同，在收发两端均有成对经纬度时写入 `distance_meters`
+  （自提点→买方，Haversine）。
 - 下单时从商品复制 `goods_lat`/`goods_lng` 到订单 `sender_lat`/`sender_lng` 时改为**数值拷贝**，避免指针与查询缓冲共用导致坐标未落库。
 
 ---
@@ -44,7 +58,7 @@
 
 ---
 
-## 2026-04-03（地图：自托管 Martin + GraphHopper，移除高德）
+## 2026-04-03（地图：自托管 Martin，移除高德）
 
 ### 废弃 / 移除
 
@@ -54,10 +68,10 @@
 
 ### 修改
 
-| 接口 | 说明 |
-|------|------|
+| 接口                       | 说明                                                 |
+|--------------------------|----------------------------------------------------|
 | `GET /api/v1/config/map` | 返回 `map_tiles_url`（Martin 模板）；环境变量 `MAP_TILES_URL` |
-| `POST/PUT` 订单算距 | 送货上门时仅当**收发均有经纬度**时由服务端调 GraphHopper `foot` 路径距离；`GRAPHHOPPER_BASE_URL` |
+| `POST/PUT` 订单算距          | 送货上门/自提时仅当**收发均有经纬度**时由服务端算 **Haversine 直线距离**（米）  |
 
 坐标：**WGS84**。详见 `doc/AMAP.md`。
 
@@ -77,10 +91,10 @@
 
 ### 修改
 
-| 接口                       | 变更说明                                                                                              |
-|--------------------------|---------------------------------------------------------------------------------------------------|
-| `POST /api/v1/orders`    | 可选 `receiver_lat/lng`、`sender_lat/lng`（WGS84，成对）。送货上门算距：仅**两端均有坐标**时 GraphHopper 步行路网。 |
-| `PUT /api/v1/orders/:id` | 卖方可传成对 `sender_lat`/`sender_lng`；与 `sender_addr` 可组合。                                             |
+| 接口                       | 变更说明                                                                                    |
+|--------------------------|-----------------------------------------------------------------------------------------|
+| `POST /api/v1/orders`    | 可选 `receiver_lat/lng`、`sender_lat/lng`（WGS84，成对）。送货上门/自提算距：仅**两端均有坐标**时 Haversine 直线距离。 |
+| `PUT /api/v1/orders/:id` | 卖方可传成对 `sender_lat`/`sender_lng`；与 `sender_addr` 可组合。                                   |
 
 ### 数据库
 

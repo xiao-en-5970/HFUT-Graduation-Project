@@ -20,7 +20,7 @@ type Order struct {
 	SenderAddr             string         `gorm:"column:sender_addr;type:varchar(512)" json:"sender_addr"`                                // 发货文字地址
 	SenderLat              *float64       `gorm:"column:sender_lat" json:"sender_lat,omitempty"`                                          // 发货地图选点纬度 WGS84
 	SenderLng              *float64       `gorm:"column:sender_lng" json:"sender_lng,omitempty"`                                          // 发货地图选点经度 WGS84
-	DistanceMeters         *int           `gorm:"column:distance_meters" json:"distance_meters,omitempty"`                                // 送货上门/自提：自提点或发货地→买方步行路径距离（米），GraphHopper foot
+	DistanceMeters         *int           `gorm:"column:distance_meters" json:"distance_meters,omitempty"`                                // 送货上门/自提：Haversine 球面直线距离（米）
 	BuyerAgreedAt          *time.Time     `gorm:"column:buyer_agreed_at" json:"buyer_agreed_at,omitempty"`                                // 买方下单时间
 	SellerAgreedAt         *time.Time     `gorm:"column:seller_agreed_at" json:"seller_agreed_at,omitempty"`                              // 卖方确认收款时间
 	DeliveryImages         pq.StringArray `gorm:"column:delivery_images;type:varchar(2048)[]" json:"delivery_images,omitempty"`           // 卖方送达凭证图

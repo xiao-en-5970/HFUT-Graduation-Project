@@ -3,11 +3,11 @@ package config
 import (
 	"log"
 	"os"
-	"strings"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/fsnotify/fsnotify"
@@ -54,8 +54,6 @@ var (
 
 	// Martin 瓦片上游（仅服务端访问，可写 http://127.0.0.1:50001/tiles 或带 {z}/{x}/{y} 的完整模板）
 	MapTilesURL string
-	// 自托管 GraphHopper 根地址（订单步行距离，仅服务端调用），如 http://host:50002
-	GraphHopperBaseURL string
 )
 
 const defaultEnvPath = "/.env"
@@ -114,7 +112,6 @@ func LoadConfigFrom(path string) error {
 	SearchCombinedPopularity = getEnvFloat("SEARCH_COMBINED_POPULARITY", 0.01)
 
 	MapTilesURL = strings.TrimSpace(getEnv("MAP_TILES_URL", ""))
-	GraphHopperBaseURL = strings.TrimSpace(getEnv("GRAPHHOPPER_BASE_URL", ""))
 
 	return nil
 }

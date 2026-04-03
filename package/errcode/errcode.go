@@ -69,10 +69,11 @@ const (
 
 // 订单模块错误码 (2700-2799)
 const (
-	ErrOrderNotFound     = 2701 // 订单不存在
-	ErrOrderNoPermission = 2702 // 无权限操作订单
-	ErrOrderCreateFailed = 2703 // 订单创建失败
-	ErrOrderUpdateFailed = 2704 // 订单更新失败
+	ErrOrderNotFound              = 2701 // 订单不存在
+	ErrOrderNoPermission          = 2702 // 无权限操作订单
+	ErrOrderCreateFailed          = 2703 // 订单创建失败
+	ErrOrderUpdateFailed          = 2704 // 订单更新失败
+	ErrOrderOfficialNotConfigured = 2705 // 订单官方通知账号未配置
 )
 
 // 学校模块错误码 (2800-2899)
@@ -141,10 +142,11 @@ var errMsgMap = map[int]string{
 	ErrFollowNoPermission:  "未关注该用户",
 
 	// 订单模块
-	ErrOrderNotFound:     "订单不存在",
-	ErrOrderNoPermission: "无权限操作订单",
-	ErrOrderCreateFailed: "订单创建失败",
-	ErrOrderUpdateFailed: "订单更新失败",
+	ErrOrderNotFound:              "订单不存在",
+	ErrOrderNoPermission:          "无权限操作订单",
+	ErrOrderCreateFailed:          "订单创建失败",
+	ErrOrderUpdateFailed:          "订单更新失败",
+	ErrOrderOfficialNotConfigured: "订单官方通知账号未配置",
 
 	// 学校模块
 	ErrSchoolNotFound:     "学校不存在",

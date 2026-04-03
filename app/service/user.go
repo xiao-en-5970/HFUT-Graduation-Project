@@ -40,6 +40,9 @@ func (s *userService) Register(ctx *gin.Context, username, password string) (uin
 }
 
 func (s *userService) Login(ctx *gin.Context, username, password string) (token string, err error) {
+	if strings.EqualFold(username, constant.OrderOfficialUsername) {
+		return "", errors.New("用户不存在")
+	}
 	user, err := dao.User().GetByUsername(ctx, username)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		logger.Error(ctx, "用户不存在", zap.Error(err))
@@ -71,6 +74,9 @@ func (s *userService) Login(ctx *gin.Context, username, password string) (token 
 
 // AdminLogin 管理员登录：验证账号密码且 role>=2 才返回 token
 func (s *userService) AdminLogin(ctx *gin.Context, username, password string) (token string, err error) {
+	if strings.EqualFold(username, constant.OrderOfficialUsername) {
+		return "", errors.New("用户不存在")
+	}
 	user, err := dao.User().GetByUsername(ctx, username)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", errors.New("用户不存在")

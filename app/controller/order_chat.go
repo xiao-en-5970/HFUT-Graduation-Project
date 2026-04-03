@@ -2,12 +2,14 @@ package controller
 
 import (
 	"errors"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
@@ -86,6 +88,10 @@ func OrderSellerConfirmPayment(ctx *gin.Context) {
 			reply.ReplyErrWithMessage(ctx, "当前状态不可确认收款")
 			return
 		}
+		if errors.Is(err, errno.ErrOrderOfficialNotConfigured) {
+			reply.ReplyErrWithCodeAndMessage(ctx, http.StatusBadRequest, errcode.ErrOrderOfficialNotConfigured, err.Error())
+			return
+		}
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
@@ -113,6 +119,10 @@ func OrderConfirmDelivery(ctx *gin.Context) {
 		}
 		if errors.Is(err, errno.ErrOrderInvalidState) {
 			reply.ReplyErrWithMessage(ctx, "当前状态不可确认送达")
+			return
+		}
+		if errors.Is(err, errno.ErrOrderOfficialNotConfigured) {
+			reply.ReplyErrWithCodeAndMessage(ctx, http.StatusBadRequest, errcode.ErrOrderOfficialNotConfigured, err.Error())
 			return
 		}
 		reply.ReplyInternalError(ctx, err)
@@ -146,6 +156,10 @@ func OrderConfirmReceipt(ctx *gin.Context) {
 		}
 		if errors.Is(err, errno.ErrOrderInsufficientStock) {
 			reply.ReplyErrWithMessage(ctx, "库存不足，无法完成订单")
+			return
+		}
+		if errors.Is(err, errno.ErrOrderOfficialNotConfigured) {
+			reply.ReplyErrWithCodeAndMessage(ctx, http.StatusBadRequest, errcode.ErrOrderOfficialNotConfigured, err.Error())
 			return
 		}
 		reply.ReplyInternalError(ctx, err)

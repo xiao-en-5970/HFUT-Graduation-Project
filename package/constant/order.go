@@ -12,10 +12,10 @@ const (
 
 // 订单内聊天消息类型
 const (
-	OrderMsgTypeText    int16 = 1
-	OrderMsgTypeImage   int16 = 2
+	OrderMsgTypeText     int16 = 1
+	OrderMsgTypeImage    int16 = 2
 	OrderMsgTypeOfficial int16 = 3 // 官方系统通知（仅服务端写入）
 )
 
-// OrderOfficialUsername 订单聊天官方通知所用系统用户（迁移脚本插入，status=禁用不可登录）
+// OrderOfficialUsername 订单聊天官方通知所用系统用户（迁移脚本插入；登录在应用层拒绝）
 const OrderOfficialUsername = "__order_official__"

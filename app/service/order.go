@@ -6,12 +6,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/config"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/graphhopper"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/geo"
 	"gorm.io/gorm"
 )
 
@@ -101,9 +100,9 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 		o.SenderLat = copyFloatPtr(*good.GoodsLat)
 		o.SenderLng = copyFloatPtr(*good.GoodsLng)
 	}
-	// 送货上门 / 自提：两端均有成对经纬度时经 GraphHopper 步行路网（需 GRAPHHOPPER_BASE_URL）。自提为「自提点→买方位置」。
+	// 送货上门 / 自提：两端均有成对经纬度时 Haversine 球面直线距离（米）。自提为「自提点→买方位置」。
 	if good.GoodsType == constant.GoodsTypeDelivery || good.GoodsType == constant.GoodsTypePickup {
-		if d := computeOrderDistanceMeters(ctx, sender, receiver, o.SenderLat, o.SenderLng, o.ReceiverLat, o.ReceiverLng); d != nil {
+		if d := computeOrderDistanceMeters(sender, receiver, o.SenderLat, o.SenderLng, o.ReceiverLat, o.ReceiverLng); d != nil {
 			o.DistanceMeters = d
 		}
 	}
@@ -115,25 +114,14 @@ func copyFloatPtr(f float64) *float64 {
 	return &v
 }
 
-// computeOrderDistanceMeters 发货/自提点→收货（买方）步行路径距离（米，GraphHopper foot）。需 GRAPHHOPPER_BASE_URL；仅当两端均有成对经纬度时计算；失败返回 nil。
-func computeOrderDistanceMeters(ctx *gin.Context, senderAddr, receiverAddr string, senderLat, senderLng, receiverLat, receiverLng *float64) *int {
+// computeOrderDistanceMeters 发货/自提点→收货（买方）球面直线距离（米，Haversine / WGS84）。两端须均有成对经纬度。
+func computeOrderDistanceMeters(senderAddr, receiverAddr string, senderLat, senderLng, receiverLat, receiverLng *float64) *int {
 	_ = senderAddr
 	_ = receiverAddr
-	if config.GraphHopperBaseURL == "" {
-		return nil
-	}
 	if senderLat == nil || senderLng == nil || receiverLat == nil || receiverLng == nil {
 		return nil
 	}
-	m, err := graphhopper.FootRouteDistanceMeters(
-		ctx.Request.Context(),
-		config.GraphHopperBaseURL,
-		*senderLat, *senderLng, *receiverLat, *receiverLng,
-	)
-	if err != nil {
-		return nil
-	}
-	v := m
+	v := geo.HaversineMeters(*senderLat, *senderLng, *receiverLat, *receiverLng)
 	return &v
 }
 
@@ -195,7 +183,7 @@ func (s *orderService) UpdateSellerInfo(ctx *gin.Context, id uint, sellerID uint
 		}
 		receiverStr := strings.TrimSpace(o.ReceiverAddr)
 		rLat, rLng := o.ReceiverLat, o.ReceiverLng
-		if d := computeOrderDistanceMeters(ctx, senderStr, receiverStr, sLat, sLng, rLat, rLng); d != nil {
+		if d := computeOrderDistanceMeters(senderStr, receiverStr, sLat, sLng, rLat, rLng); d != nil {
 			updates["distance_meters"] = *d
 		}
 	}

@@ -1326,7 +1326,7 @@
           <p><strong>收货（地图 WGS84）</strong> ${formatLngLatPair(o.receiver_lat, o.receiver_lng)}</p>
           <p><strong>发货（文字）</strong> ${escapeHtml(o.sender_addr || '')}</p>
           <p><strong>发货（地图 WGS84）</strong> ${formatLngLatPair(o.sender_lat, o.sender_lng)}</p>
-          <p><strong>收发步行距离</strong> ${formatOrderWalkDistance(o.distance_meters)} <span class="text-muted">（送货上门/自提；两端均有坐标时经 GraphHopper 路网）</span></p>
+          <p><strong>收发步行距离</strong> ${formatOrderWalkDistance(o.distance_meters)} <span class="text-muted">（送货上门/自提；两端有坐标时为直线距离）</span></p>
           <p><strong>买方下单时间</strong> ${(o.buyer_agreed_at || '').slice(0, 19) || '-'} · <strong>卖方确认收款</strong> ${(o.seller_agreed_at || '').slice(0, 19) || '-'}</p>
           <p><strong>完成时间</strong> ${(o.completed_at || '').slice(0, 19) || '-'}</p>
         </div>

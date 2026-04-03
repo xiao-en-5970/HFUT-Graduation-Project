@@ -278,7 +278,7 @@ func (s *orderService) officialSenderID(ctx context.Context) (int, error) {
 	u, err := dao.User().GetByUsername(ctx, constant.OrderOfficialUsername)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return 0, errors.New("官方账号未配置，请执行 package/sql/migrate_order_official_message.sql")
+			return 0, errno.ErrOrderOfficialNotConfigured
 		}
 		return 0, err
 	}
