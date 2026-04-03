@@ -1,43 +1,45 @@
 # CI/CD 说明（GitHub Actions）
 
+## 流程概览
+
+- **推分支**（`main` / `master`）：仅 `go vet` + `go build` 验证。
+- **打 tag**（`v*`）：在通过检查后，将仓库 **rsync 到部署机**，在部署机上 **`docker build`**（多阶段 Dockerfile，内含 Go 编译），再
+  **`docker run`** 启动 `apiserver`。
+- **不再使用 GHCR**：镜像不在 GitHub Actions 里构建推送；构建与 Docker **层缓存**均在部署机本地（`/var/lib/docker`
+  ）。重复部署时未变更的层会命中缓存。
+
+### 部署机要求
+
+- 已安装 **Docker**，建议开启 **BuildKit**（工作流里已设 `DOCKER_BUILDKIT=1`）。
+- 宿主机已按原约定准备 **`/.env`**（供 `grep` 出 `KEY=VALUE` 注入容器）。
+- 可选 Secret **`DEPLOY_PATH`**：源码同步与构建目录；不填则使用部署用户 **`$HOME/hfut-apiserver`**。
+
+### 所需 Secrets
+
+| Secret                                  | 说明             |
+|-----------------------------------------|----------------|
+| `DEPLOY_HOST`                           | 部署机主机名或 IP     |
+| `DEPLOY_USER`                           | SSH 用户         |
+| `DEPLOY_SSH_KEY` 或 `DEPLOY_SSH_KEY_B64` | SSH 私钥         |
+| `DEPLOY_PATH`（可选）                       | 远程目录绝对路径或留空用默认 |
+
+**不再需要** `GHCR_TOKEN` 或 `packages:write`。
+
 ## Node.js 20 弃用告警
 
 GitHub 将逐步把 Actions 里运行 JavaScript action 的 Node 版本从 20 迁到 24（约 2026-06 起默认 24）。
 
 本仓库 `.github/workflows/deploy.yml` 已做：
 
-- 使用较新的 action 主版本：`actions/checkout@v6`、`actions/setup-go@v6`、`docker/login-action@v4`、
-  `docker/build-push-action@v7`（通常基于 Node 24 或兼容新运行时）。
-- 工作流顶层设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`，在官方尚未全部切换前显式使用 Node 24 运行 JS action。
+- 使用较新的 action 主版本：`actions/checkout@v6`、`actions/setup-go@v6`。
+- 工作流顶层设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`。
 
 若仍出现告警，可到 [GitHub Changelog](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/)
 查看最新说明，并把各 action 升级到 `releases/latest` 对应 tag。
 
-## Artifact storage quota（无法上传 Artifact）
+## setup-go 与缓存
 
-错误示例：`Failed to CreateArtifact: Artifact storage quota has been hit`
-
-### 本仓库已处理：`docker/build-push-action` 隐式上传
-
-`docker/build-push-action` v6+ 在 **post** 阶段默认把 **build record** 通过 `GitHubArtifact.upload()` 传到 **GitHub
-Artifacts**
-（环境变量 `DOCKER_BUILD_RECORD_UPLOAD` 默认为开启）。这与是否手写 `actions/upload-artifact` 无关，仍会占用 Artifact 存储。
-
-本工作流在 **build** 任务中已设置 `DOCKER_BUILD_RECORD_UPLOAD: "false"`：镜像仍会正常构建并推送到 GHCR，仅不再上传 build
-record。
-
-### 账号仍满额时（其它仓库或历史 artifact）
-
-- 额度按 **组织或用户** 汇总，约每 6–12 小时重算。
-
-建议：
-
-1. **清理**：GitHub → 仓库 **Settings** → **Actions** → **Artifacts**（或组织级存储管理）删除旧 artifact。
-2. **缩短保留**：缩短 artifact / log 保留天数。
-3. **扩容
-   **：[Billing / Actions 存储说明](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions#calculating-minute-and-storage-spending)。
-
-本仓库 `setup-go` 已设 `cache: false`，可减少 **缓存** 占用。
+本仓库 `setup-go` 已设 `cache: false`，减轻 Actions 侧缓存占用；Go 依赖与编译缓存由**部署机**上 Docker 构建层承担。
 
 ## 相关链接
 
