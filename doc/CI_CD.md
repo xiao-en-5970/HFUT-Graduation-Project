@@ -14,6 +14,11 @@
 - 宿主机已按原约定准备 **`/.env`**（供 `grep` 出 `KEY=VALUE` 注入容器）。
 - 可选 Secret **`DEPLOY_PATH`**：源码同步与构建目录；不填则使用部署用户 **`$HOME/hfut-apiserver`**。
 
+### rsync 与 SSH 密钥
+
+`rsync` 通过 SSH 连接远程时**不会**自动使用工作流里写入的 `~/.ssh/deploy_key`；本仓库已设置 `RSYNC_RSH` / `rsync -e`，与
+`ssh -i ~/.ssh/deploy_key` 一致。若曾出现 `Permission denied (publickey)` 仅发生在 rsync 步骤，多为未指定 `-i` 导致。
+
 ### 所需 Secrets
 
 | Secret                                  | 说明             |
