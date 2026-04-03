@@ -28,6 +28,8 @@ type CreateGoodReq struct {
 	MarkedPrice int      `json:"marked_price"` // 标价（分）
 	Stock       int      `json:"stock"`        // 库存
 	Images      []string `json:"images"`       // 图片 URL 列表
+	GoodsLat    *float64 `json:"goods_lat"`    // 商品位置纬度 WGS84，与发货地一致
+	GoodsLng    *float64 `json:"goods_lng"`    // 商品位置经度 WGS84
 }
 
 type UpdateGoodReq struct {
@@ -40,6 +42,8 @@ type UpdateGoodReq struct {
 	MarkedPrice *int      `json:"marked_price"`
 	Stock       *int      `json:"stock"`
 	Images      *[]string `json:"images"`
+	GoodsLat    *float64  `json:"goods_lat"`
+	GoodsLng    *float64  `json:"goods_lng"`
 }
 
 func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req CreateGoodReq) (uint, error) {
@@ -75,6 +79,10 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 		Stock:       req.Stock,
 		GoodStatus:  dao.GoodStatusOffShelf, // 新建为下架，需上架后才可见
 		Status:      constant.StatusValid,
+	}
+	if req.GoodsLat != nil && req.GoodsLng != nil {
+		g.GoodsLat = req.GoodsLat
+		g.GoodsLng = req.GoodsLng
 	}
 	if len(req.Images) > 0 {
 		paths := make([]string, len(req.Images))
@@ -159,6 +167,10 @@ func (s *goodService) Update(ctx *gin.Context, id uint, userID uint, schoolID ui
 		updates["goods_addr"] = addr
 		updates["pickup_addr"] = addr
 	}
+	if req.GoodsLat != nil && req.GoodsLng != nil {
+		updates["goods_lat"] = *req.GoodsLat
+		updates["goods_lng"] = *req.GoodsLng
+	}
 	if len(updates) == 0 {
 		return nil
 	}
@@ -229,6 +241,8 @@ type AdminCreateGoodReq struct {
 	Stock       int      `json:"stock"`
 	Images      []string `json:"images"`
 	GoodStatus  int      `json:"good_status"` // 可选 1在售 2下架 3已售出，默认下架
+	GoodsLat    *float64 `json:"goods_lat"`
+	GoodsLng    *float64 `json:"goods_lng"`
 }
 
 // AdminUpdateGoodReq 管理端更新商品
@@ -246,6 +260,8 @@ type AdminUpdateGoodReq struct {
 	Images      *[]string `json:"images"`
 	GoodStatus  *int      `json:"good_status"`
 	Status      *int16    `json:"status"` // 1正常 2禁用
+	GoodsLat    *float64  `json:"goods_lat"`
+	GoodsLng    *float64  `json:"goods_lng"`
 }
 
 func (s *goodService) AdminCreate(ctx *gin.Context, req AdminCreateGoodReq) (uint, error) {
@@ -288,6 +304,10 @@ func (s *goodService) AdminCreate(ctx *gin.Context, req AdminCreateGoodReq) (uin
 		Stock:       req.Stock,
 		GoodStatus:  gs,
 		Status:      constant.StatusValid,
+	}
+	if req.GoodsLat != nil && req.GoodsLng != nil {
+		g.GoodsLat = req.GoodsLat
+		g.GoodsLng = req.GoodsLng
 	}
 	if len(req.Images) > 0 {
 		paths := make([]string, len(req.Images))
@@ -369,6 +389,10 @@ func (s *goodService) AdminUpdate(ctx *gin.Context, id uint, req AdminUpdateGood
 		}
 		updates["goods_addr"] = addr
 		updates["pickup_addr"] = addr
+	}
+	if req.GoodsLat != nil && req.GoodsLng != nil {
+		updates["goods_lat"] = *req.GoodsLat
+		updates["goods_lng"] = *req.GoodsLng
 	}
 	if req.Status != nil && (*req.Status == constant.StatusValid || *req.Status == constant.StatusInvalid) {
 		updates["status"] = *req.Status

@@ -131,13 +131,24 @@ func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 			gt = g.GoodsType
 			g.Images = oss.TransformImageURLs(g.Images)
 			ga := effectiveGoodAddr(g)
-			m["good"] = map[string]interface{}{
+			gm := map[string]interface{}{
 				"id": g.ID, "title": g.Title, "images": g.Images, "price": g.Price,
 				"user_id":    g.UserID,
 				"goods_type": g.GoodsType, "goods_type_label": constant.GoodsTypeLabel(g.GoodsType),
 				"goods_addr":  ga,
 				"pickup_addr": ga,
 			}
+			if g.GoodsLat != nil {
+				gm["goods_lat"] = *g.GoodsLat
+			} else {
+				gm["goods_lat"] = nil
+			}
+			if g.GoodsLng != nil {
+				gm["goods_lng"] = *g.GoodsLng
+			} else {
+				gm["goods_lng"] = nil
+			}
+			m["good"] = gm
 		}
 	}
 	m["order_status"] = o.OrderStatus

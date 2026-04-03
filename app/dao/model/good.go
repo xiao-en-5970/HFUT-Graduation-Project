@@ -19,6 +19,8 @@ type Good struct {
 	GoodsType    int16          `gorm:"column:goods_type;type:smallint;not null;default:1" json:"goods_type"`      // 1送货上门 2自提 3在线商品
 	GoodsAddr    string         `gorm:"column:goods_addr;type:varchar(512)" json:"goods_addr,omitempty"`           // 商品地址：发货地/自提点合一，用于默认卖方发货地址与自提说明
 	PickupAddr   string         `gorm:"column:pickup_addr;type:varchar(512)" json:"pickup_addr,omitempty"`         // 与 goods_addr 同步，兼容旧字段
+	GoodsLat     *float64       `gorm:"column:goods_lat" json:"goods_lat,omitempty"`                               // 商品位置纬度 WGS84，与发货地一致
+	GoodsLng     *float64       `gorm:"column:goods_lng" json:"goods_lng,omitempty"`                               // 商品位置经度 WGS84
 	Price        int            `gorm:"type:integer;not null;default:0" json:"price"`                              // 商品价格，单位分
 	MarkedPrice  int            `gorm:"column:marked_price;type:integer;not null;default:0" json:"marked_price"`   // 标价，单位分
 	Stock        int            `gorm:"type:integer;not null;default:0" json:"stock"`                              // 库存数量

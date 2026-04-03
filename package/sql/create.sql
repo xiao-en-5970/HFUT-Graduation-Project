@@ -329,6 +329,13 @@ ALTER TABLE goods
     ADD COLUMN IF NOT EXISTS goods_addr VARCHAR(512);
 COMMENT ON COLUMN goods.goods_addr IS '商品地址：发货地/自提点，用于默认卖方发货地址与自提说明（与 pickup_addr 写入时同步）';
 
+ALTER TABLE goods
+    ADD COLUMN IF NOT EXISTS goods_lat DOUBLE PRECISION;
+ALTER TABLE goods
+    ADD COLUMN IF NOT EXISTS goods_lng DOUBLE PRECISION;
+COMMENT ON COLUMN goods.goods_lat IS '商品位置纬度 WGS84，与发货地一致';
+COMMENT ON COLUMN goods.goods_lng IS '商品位置经度 WGS84';
+
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS school_id integer REFERENCES schools(id);
 comment on column articles.school_id is '学校ID';
 

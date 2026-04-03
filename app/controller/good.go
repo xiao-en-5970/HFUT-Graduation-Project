@@ -60,6 +60,16 @@ func enrichGoodWithAuthor(ctx *gin.Context, g *model.Good) map[string]interface{
 		"like_count": g.LikeCount, "collect_count": g.CollectCount,
 		"created_at": g.CreatedAt, "updated_at": g.UpdatedAt,
 	}
+	if g.GoodsLat != nil {
+		m["goods_lat"] = *g.GoodsLat
+	} else {
+		m["goods_lat"] = nil
+	}
+	if g.GoodsLng != nil {
+		m["goods_lng"] = *g.GoodsLng
+	} else {
+		m["goods_lng"] = nil
+	}
 	if g.UserID != nil && *g.UserID > 0 {
 		if u, err := getUserBrief(ctx, uint(*g.UserID)); err == nil {
 			m["author"] = u

@@ -10,8 +10,8 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/graphhopper"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/graphhopper"
 )
 
 type orderService struct{}
@@ -29,7 +29,7 @@ func goodAddrForOrder(g *model.Good) string {
 }
 
 // CreateOrderReq 创建订单：直接进入「待卖方确认收款」；buyer_agreed_at 记下单时间（买方契约）
-// 收货/发货各含：文字地址 + 地图选点（WGS84 经纬度，成对传）；距离优先用两端坐标经 GraphHopper 步行路网
+// 收货：买方传 receiver_*。发货：未传 sender_* 时由服务端用商品的 goods_addr 与 goods_lat/goods_lng（若有）写入订单；仍可显式传 sender_* 覆盖。
 type CreateOrderReq struct {
 	GoodsID      uint     `json:"goods_id" binding:"required"`
 	ReceiverAddr string   `json:"receiver_addr"`
@@ -87,6 +87,9 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 	if req.SenderLat != nil && req.SenderLng != nil {
 		o.SenderLat = req.SenderLat
 		o.SenderLng = req.SenderLng
+	} else if good.GoodsLat != nil && good.GoodsLng != nil {
+		o.SenderLat = good.GoodsLat
+		o.SenderLng = good.GoodsLng
 	}
 	// 仅「送货上门」计算步行距离：两端均有成对经纬度时经 GraphHopper（需 GRAPHHOPPER_BASE_URL）
 	if good.GoodsType == constant.GoodsTypeDelivery {

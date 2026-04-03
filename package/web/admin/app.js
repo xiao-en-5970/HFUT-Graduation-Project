@@ -732,11 +732,29 @@
         }
     }
 
-    function showGoodModal(row) {
+    async function showGoodModal(row) {
         const isEdit = row && row.id != null;
         const uid = row?.user_id ?? '';
         const sid = row?.school_id ?? '';
         const initialImgs = row?.images && Array.isArray(row.images) ? [...row.images] : [];
+        let tilesUrl = '';
+        let adminTok = '';
+        try {
+            adminTok = getToken() || '';
+            const cfg = await fetchMapTilesConfigAdmin();
+            tilesUrl = normalizeTilesUrl(cfg.tilesUrl || '');
+        } catch (e) {
+            tilesUrl = '';
+        }
+        const mapBlock = (tilesUrl && adminTok)
+            ? `<h5 class="trade-order-map-title">商品位置（地图选点，WGS84）</h5>
+      <p class="text-muted trade-subsection">与上方文字地址一致，表示<strong>发货地</strong>；买家下单时默认用此点作为卖方端坐标（送货上门算距需与收货点成对）。</p>
+      <div id="g-map-goods" class="trade-map trade-map-order-sm" title="点击选发货地"></div>
+      <div class="trade-order-coords">
+        <label>经度 <input type="number" step="any" id="g-goods-lng" placeholder="地图点击填入" /></label>
+        <label>纬度 <input type="number" step="any" id="g-goods-lat" placeholder="地图点击填入" /></label>
+      </div>`
+            : '<p class="text-muted">配置 <code>MAP_TILES_URL</code> 并登录管理后台后，可为商品在地图上选发货坐标。</p>';
         showModal(isEdit ? '编辑商品 #' + row.id : '新建商品', `
       <label>用户ID <input type="number" id="g-user_id" value="${uid}" required></label>
       <label>学校ID <input type="number" id="g-school_id" value="${sid}" required></label>
@@ -750,7 +768,8 @@
         <option value="2">自提</option>
         <option value="3">在线商品</option>
       </select></label>
-      <label>商品地址 <input type="text" id="g-goods_addr" placeholder="发货地/自提点；送货上门可作默认卖方发货地址，自提可作约定提货点"></label>
+      <label>商品地址 <input type="text" id="g-goods_addr" placeholder="发货地/自提点文字说明（与地图选点一致）"></label>
+      ${mapBlock}
       <label>销售状态 <select id="g-good_status">
         <option value="1">在售</option>
         <option value="2">下架</option>
@@ -778,6 +797,17 @@
             if (!payload.user_id || !payload.school_id) throw new Error('请填写用户ID与学校ID');
             if (!payload.title || !payload.content) throw new Error('请填写标题与内容');
 
+            const lngEl = ov.querySelector('#g-goods-lng');
+            const latEl = ov.querySelector('#g-goods-lat');
+            if (lngEl && latEl) {
+                const glng = parseFloat(lngEl.value);
+                const glat = parseFloat(latEl.value);
+                if (!Number.isNaN(glng) && !Number.isNaN(glat)) {
+                    payload.goods_lng = glng;
+                    payload.goods_lat = glat;
+                }
+            }
+
             let images = Array.from(ov.querySelectorAll('#g-images-list .art-img-item:not(.art-img-pending)')).map(el => el.dataset.url).filter(Boolean);
             const pending = Array.from(ov.querySelectorAll('#g-images-list .art-img-pending')).map(el => el._file).filter(Boolean);
             const progress = ensureUploadProgress(ov);
@@ -804,9 +834,11 @@
                             marked_price: payload.marked_price,
                             stock: payload.stock,
                             goods_type: payload.goods_type,
-                          goods_addr: payload.goods_addr,
+                            goods_addr: payload.goods_addr,
                             pickup_addr: payload.pickup_addr,
                             good_status: payload.good_status,
+                            goods_lng: payload.goods_lng,
+                            goods_lat: payload.goods_lat,
                             images
                         })
                     });
@@ -822,9 +854,11 @@
                             marked_price: payload.marked_price,
                             stock: payload.stock,
                             goods_type: payload.goods_type,
-                          goods_addr: payload.goods_addr,
+                            goods_addr: payload.goods_addr,
                             pickup_addr: payload.pickup_addr,
                             good_status: payload.good_status,
+                            goods_lng: payload.goods_lng,
+                            goods_lat: payload.goods_lat,
                             images: []
                         })
                     });
@@ -852,7 +886,17 @@
             const gs = row?.good_status ?? 2;
             ov.querySelector('#g-good_status').value = String(gs);
             ov.querySelector('#g-goods_type').value = String(row?.goods_type ?? 1);
-          ov.querySelector('#g-goods_addr').value = row?.goods_addr || row?.pickup_addr || '';
+            ov.querySelector('#g-goods_addr').value = row?.goods_addr || row?.pickup_addr || '';
+            const glngInput = ov.querySelector('#g-goods-lng');
+            const glatInput = ov.querySelector('#g-goods-lat');
+            if (glngInput && row?.goods_lng != null) glngInput.value = String(row.goods_lng);
+            if (glatInput && row?.goods_lat != null) glatInput.value = String(row.goods_lat);
+            if (tilesUrl && adminTok && ov.querySelector('#g-map-goods')) {
+                loadMapLibreScript().then(() => {
+                    initMapLibrePicker('g-map-goods', 'g-goods-lng', 'g-goods-lat', tilesUrl, [117.27, 31.86], adminTok, {variant: 'admin'});
+                }).catch(() => {
+                });
+            }
             const listEl = ov.querySelector('#g-images-list');
             const gid = isEdit ? row.id : null;
 
@@ -1404,8 +1448,6 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
       const tilesUrl = mapCfg.tilesUrl;
       const rcvLngVal = order && order.receiver_lng != null ? String(order.receiver_lng) : '';
       const rcvLatVal = order && order.receiver_lat != null ? String(order.receiver_lat) : '';
-      const sndLngVal = order && order.sender_lng != null ? String(order.sender_lng) : '';
-      const sndLatVal = order && order.sender_lat != null ? String(order.sender_lat) : '';
 
         const msgHtml = msgs.length
             ? msgs.map(m => {
@@ -1423,15 +1465,10 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
             }).join('')
             : '<p class="text-muted">暂无消息（待下单后可发）</p>';
 
-      const prefSender = order && !loadErr
-          ? (order.sender_addr || (order.good && (order.good.goods_addr || order.good.pickup_addr)) || '')
-          : '';
-      const senderAddrVal = prefSender ? String(prefSender).replace(/"/g, '&quot;') : '';
-
         let actionHints = '';
         if (order && !loadErr) {
             if (os === 1) {
-              actionHints = '<p class="trade-hint">待卖方确认收款：卖方可点「确认收款」；不确认即视为未成交。可聊天，卖方可填发货地址。</p>';
+                actionHints = '<p class="trade-hint">待卖方确认收款：卖方可点「确认收款」；不确认即视为未成交。发货地以商品信息为准。</p>';
             } else if (os === 2) {
               if (gt === 3) {
                 actionHints = '<p class="trade-hint">不应出现：在线商品确认收款后应直接「待买方确认收货」。</p>';
@@ -1454,8 +1491,8 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
 <div class="trade-demo-intro">
   <p><strong>说明：</strong>管理员登录仅用于进后台；<strong>下单、聊天、确认收货</strong>必须使用<strong>普通用户</strong>的账号密码登录（与 App 相同接口）。买卖双方须<strong>绑定同一学校</strong>，且商品的 <code>user_id</code> 为卖家、<code>school_id</code> 一致。</p>
   <ol class="trade-steps">
-    <li>在「用户管理」建两个普通用户并绑定同一学校；在「商品管理」新建商品（填卖家 user_id）、保存后点<strong>上架</strong>。</li>
-    <li>页面<strong>左侧为买方</strong>、<strong>右侧为卖方</strong>：各自登录后，在对应一侧发消息、点按钮（接口仍与 App 一致）。</li>
+    <li>在「用户管理」建两个普通用户并绑定同一学校；在「商品管理」新建商品：填写<strong>商品地址</strong>并在地图上选<strong>发货地坐标</strong>（与 App 一致），保存后<strong>上架</strong>。</li>
+    <li>页面<strong>左侧为买方</strong>、<strong>右侧为卖方</strong>：买方只填<strong>收货位置</strong>；卖方发货地以商品为准，无需再填发货位置。</li>
     <li>左栏填商品 ID 与收货地址，点<strong>买家下单</strong> → 右栏<strong>确认收款</strong> → 按类型派送/自提 → 左栏<strong>确认收货</strong>。关键节点会插入<strong>官方</strong>聊天提示。</li>
   </ol>
 </div>
@@ -1474,8 +1511,8 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
     <p><strong>商品类型</strong> ${gt != null ? (GOODS_TYPE_MAP[gt] || gt) : '-'}</p>
     <p><strong>收货（文字）</strong> ${escapeHtml(order.receiver_addr || '')}</p>
     <p><strong>收货（地图）</strong> ${escapeHtml(formatLngLatPair(order.receiver_lat, order.receiver_lng))}</p>
-    <p><strong>发货（文字）</strong> ${escapeHtml(order.sender_addr || '')}</p>
-    <p><strong>发货（地图）</strong> ${escapeHtml(formatLngLatPair(order.sender_lat, order.sender_lng))}</p>
+    <p><strong>发货（文字）</strong> ${escapeHtml(order.sender_addr || '')} <span class="text-muted">（默认来自商品）</span></p>
+    <p><strong>发货（地图）</strong> ${escapeHtml(formatLngLatPair(order.sender_lat, order.sender_lng))} <span class="text-muted">（默认来自商品坐标）</span></p>
     <p><strong>收发步行距离</strong> ${escapeHtml(formatOrderWalkDistance(order.distance_meters))} <span class="text-muted">（送货上门；坐标优先）</span></p>
     <p><strong>买方下单时间</strong> ${(order.buyer_agreed_at || '').slice(0, 19) || '—'} · <strong>卖方确认收款</strong> ${(order.seller_agreed_at || '').slice(0, 19) || '—'}</p>
   </div>` : (!orderId ? '<p class="text-muted">请先下单或填写订单号并刷新。</p>' : '')}
@@ -1500,7 +1537,7 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
     </div>
     <div class="trade-card trade-card-order">
       <h4>买家下单</h4>
-      <p class="text-muted trade-subsection">请先<strong>登录买家</strong>（或至少一方登录以加载地图）。瓦片经 <code>/api/v1/map/tiles</code> 转发；在地图上<strong>点击选收货点</strong>，再填写文字说明。坐标 <strong>WGS84</strong>。</p>
+      <p class="text-muted trade-subsection">请先<strong>登录买家</strong>（或至少一方登录以加载地图）。瓦片经 <code>/api/v1/map/tiles</code> 转发；买方只需选<strong>收货点</strong>；卖方发货地已在<strong>商品</strong>里维护。</p>
       <label>商品 ID <input type="number" id="td-goods-id" placeholder="商品管理列表中的 ID" min="1"></label>
       <h5 class="trade-order-map-title">收货位置（地图选点）</h5>
       ${tilesUrl ? '<div id="td-map-rcv" class="trade-map trade-map-order" title="点击选收货位置"></div><p class="text-muted trade-map-hint">在地图上点击即可写入下方经纬度；可拖动、缩放。浏览器定位需 HTTPS 或 localhost。</p>' : '<p class="error">无法显示地图：请<strong>登录买家或卖家</strong>，并配置服务端 <code>MAP_TILES_URL</code>。</p>'}
@@ -1510,13 +1547,6 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
         <button type="button" class="btn btn-sm" id="td-copy-rcv">复制收货坐标</button>
       </div>
       <label>详细位置（文字） <textarea id="td-receiver" rows="2" placeholder="寝室、楼号、约定见面点等"></textarea></label>
-      <h5 class="trade-order-map-title">发货位置（可选）</h5>
-      <label>发货地址（文字） <textarea id="td-sender-create" rows="1" placeholder="可与商品默认发货地一致；可空"></textarea></label>
-      <div class="trade-order-coords">
-        <label>发货经度 <input type="number" step="any" id="td-snd-create-lng"></label>
-        <label>发货纬度 <input type="number" step="any" id="td-snd-create-lat"></label>
-      </div>
-      ${tilesUrl ? '<div id="td-map-snd-create" class="trade-map trade-map-order trade-map-order-sm" title="点击选发货位置"></div><p class="text-muted">发货地图（可选；送货上门算距建议填写收发坐标）</p>' : ''}
       <button type="button" class="btn btn-primary" id="td-create-order">买家下单</button>
       <p class="text-muted">不能买自己发布的商品。下单后即为<strong>待卖方确认收款</strong>。</p>
     </div>
@@ -1541,11 +1571,6 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
       <h4>卖方履约</h4>
       <div class="trade-actions trade-actions-seller">
         <button type="button" class="btn btn-primary" id="td-seller-confirm">确认收款</button>
-        <label>发货地址（文字） <input type="text" id="td-sender-addr" value="${senderAddrVal}" placeholder="送货上门时可填" style="min-width:220px"></label>
-        <label>发货经度 <input type="number" step="any" id="td-snd-lng" value="${escapeHtml(sndLngVal)}"></label>
-        <label>发货纬度 <input type="number" step="any" id="td-snd-lat" value="${escapeHtml(sndLatVal)}"></label>
-        ${tilesUrl ? '<div id="td-map-snd-fulfill" class="trade-map trade-map-fulfill" title="点击更新发货位置"></div>' : ''}
-        <button type="button" class="btn" id="td-put-sender">保存发货地址与地图点</button>
         <button type="button" class="btn" id="td-confirm-delivery">确认送达（送货上门）</button>
       </div>
       <p class="text-muted">在线商品：确认收款后进入待买方确认收货，无「确认送达」。自提：确认收款后待买方自提。</p>
@@ -1563,10 +1588,6 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
         loadMapLibreScript().then(() => {
           const uTok = buyerTok || sellerTok;
           initMapLibrePicker('td-map-rcv', 'td-rcv-lng', 'td-rcv-lat', tilesUrl, [117.27, 31.86], uTok);
-          initMapLibrePicker('td-map-snd-create', 'td-snd-create-lng', 'td-snd-create-lat', tilesUrl, [117.27, 31.86], uTok);
-          if (document.getElementById('td-map-snd-fulfill')) {
-            initMapLibrePicker('td-map-snd-fulfill', 'td-snd-lng', 'td-snd-lat', tilesUrl, [117.27, 31.86], uTok);
-          }
         }).catch((e) => {
           console.warn('地图加载失败', e);
         });
@@ -1641,23 +1662,15 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
             const receiver = moduleContent.querySelector('#td-receiver').value.trim();
           const rcvLng = parseFloat(moduleContent.querySelector('#td-rcv-lng').value);
           const rcvLat = parseFloat(moduleContent.querySelector('#td-rcv-lat').value);
-          const sndText = moduleContent.querySelector('#td-sender-create')?.value.trim() || '';
-          const sndLng = parseFloat(moduleContent.querySelector('#td-snd-create-lng').value);
-          const sndLat = parseFloat(moduleContent.querySelector('#td-snd-create-lat').value);
             if (!gid) {
                 alert('请填写商品 ID');
                 return;
             }
             try {
               const payload = {goods_id: gid, receiver_addr: receiver};
-              if (sndText) payload.sender_addr = sndText;
               if (!Number.isNaN(rcvLng) && !Number.isNaN(rcvLat)) {
                 payload.receiver_lng = rcvLng;
                 payload.receiver_lat = rcvLat;
-              }
-              if (!Number.isNaN(sndLng) && !Number.isNaN(sndLat)) {
-                payload.sender_lng = sndLng;
-                payload.sender_lat = sndLat;
               }
                 const d = await userApi(buyerTok, '/orders', {
                     method: 'POST',
@@ -1714,32 +1727,6 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
         const t = localStorage.getItem(DEMO_SELLER_TOKEN);
             try {
               await userApi(t, `/orders/${oid}/seller-confirm-payment`, {method: 'POST', body: JSON.stringify({})});
-                renderTradeDemo();
-            } catch (e) {
-                alert(e.message);
-            }
-        });
-        moduleContent.querySelector('#td-put-sender')?.addEventListener('click', async () => {
-            const oid = (localStorage.getItem(DEMO_ORDER_ID) || '').trim();
-            if (!oid) {
-                alert('请先填写订单号');
-                return;
-            }
-            const t = localStorage.getItem(DEMO_SELLER_TOKEN);
-            const addr = moduleContent.querySelector('#td-sender-addr').value.trim();
-          const slng = parseFloat(moduleContent.querySelector('#td-snd-lng').value);
-          const slat = parseFloat(moduleContent.querySelector('#td-snd-lat').value);
-          const putBody = {sender_addr: addr};
-          if (!Number.isNaN(slng) && !Number.isNaN(slat)) {
-            putBody.sender_lng = slng;
-            putBody.sender_lat = slat;
-          }
-          if (!addr && (Number.isNaN(slng) || Number.isNaN(slat))) {
-            alert('请填写发货文字地址，或在地图上选点填写经纬度');
-                return;
-            }
-            try {
-              await userApi(t, `/orders/${oid}`, {method: 'PUT', body: JSON.stringify(putBody)});
                 renderTradeDemo();
             } catch (e) {
                 alert(e.message);

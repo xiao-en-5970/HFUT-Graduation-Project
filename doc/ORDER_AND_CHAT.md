@@ -25,8 +25,10 @@
 
 ## 典型 API 顺序
 
-1. `POST /api/v1/orders` — `{ "goods_id", "receiver_addr"?, "receiver_lat/lng"?, "sender_addr"?, "sender_lat/lng"? }` →
-   状态 **1**，并记录 **买方下单时间**（`buyer_agreed_at`）。地图坐标为 **WGS84**；送货上门算距需**两端均有坐标**（服务端 GraphHopper）。
+1. `POST /api/v1/orders` — `goods_id`、收货 `receiver_*` 可选；**发货**默认取商品的 **文字地址**（`goods_addr`）与 **地图坐标
+   **（`goods_lat`/`goods_lng`，见商品表）；未传 `sender_*` 时由服务端从商品带入订单。亦可显式传 `sender_*` 覆盖（一般不必）。
+   状态 **1**，并记录 **买方下单时间**（`buyer_agreed_at`）。坐标 **WGS84**；送货上门算距需**收发两端均有成对坐标**
+   （GraphHopper）。商品坐标迁移：`package/sql/migrate_goods_location.sql`。
 2. `GET /api/v1/config/map` — 取 Martin `map_tiles_url`，供 MapLibre（需 JWT，`MAP_TILES_URL`）。详见 `doc/AMAP.md`。
 3. `GET/POST /api/v1/orders/:id/messages` — 聊天（未结束前）。`msg_type`：1 文字、2 图片、**3 官方通知**（仅服务端写入）。卖方确认收款、卖方确认送达、买方确认收货时，会向会话插入一条官方文案，买卖双方均可见。需执行 `package/sql/migrate_order_official_message.sql`（或全新库 `create.sql` 已含系统用户 `__order_official__`）。
 4. `POST /api/v1/orders/:id/seller-confirm-payment` — 卖方确认收款 → **2**（在线商品 → **3**）
@@ -34,7 +36,8 @@
 6. `POST .../confirm-receipt` — 买方 → **4**
 7. `POST .../cancel` — 状态 **1、2、3** 可取消 → **5**
 
-卖方更新发货地：`PUT /api/v1/orders/:id` 可传 `sender_addr` 与/或成对 `sender_lat`/`sender_lng`。
+卖方如需临时改发货地（少见）：`PUT /api/v1/orders/:id` 可传 `sender_addr` 与/或成对 `sender_lat`/`sender_lng`；常态应以**商品
+**上的地址与坐标为准。
 
 图片请先走 `POST /api/v1/oss/...` 上传。
 
