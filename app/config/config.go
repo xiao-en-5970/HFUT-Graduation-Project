@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -51,12 +52,10 @@ var (
 	SearchCombinedRelevance    float64 // combined 排序：相关度系数，默认 100
 	SearchCombinedPopularity   float64 // combined 排序：热度系数，默认 0.01
 
-	// 高德地图 Web 服务 Key（用于订单发货/收货地址间步行距离等），见 https://console.amap.com/
-	AmapKey string
-	// 高德 JS API Key（管理后台/前端地图选点；可与 Web 服务 Key 相同或单独创建并勾选「Web端」）
-	AmapWebKey string
-	// 高德 JS API 安全密钥（与 AMAP_WEB_KEY 成对；加载地图前需 window._AMapSecurityConfig.securityJsCode）
-	AmapWebSecurityCode string
+	// Martin 瓦片上游（仅服务端访问，可写 http://127.0.0.1:50001/tiles 或带 {z}/{x}/{y} 的完整模板）
+	MapTilesURL string
+	// 自托管 GraphHopper 根地址（订单步行距离，仅服务端调用），如 http://host:50002
+	GraphHopperBaseURL string
 )
 
 const defaultEnvPath = "/.env"
@@ -114,9 +113,8 @@ func LoadConfigFrom(path string) error {
 	SearchCombinedRelevance = getEnvFloat("SEARCH_COMBINED_RELEVANCE", 100)
 	SearchCombinedPopularity = getEnvFloat("SEARCH_COMBINED_POPULARITY", 0.01)
 
-	AmapKey = getEnv("AMAP_KEY", "")
-	AmapWebKey = getEnv("AMAP_WEB_KEY", "")
-	AmapWebSecurityCode = getEnv("AMAP_WEB_SECURITY_CODE", "")
+	MapTilesURL = strings.TrimSpace(getEnv("MAP_TILES_URL", ""))
+	GraphHopperBaseURL = strings.TrimSpace(getEnv("GRAPHHOPPER_BASE_URL", ""))
 
 	return nil
 }

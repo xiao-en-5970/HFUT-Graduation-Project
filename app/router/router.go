@@ -58,12 +58,9 @@ func PrivateRouter(api *gin.RouterGroup) {
 	}
 	// 帖子（type=1）、提问（type=2）、回答（type=3），三类接口数据隔离+学校隔离
 	api.Use(middleware.LoadUserSchool())
-	// 地图配置（前端选点；需 JWT）
+	// 地图：配置与瓦片转发（Martin 仅服务端可达；需 JWT）
 	api.GET("/config/map", controller.MapConfig)
-	// 地名搜索（手机 App / Web；走服务端 AMAP_KEY，返回 GCJ-02）
-	api.GET("/map/input-tips", controller.MapInputTips)
-	api.GET("/map/place-text", controller.MapPlaceText)
-	api.GET("/map/district", controller.MapDistrict)
+	api.GET("/map/tiles/:z/:x/:y", controller.MapTileProxy)
 	// 聚合搜索：帖子+提问+回答，支持筛选与排序
 	api.GET("/search/articles", controller.SearchArticles)
 	postGroup := api.Group("/post")

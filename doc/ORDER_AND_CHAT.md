@@ -26,15 +26,13 @@
 ## 典型 API 顺序
 
 1. `POST /api/v1/orders` — `{ "goods_id", "receiver_addr"?, "receiver_lat/lng"?, "sender_addr"?, "sender_lat/lng"? }` →
-   状态 **1**，并记录 **买方下单时间**（`buyer_agreed_at`）。文字与地图坐标（GCJ-02）可同时传；送货上门算距优先用两端坐标。
-2. `GET /api/v1/config/map` — 取高德 JS Key，供 Web/H5 地图（需 JWT，`AMAP_WEB_KEY`）。
-3. `GET /api/v1/map/input-tips`、`GET /api/v1/map/place-text` — 搜地名联想 / POI 搜索，返回坐标后填入下单（需 JWT，服务端
-   `AMAP_KEY`）；手机 App 见 `doc/AMAP.md`。
-4. `GET/POST /api/v1/orders/:id/messages` — 聊天（未结束前）
-5. `POST /api/v1/orders/:id/seller-confirm-payment` — 卖方确认收款 → **2**（在线商品 → **3**）
-6. 送货上门：`POST .../confirm-delivery` → **3**；自提：无此步
-7. `POST .../confirm-receipt` — 买方 → **4**
-8. `POST .../cancel` — 状态 **1、2、3** 可取消 → **5**
+   状态 **1**，并记录 **买方下单时间**（`buyer_agreed_at`）。地图坐标为 **WGS84**；送货上门算距需**两端均有坐标**（服务端 GraphHopper）。
+2. `GET /api/v1/config/map` — 取 Martin `map_tiles_url`，供 MapLibre（需 JWT，`MAP_TILES_URL`）。详见 `doc/AMAP.md`。
+3. `GET/POST /api/v1/orders/:id/messages` — 聊天（未结束前）
+4. `POST /api/v1/orders/:id/seller-confirm-payment` — 卖方确认收款 → **2**（在线商品 → **3**）
+5. 送货上门：`POST .../confirm-delivery` → **3**；自提：无此步
+6. `POST .../confirm-receipt` — 买方 → **4**
+7. `POST .../cancel` — 状态 **1、2、3** 可取消 → **5**
 
 卖方更新发货地：`PUT /api/v1/orders/:id` 可传 `sender_addr` 与/或成对 `sender_lat`/`sender_lng`。
 

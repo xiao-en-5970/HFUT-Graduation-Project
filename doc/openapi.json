@@ -489,7 +489,7 @@
       "required": [
         "goods_id"
       ],
-      "description": "创建订单：成功后 order_status=1（待卖方确认收款），buyer_agreed_at=下单时间。收货/发货各支持「文字 + 地图坐标（GCJ-02，成对）」；送货上门算距时优先用两端坐标。",
+      "description": "创建订单：成功后 order_status=1（待卖方确认收款），buyer_agreed_at=下单时间。收货/发货各支持「文字 + 地图坐标（WGS84，成对）」；送货上门算距需两端均有坐标，服务端 GraphHopper 步行路网。",
       "properties": {
         "goods_id": {
           "type": "integer",
@@ -1220,8 +1220,8 @@
         "tags": [
           "配置"
         ],
-        "summary": "高德地图 JS Key + 安全密钥（选点）",
-        "description": "返回 `data.amap_web_key`、`data.amap_security_js_code`。加载地图脚本前须设置 `window._AMapSecurityConfig = { securityJsCode }`。需 JWT；未配置时对应字段为空字符串。",
+        "summary": "地图瓦片 URL 模板（经本 API 转发）",
+        "description": "返回 `data.map_tiles_url`：指向本服务的 `.../api/v1/map/tiles/{z}/{x}/{y}`（绝对 URL）；Martin 上游仅服务端配置 `MAP_TILES_URL`。未配置上游时为空。需 JWT。",
         "security": [
           {
             "BearerAuth": []
@@ -1229,138 +1229,28 @@
         ],
         "responses": {
           "200": {
-            "description": "data: { amap_web_key, amap_security_js_code }"
+            "description": "data: { map_tiles_url }"
           },
           "401": {}
         }
       }
     },
-    "/api/v1/map/district": {
+    "/api/v1/map/tiles/{z}/{x}/{y}": {
       "get": {
-        "tags": [
-          "配置"
-        ],
-        "summary": "行政区下级（省市区级联）",
-        "description": "`keywords` 为 adcode 或名称：默认 `100000` 查中国下一级（省）；再选省 adcode 查市；再选市 adcode 查区县。返回 `data.list[]`：`adcode`、`name`、`center`、`level`。",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
+        "tags": ["配置"],
+        "summary": "矢量瓦片转发（Martin 反向代理）",
+        "description": "JWT 必填；MapLibre 拉瓦片时须带 `Authorization: Bearer`。服务端再请求 `MAP_TILES_URL` 上游。",
+        "security": [{"BearerAuth": []}],
         "parameters": [
-          {
-            "in": "query",
-            "name": "keywords",
-            "type": "string",
-            "description": "默认 100000"
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "type": "integer",
-            "default": 1
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "type": "integer",
-            "default": 20
-          }
+          {"in": "path", "name": "z", "type": "string", "required": true},
+          {"in": "path", "name": "x", "type": "string", "required": true},
+          {"in": "path", "name": "y", "type": "string", "required": true}
         ],
         "responses": {
-          "200": {
-            "description": "data: { list, keywords, page, offset }"
-          },
-          "400": {},
-          "401": {}
-        }
-      }
-    },
-    "/api/v1/map/input-tips": {
-      "get": {
-        "tags": [
-          "配置"
-        ],
-        "summary": "地名输入提示（联想）",
-        "description": "高德输入提示。`keywords` 必填；`city` 可选；`citylimit=1` 时限制在 city 内。返回 `data.list[]`：`name`、`address`、`lng`、`lat`、`has_coord`（GCJ-02）。需配置服务端 `AMAP_KEY`。",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "query",
-            "name": "keywords",
-            "type": "string",
-            "required": true
-          },
-          {
-            "in": "query",
-            "name": "city",
-            "type": "string",
-            "description": "城市名或 adcode"
-          },
-          {
-            "in": "query",
-            "name": "citylimit",
-            "type": "string",
-            "description": "1 或 true 时与 city 联用"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "data: { list }"
-          },
-          "400": {},
-          "401": {}
-        }
-      }
-    },
-    "/api/v1/map/place-text": {
-      "get": {
-        "tags": [
-          "配置"
-        ],
-        "summary": "POI 关键字搜索",
-        "description": "高德地点搜索，适合「搜地名 → 选一条」。`keywords` 必填；`city`、`page`、`offset` 可选。返回 `data.list` 结构同 input-tips。",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "query",
-            "name": "keywords",
-            "type": "string",
-            "required": true
-          },
-          {
-            "in": "query",
-            "name": "city",
-            "type": "string"
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "type": "integer",
-            "default": 1
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "type": "integer",
-            "default": 20,
-            "description": "每页条数，最大 50"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "data: { list, page, offset }"
-          },
-          "400": {},
-          "401": {}
+          "200": {"description": "application/vnd.mapbox-vector-tile 或上游 Content-Type"},
+          "401": {},
+          "502": {"description": "上游不可达"},
+          "503": {"description": "未配置 MAP_TILES_URL"}
         }
       }
     },

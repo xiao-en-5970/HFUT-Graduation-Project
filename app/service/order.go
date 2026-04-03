@@ -10,7 +10,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/amap"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/graphhopper"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 )
 
@@ -29,7 +29,7 @@ func goodAddrForOrder(g *model.Good) string {
 }
 
 // CreateOrderReq 创建订单：直接进入「待卖方确认收款」；buyer_agreed_at 记下单时间（买方契约）
-// 收货/发货各含：文字地址 + 地图选点（GCJ-02 经纬度，成对传）；距离优先用两端坐标计算
+// 收货/发货各含：文字地址 + 地图选点（WGS84 经纬度，成对传）；距离优先用两端坐标经 GraphHopper 步行路网
 type CreateOrderReq struct {
 	GoodsID      uint     `json:"goods_id" binding:"required"`
 	ReceiverAddr string   `json:"receiver_addr"`
@@ -88,7 +88,7 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 		o.SenderLat = req.SenderLat
 		o.SenderLng = req.SenderLng
 	}
-	// 仅「送货上门」计算步行距离：优先两端地图坐标，否则两段文字地址地理编码
+	// 仅「送货上门」计算步行距离：两端均有成对经纬度时经 GraphHopper（需 GRAPHHOPPER_BASE_URL）
 	if good.GoodsType == constant.GoodsTypeDelivery {
 		if d := computeOrderDistanceMeters(ctx, sender, receiver, o.SenderLat, o.SenderLng, o.ReceiverLat, o.ReceiverLng); d != nil {
 			o.DistanceMeters = d
@@ -97,28 +97,21 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 	return dao.Order().Create(ctx.Request.Context(), o)
 }
 
-// computeOrderDistanceMeters 发货地→收货地步行规划距离（米）。需配置 AMAP_KEY；失败返回 nil，不阻断下单。
-// 若收发两端各有成对经纬度，直接测距；否则在两段文字地址均非空时走地理编码再测距。
+// computeOrderDistanceMeters 发货地→收货地步行路径距离（米，GraphHopper foot）。需 GRAPHHOPPER_BASE_URL；仅当两端均有成对经纬度时计算；失败返回 nil。
 func computeOrderDistanceMeters(ctx *gin.Context, senderAddr, receiverAddr string, senderLat, senderLng, receiverLat, receiverLng *float64) *int {
-	if config.AmapKey == "" {
+	_ = senderAddr
+	_ = receiverAddr
+	if config.GraphHopperBaseURL == "" {
 		return nil
 	}
-	if senderLat != nil && senderLng != nil && receiverLat != nil && receiverLng != nil {
-		from := &amap.GeocodeResult{Lng: *senderLng, Lat: *senderLat}
-		to := &amap.GeocodeResult{Lng: *receiverLng, Lat: *receiverLat}
-		m, err := amap.WalkingDistanceMeters(ctx.Request.Context(), config.AmapKey, from, to)
-		if err != nil {
-			return nil
-		}
-		v := m
-		return &v
-	}
-	sa := strings.TrimSpace(senderAddr)
-	ra := strings.TrimSpace(receiverAddr)
-	if sa == "" || ra == "" {
+	if senderLat == nil || senderLng == nil || receiverLat == nil || receiverLng == nil {
 		return nil
 	}
-	m, err := amap.DistanceBetweenAddresses(ctx.Request.Context(), config.AmapKey, sa, ra)
+	m, err := graphhopper.FootRouteDistanceMeters(
+		ctx.Request.Context(),
+		config.GraphHopperBaseURL,
+		*senderLat, *senderLng, *receiverLat, *receiverLng,
+	)
 	if err != nil {
 		return nil
 	}

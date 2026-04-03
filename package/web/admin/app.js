@@ -93,165 +93,104 @@
     const la = Number(lat);
     const ln = Number(lng);
     if (Number.isNaN(la) || Number.isNaN(ln)) return '—';
-    return ln.toFixed(6) + ', ' + la.toFixed(6) + '（经度, 纬度 · GCJ-02）';
+    return ln.toFixed(6) + ', ' + la.toFixed(6) + '（经度, 纬度 · WGS84）';
   }
 
-  let _amapScriptKey = '';
+  function normalizeTilesUrl(u) {
+    let s = (u || '').trim();
+    if (!s) return '';
+    if (s.indexOf('{z}') === -1) s = s.replace(/\/?$/, '') + '/{z}/{x}/{y}';
+    return s;
+  }
 
-  /** 高德 JS API 2.x 需在加载脚本前设置安全密钥，否则地图不显示 */
-  function loadAmapScript(key, securityJsCode) {
-    if (!key) return Promise.reject(new Error('no key'));
-    const sec = securityJsCode != null ? String(securityJsCode) : '';
-    const cacheKey = key + '\0' + sec;
-    if (window.AMap && _amapScriptKey === cacheKey) return Promise.resolve();
-    window._AMapSecurityConfig = { securityJsCode: sec };
+  function cleanupTradeDemoMaps() {
+    if (!window._tradeDemoMaps) return;
+    window._tradeDemoMaps.forEach((m) => { try { m.remove(); } catch (_) {} });
+    window._tradeDemoMaps = [];
+  }
+
+  function loadMapLibreScript() {
+    if (window.maplibregl) return Promise.resolve();
     return new Promise((resolve, reject) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css';
       const s = document.createElement('script');
-      s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(key);
-      s.onload = () => {
-        _amapScriptKey = cacheKey;
-        resolve();
-      };
-      s.onerror = () => reject(new Error('地图脚本加载失败'));
+      s.src = 'https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js';
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('MapLibre 脚本加载失败'));
+      document.head.appendChild(link);
       document.head.appendChild(s);
     });
   }
 
-  /** 点击地图写入经纬度输入框（高德 GCJ-02） */
-  function initMapPicker(containerId, lngId, latId, centerLngLat) {
+  /** Martin 矢量瓦片（经 /api/v1/map/tiles 转发）+ MapLibre；authToken 为买家/卖家 JWT。centerLngLat 为 [lng, lat] */
+  function initMapLibrePicker(containerId, lngId, latId, tilesUrl, centerLngLat, authToken) {
     const el = document.getElementById(containerId);
-    if (!el || !window.AMap) return;
+    if (!el || !window.maplibregl || !tilesUrl) return;
+    if (!window._tradeDemoMaps) window._tradeDemoMaps = [];
     const lngInput = lngId ? document.getElementById(lngId) : null;
     const latInput = latId ? document.getElementById(latId) : null;
     const center = centerLngLat || [117.27, 31.86];
-    const map = new window.AMap.Map(el, {zoom: 15, center: center});
+    const token = authToken ? String(authToken) : '';
+    const map = new maplibregl.Map({
+      container: el,
+      transformRequest: (url, resourceType) => {
+        if (token && resourceType === 'Tile' && String(url).indexOf('/api/v1/map/tiles') !== -1) {
+          return { url, headers: { Authorization: 'Bearer ' + token } };
+        }
+        return { url };
+      },
+      style: {
+        version: 8,
+        sources: {
+          tiles: {
+            type: 'vector',
+            tiles: [tilesUrl],
+            minzoom: 0,
+            maxzoom: 14
+          }
+        },
+        layers: [
+          { id: 'bg', type: 'background', paint: { 'background-color': '#f0f0f0' } },
+          { id: 'water', type: 'fill', source: 'tiles', 'source-layer': 'water', paint: { 'fill-color': '#aad3df' } },
+          { id: 'roads', type: 'line', source: 'tiles', 'source-layer': 'transportation', paint: { 'line-color': '#fff', 'line-width': 1 } },
+          { id: 'buildings', type: 'fill', source: 'tiles', 'source-layer': 'building', paint: { 'fill-color': '#ddd' } }
+        ]
+      },
+      center: center,
+      zoom: 14
+    });
+    window._tradeDemoMaps.push(map);
     let marker = null;
+    map.on('load', () => {
+      map.resize();
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            map.setCenter([pos.coords.longitude, pos.coords.latitude]);
+            map.setZoom(15);
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+        );
+      }
+    });
     if (lngInput && latInput && lngInput.value && latInput.value) {
       const lng = parseFloat(lngInput.value);
       const lat = parseFloat(latInput.value);
       if (!Number.isNaN(lng) && !Number.isNaN(lat)) {
-        marker = new window.AMap.Marker({position: [lng, lat], map: map});
         map.setCenter([lng, lat]);
+        marker = new maplibregl.Marker().setLngLat([lng, lat]).addTo(map);
       }
     }
     map.on('click', (e) => {
-      const lng = e.lnglat.getLng();
-      const lat = e.lnglat.getLat();
+      const lng = e.lngLat.lng;
+      const lat = e.lngLat.lat;
       if (lngInput) lngInput.value = String(lng);
       if (latInput) latInput.value = String(lat);
-      if (marker) marker.setPosition(e.lnglat);
-      else marker = new window.AMap.Marker({position: e.lnglat, map: map});
-    });
-  }
-
-  /**
-   * 交易演示：先选省市区，再搜详细位置（管理员 token 调 /map/district、/map/input-tips）
-   */
-  function setupTradeDistrictCascader(root) {
-    if (!root) return;
-    const prov = root.querySelector('#td-province');
-    const city = root.querySelector('#td-city');
-    const dist = root.querySelector('#td-district');
-    if (!prov || !city || !dist) return;
-
-    function fillSelect(sel, items) {
-      sel.innerHTML = '<option value="">请选择</option>';
-      (items || []).forEach((it) => {
-        const o = document.createElement('option');
-        o.value = it.adcode;
-        o.textContent = it.name;
-        sel.appendChild(o);
-      });
-    }
-
-    function loadDistrict(keywords, targetSelect) {
-      return api('/map/district?keywords=' + encodeURIComponent(keywords) + '&page=1&offset=50').then((d) => {
-        fillSelect(targetSelect, d.data?.list || []);
-      });
-    }
-
-    api('/map/district?keywords=100000&page=1&offset=50').then((d) => {
-      fillSelect(prov, d.data?.list || []);
-      if (!(d.data?.list || []).length) {
-        const hint = document.createElement('p');
-        hint.className = 'text-muted';
-        hint.style.fontSize = '0.85rem';
-        hint.innerHTML = '省列表为空：请确认服务端已配置 <code>AMAP_KEY</code>（Web 服务 Key），并重启 API。';
-        prov.parentElement.insertBefore(hint, prov);
-      }
-    }).catch((e) => {
-      const err = document.createElement('p');
-      err.className = 'error';
-      err.style.fontSize = '0.85rem';
-      err.textContent = '省列表加载失败：' + (e.message || e) + '（需管理员已登录且服务端配置 AMAP_KEY）';
-      prov.parentElement.insertBefore(err, prov);
-    });
-
-    prov.addEventListener('change', () => {
-      city.innerHTML = '<option value="">请选择</option>';
-      dist.innerHTML = '<option value="">请选择</option>';
-      const v = prov.value;
-      if (!v) return;
-      loadDistrict(v, city).catch((e) => alert(e.message));
-    });
-    city.addEventListener('change', () => {
-      dist.innerHTML = '<option value="">请选择</option>';
-      const v = city.value;
-      if (!v) return;
-      loadDistrict(v, dist).catch((e) => alert(e.message));
-    });
-
-    root.querySelector('#td-search-place')?.addEventListener('click', async () => {
-      const kw = root.querySelector('#td-place-keyword')?.value.trim();
-      if (!kw) {
-        alert('请输入搜索关键字');
-        return;
-      }
-      const ad = dist.value || city.value || prov.value || '';
-      let qs = '/map/input-tips?keywords=' + encodeURIComponent(kw);
-      if (ad) {
-        qs += '&city=' + encodeURIComponent(ad) + '&citylimit=1';
-      }
-      try {
-        const d = await api(qs);
-        const list = d.data?.list || [];
-        const box = root.querySelector('#td-search-results');
-        if (!box) return;
-        box.innerHTML = '';
-        if (!list.length) {
-          box.innerHTML = '<p class="text-muted">无结果，可改关键字或先选省市区</p>';
-          return;
-        }
-        const hint = document.createElement('p');
-        hint.className = 'text-muted';
-        hint.textContent = '点击一条填入收货坐标与地址文字：';
-        box.appendChild(hint);
-        list.forEach((it) => {
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'btn btn-sm trade-tip-item';
-          b.textContent = (it.name || '') + (it.address ? ' — ' + it.address : '');
-          if (!it.has_coord) {
-            b.disabled = true;
-            b.title = '无坐标';
-          } else {
-            b.onclick = () => {
-              const lngEl = root.querySelector('#td-rcv-lng');
-              const latEl = root.querySelector('#td-rcv-lat');
-              const ta = root.querySelector('#td-receiver');
-              if (lngEl) lngEl.value = String(it.lng);
-              if (latEl) latEl.value = String(it.lat);
-              if (ta) {
-                const line = [it.name, it.address].filter(Boolean).join(' ');
-                if (line) ta.value = line;
-              }
-            };
-          }
-          box.appendChild(b);
-        });
-      } catch (e) {
-        alert(e.message);
-      }
+      if (marker) marker.setLngLat([lng, lat]);
+      else marker = new maplibregl.Marker().setLngLat([lng, lat]).addTo(map);
     });
   }
 
@@ -289,20 +228,15 @@
         return data;
     }
 
-  /** 返回 { key, security }；高德要求 key + 安全密钥一起用于浏览器地图 */
-  async function fetchMapJsConfig(token) {
-    if (!token) return { key: '', security: '' };
+  /** 返回 { tilesUrl }；Martin 瓦片模板，需服务端 MAP_TILES_URL */
+  async function fetchMapTilesConfig(token) {
+    if (!token) return { tilesUrl: '' };
     try {
       const d = await userApi(token, '/config/map');
       const data = d.data || {};
-      return {
-        key: data.amap_web_key ? String(data.amap_web_key) : '',
-        security: data.amap_security_js_code != null && data.amap_security_js_code !== ''
-          ? String(data.amap_security_js_code)
-          : ''
-      };
+      return { tilesUrl: normalizeTilesUrl(data.map_tiles_url || '') };
     } catch (_) {
-      return { key: '', security: '' };
+      return { tilesUrl: '' };
     }
   }
 
@@ -1310,10 +1244,10 @@
         <div class="order-detail-meta">
           <p><strong>状态</strong> ${o.order_status_label || o.order_status} · 买家 user_id: ${o.user_id} · 商品: ${o.good ? o.good.title : o.goods_id}</p>
           <p><strong>收货（文字）</strong> ${escapeHtml(o.receiver_addr || '')}</p>
-          <p><strong>收货（地图 GCJ-02）</strong> ${formatLngLatPair(o.receiver_lat, o.receiver_lng)}</p>
+          <p><strong>收货（地图 WGS84）</strong> ${formatLngLatPair(o.receiver_lat, o.receiver_lng)}</p>
           <p><strong>发货（文字）</strong> ${escapeHtml(o.sender_addr || '')}</p>
-          <p><strong>发货（地图 GCJ-02）</strong> ${formatLngLatPair(o.sender_lat, o.sender_lng)}</p>
-          <p><strong>收发步行距离</strong> ${formatOrderWalkDistance(o.distance_meters)} <span class="text-muted">（送货上门；有地图坐标时优先按坐标算距，需 AMAP_KEY）</span></p>
+          <p><strong>发货（地图 WGS84）</strong> ${formatLngLatPair(o.sender_lat, o.sender_lng)}</p>
+          <p><strong>收发步行距离</strong> ${formatOrderWalkDistance(o.distance_meters)} <span class="text-muted">（送货上门；两端均有坐标时经 GraphHopper 路网）</span></p>
           <p><strong>买方下单时间</strong> ${(o.buyer_agreed_at || '').slice(0, 19) || '-'} · <strong>卖方确认收款</strong> ${(o.seller_agreed_at || '').slice(0, 19) || '-'}</p>
           <p><strong>完成时间</strong> ${(o.completed_at || '').slice(0, 19) || '-'}</p>
         </div>
@@ -1339,6 +1273,7 @@
      * 管理员 token 不能调 POST /orders，必须在此页分别登录卖家、买家账号。
      */
     async function renderTradeDemo() {
+        cleanupTradeDemoMaps();
         moduleContent.innerHTML = '<p class="text-muted">加载中…</p>';
         const sellerTok = localStorage.getItem(DEMO_SELLER_TOKEN);
         const buyerTok = localStorage.getItem(DEMO_BUYER_TOKEN);
@@ -1365,9 +1300,8 @@
         const gt = order && order.good ? order.good.goods_type : null;
         const os = order ? Number(order.order_status) : 0;
 
-      const mapJs = await fetchMapJsConfig(buyerTok || sellerTok);
-      const mapKey = mapJs.key;
-      const mapSecurity = mapJs.security;
+      const mapCfg = await fetchMapTilesConfig(buyerTok || sellerTok);
+      const tilesUrl = mapCfg.tilesUrl;
       const rcvLngVal = order && order.receiver_lng != null ? String(order.receiver_lng) : '';
       const rcvLatVal = order && order.receiver_lat != null ? String(order.receiver_lat) : '';
       const sndLngVal = order && order.sender_lng != null ? String(order.sender_lng) : '';
@@ -1451,28 +1385,18 @@
 
 <div class="trade-card">
   <h4>1. 买家下单</h4>
-  <p class="text-muted trade-subsection">先选<strong>省 → 市 → 区县</strong>缩小范围，再<strong>搜详细位置</strong>（或直接在地图点选）。需服务端配置 <code>AMAP_KEY</code>；本页用<strong>管理员登录态</strong>调地图接口。</p>
-  <div class="trade-dist-row">
-    <label>省 <select id="td-province"><option value="">请选择</option></select></label>
-    <label>市 <select id="td-city"><option value="">请选择</option></select></label>
-    <label>区县 <select id="td-district"><option value="">请选择</option></select></label>
-  </div>
-  <div class="trade-place-search">
-    <label>搜详细位置 <input type="text" id="td-place-keyword" placeholder="小区、路名、商场等" style="max-width:min(100%,320px)"></label>
-    <button type="button" class="btn btn-sm" id="td-search-place">搜索候选</button>
-  </div>
-  <div id="td-search-results" class="trade-search-results"></div>
+  <p class="text-muted trade-subsection">瓦片经<strong>本 API 转发</strong>，浏览器不直连 Martin。地图以<strong>浏览器定位</strong>为中心（需 HTTPS 或 localhost）；可拖动点选。<strong>详细位置</strong>手写。坐标 <strong>WGS84</strong>。</p>
   <label>商品 ID <input type="number" id="td-goods-id" placeholder="商品管理列表中的 ID" min="1"></label>
-  <label>收货地址（文字） <textarea id="td-receiver" rows="2" placeholder="寝室/楼号等口头描述；可从上一步搜索结果带入"></textarea></label>
-  <label>收货经度 <input type="number" step="any" id="td-rcv-lng" placeholder="地图选点自动填入"></label>
-  <label>收货纬度 <input type="number" step="any" id="td-rcv-lat" placeholder="地图选点自动填入"></label>
-  ${mapKey ? '<div id="td-map-rcv" class="trade-map" title="点击选收货位置"></div><p class="text-muted">收货地图：点击标记（GCJ-02）' + (!mapSecurity ? ' · <strong>未配置安全密钥</strong>时地图可能空白，请在服务端设置 <code>AMAP_WEB_SECURITY_CODE</code>' : '') + '</p>' : '<p class="text-muted">登录买家/卖家账号且服务端配置 <code>AMAP_WEB_KEY</code> 后可加载地图；须同时配置 <code>AMAP_WEB_SECURITY_CODE</code>（与 Key 同控制台获取）。</p>'}
+  <label>详细位置（文字，自填） <textarea id="td-receiver" rows="2" placeholder="寝室、楼号、约定见面点等"></textarea></label>
+  <label>收货经度 <input type="number" step="any" id="td-rcv-lng" placeholder="地图点击填入"></label>
+  <label>收货纬度 <input type="number" step="any" id="td-rcv-lat" placeholder="地图点击填入"></label>
+  ${tilesUrl ? '<div id="td-map-rcv" class="trade-map" title="点击选收货位置"></div><p class="text-muted">收货地图（经 <code>/api/v1/map/tiles</code>）</p>' : '<p class="text-muted">登录买家/卖家且服务端配置 <code>MAP_TILES_URL</code>（Martin 上游，仅后端访问）后可加载地图。</p>'}
   <label>发货地址（文字，可选） <textarea id="td-sender-create" rows="1" placeholder="可与商品默认发货地一致；可空"></textarea></label>
   <label>发货经度 <input type="number" step="any" id="td-snd-create-lng"></label>
   <label>发货纬度 <input type="number" step="any" id="td-snd-create-lat"></label>
-  ${mapKey ? '<div id="td-map-snd-create" class="trade-map" title="点击选发货位置"></div><p class="text-muted">发货地图（可选）：与文字一起提交更准确算距</p>' : ''}
+  ${tilesUrl ? '<div id="td-map-snd-create" class="trade-map" title="点击选发货位置"></div><p class="text-muted">发货地图（可选）</p>' : ''}
   <button type="button" class="btn btn-primary" id="td-create-order">买家下单</button>
-  <p class="text-muted">不能买自己发布的商品。下单后即为<strong>待卖方确认收款</strong>。距离优先用<strong>两端地图坐标</strong>，否则用文字地址地理编码（需 <code>AMAP_KEY</code>）。</p>
+  <p class="text-muted">不能买自己发布的商品。下单后即为<strong>待卖方确认收款</strong>。<strong>送货上门算距</strong>需收发两端均有经纬度，由服务端调用 GraphHopper（<code>GRAPHHOPPER_BASE_URL</code>）。</p>
 </div>
 
 <div class="trade-card">
@@ -1510,7 +1434,7 @@
     <label>卖方发货地址（文字） <input type="text" id="td-sender-addr" value="${senderAddrVal}" placeholder="送货上门时可填" style="min-width:220px"></label>
     <label>发货经度 <input type="number" step="any" id="td-snd-lng" value="${escapeHtml(sndLngVal)}"></label>
     <label>发货纬度 <input type="number" step="any" id="td-snd-lat" value="${escapeHtml(sndLatVal)}"></label>
-    ${mapKey ? '<div id="td-map-snd-fulfill" class="trade-map" title="点击更新发货位置"></div>' : ''}
+    ${tilesUrl ? '<div id="td-map-snd-fulfill" class="trade-map" title="点击更新发货位置"></div>' : ''}
     <button type="button" class="btn" id="td-put-sender">保存发货地址与地图点（卖方）</button>
     <button type="button" class="btn" id="td-confirm-delivery">确认送达（卖方·送货上门）</button>
     <button type="button" class="btn btn-primary" id="td-confirm-receipt">确认收货（买方）</button>
@@ -1522,14 +1446,13 @@
         const chatLog = moduleContent.querySelector('#td-chat-log');
         if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
 
-      setupTradeDistrictCascader(moduleContent);
-
-      if (mapKey) {
-        loadAmapScript(mapKey, mapSecurity).then(() => {
-          initMapPicker('td-map-rcv', 'td-rcv-lng', 'td-rcv-lat', [117.27, 31.86]);
-          initMapPicker('td-map-snd-create', 'td-snd-create-lng', 'td-snd-create-lat', [117.27, 31.86]);
+      if (tilesUrl) {
+        loadMapLibreScript().then(() => {
+          const uTok = buyerTok || sellerTok;
+          initMapLibrePicker('td-map-rcv', 'td-rcv-lng', 'td-rcv-lat', tilesUrl, [117.27, 31.86], uTok);
+          initMapLibrePicker('td-map-snd-create', 'td-snd-create-lng', 'td-snd-create-lat', tilesUrl, [117.27, 31.86], uTok);
           if (document.getElementById('td-map-snd-fulfill')) {
-            initMapPicker('td-map-snd-fulfill', 'td-snd-lng', 'td-snd-lat', [117.27, 31.86]);
+            initMapLibrePicker('td-map-snd-fulfill', 'td-snd-lng', 'td-snd-lat', tilesUrl, [117.27, 31.86], uTok);
           }
         }).catch((e) => {
           console.warn('地图加载失败', e);

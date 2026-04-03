@@ -6,21 +6,33 @@
 
 ---
 
-## 2026-04-03（地图：省市区级联 + 搜详细位置）
+## 2026-04-03（地图瓦片经 API 反向代理）
 
-### 新增
+- `GET /api/v1/config/map` 返回的 `map_tiles_url` 指向本服务 `.../api/v1/map/tiles/{z}/{x}/{y}`；`MAP_TILES_URL` 仅为服务端访问 Martin 的上游地址。
+- 新增 `GET /api/v1/map/tiles/:z/:x/:y`（JWT），MapLibre 拉瓦片需 `Authorization: Bearer`。
 
-| 接口                           | 说明                                              |
-|------------------------------|-------------------------------------------------|
-| `GET /api/v1/map/district`   | 高德行政区下级，省→市→区级联（`keywords` 用 adcode，如 `100000`） |
-| `GET /api/v1/map/input-tips` | 高德输入提示，`keywords` 必填                            |
-| `GET /api/v1/map/place-text` | 高德 POI 关键字搜索                                    |
+---
 
-均需 JWT；使用服务端 `AMAP_KEY`。手机 App 与 `doc/AMAP.md` 说明一致。
+## 2026-04-03（地图：自托管 Martin + GraphHopper，移除高德）
+
+### 废弃 / 移除
+
+| 接口 | 说明 |
+|------|------|
+| `GET /api/v1/map/district`、`/map/input-tips`、`/map/place-text` | 已删除；不再提供行政区级联与高德 POI 搜索 |
+
+### 修改
+
+| 接口 | 说明 |
+|------|------|
+| `GET /api/v1/config/map` | 返回 `map_tiles_url`（Martin 模板）；环境变量 `MAP_TILES_URL` |
+| `POST/PUT` 订单算距 | 送货上门时仅当**收发均有经纬度**时由服务端调 GraphHopper `foot` 路径距离；`GRAPHHOPPER_BASE_URL` |
+
+坐标：**WGS84**。详见 `doc/AMAP.md`。
 
 ### 管理后台
 
-- 「交易演示」：先选省/市/区县，再「搜详细位置」；候选点选填入收货文字与坐标（管理员登录态调接口）。
+- 「交易演示」：浏览器定位 + MapLibre 点选；详细地址手填字符串。
 
 ---
 
@@ -30,13 +42,13 @@
 
 | 接口                       | 说明                                                          |
 |--------------------------|-------------------------------------------------------------|
-| `GET /api/v1/config/map` | 返回 `amap_web_key`、`amap_security_js_code`（需 JWT）；环境变量 `AMAP_WEB_KEY`、`AMAP_WEB_SECURITY_CODE`。 |
+| `GET /api/v1/config/map` | 返回 `map_tiles_url`（需 JWT）；`MAP_TILES_URL`。 |
 
 ### 修改
 
 | 接口                       | 变更说明                                                                                              |
 |--------------------------|---------------------------------------------------------------------------------------------------|
-| `POST /api/v1/orders`    | 可选 `receiver_lat/lng`、`sender_lat/lng`（GCJ-02，成对）。送货上门算距：**两端均有坐标**时按坐标测距，否则两段**文字地址均非空**时地理编码测距。 |
+| `POST /api/v1/orders`    | 可选 `receiver_lat/lng`、`sender_lat/lng`（WGS84，成对）。送货上门算距：仅**两端均有坐标**时 GraphHopper 步行路网。 |
 | `PUT /api/v1/orders/:id` | 卖方可传成对 `sender_lat`/`sender_lng`；与 `sender_addr` 可组合。                                             |
 
 ### 数据库

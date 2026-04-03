@@ -268,10 +268,10 @@ ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS sender_lat DOUBLE PRECISION;
 ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS sender_lng DOUBLE PRECISION;
-COMMENT ON COLUMN orders.receiver_lat IS '收货地图选点纬度 GCJ-02';
-COMMENT ON COLUMN orders.receiver_lng IS '收货地图选点经度 GCJ-02';
-COMMENT ON COLUMN orders.sender_lat IS '发货地图选点纬度 GCJ-02';
-COMMENT ON COLUMN orders.sender_lng IS '发货地图选点经度 GCJ-02';
+COMMENT ON COLUMN orders.receiver_lat IS '收货地图选点纬度 WGS84';
+COMMENT ON COLUMN orders.receiver_lng IS '收货地图选点经度 WGS84';
+COMMENT ON COLUMN orders.sender_lat IS '发货地图选点纬度 WGS84';
+COMMENT ON COLUMN orders.sender_lng IS '发货地图选点经度 WGS84';
 
 ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS buyer_agreed_at TIMESTAMP;
