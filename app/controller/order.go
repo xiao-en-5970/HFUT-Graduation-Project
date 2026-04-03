@@ -42,6 +42,14 @@ func OrderCreate(ctx *gin.Context) {
 			reply.ReplyErrWithMessage(ctx, "库存不足")
 			return
 		}
+		if errors.Is(err, errno.ErrOrderReceiverLocationRequired) {
+			reply.ReplyErrWithMessage(ctx, "请选择收货地址")
+			return
+		}
+		if errors.Is(err, errno.ErrUserLocationNotFound) {
+			reply.ReplyErrWithMessage(ctx, "收货地址不存在或已删除")
+			return
+		}
 		reply.ReplyErrWithMessage(ctx, err.Error())
 		return
 	}
@@ -99,6 +107,11 @@ func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 		"buyer_confirm_images": oss.TransformImageURLs([]string(o.BuyerConfirmImages)),
 		"completed_at":         o.CompletedAt,
 		"created_at":           o.CreatedAt,
+	}
+	if o.ReceiverUserLocationID != nil {
+		m["receiver_user_location_id"] = *o.ReceiverUserLocationID
+	} else {
+		m["receiver_user_location_id"] = nil
 	}
 	if o.DistanceMeters != nil {
 		m["distance_meters"] = *o.DistanceMeters

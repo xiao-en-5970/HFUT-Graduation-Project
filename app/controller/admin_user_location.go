@@ -48,6 +48,30 @@ func AdminUserLocationList(ctx *gin.Context) {
 	reply.ReplyOKWithData(ctx, gin.H{"list": out, "total": total, "page": page, "page_size": pageSize})
 }
 
+// AdminUserLocationCreate POST /admin/user-locations 为指定用户新增地址
+func AdminUserLocationCreate(ctx *gin.Context) {
+	var body struct {
+		UserID    uint     `json:"user_id" binding:"required"`
+		Label     string   `json:"label"`
+		Addr      string   `json:"addr" binding:"required"`
+		Lat       *float64 `json:"lat"`
+		Lng       *float64 `json:"lng"`
+		IsDefault bool     `json:"is_default"`
+	}
+	if err := ctx.BindJSON(&body); err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	id, err := service.UserLocation().AdminCreate(ctx, body.UserID, service.UserLocationCreateReq{
+		Label: body.Label, Addr: body.Addr, Lat: body.Lat, Lng: body.Lng, IsDefault: body.IsDefault,
+	})
+	if err != nil {
+		reply.ReplyErrWithMessage(ctx, err.Error())
+		return
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"id": id})
+}
+
 // AdminUserLocationDelete DELETE /admin/user-locations/:id 软删除
 func AdminUserLocationDelete(ctx *gin.Context) {
 	id, ok := parseID(ctx, "id")

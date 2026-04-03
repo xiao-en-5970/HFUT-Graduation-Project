@@ -17,12 +17,13 @@ var ErrGoodNotFoundOrNoPermission = errors.New("商品不存在或无权限")
 
 // 订单
 var (
-	ErrOrderGoodNotFound      = errors.New("商品不存在或已下架")
-	ErrOrderGoodNotOnSale     = errors.New("商品未上架")
-	ErrOrderInsufficientStock = errors.New("库存不足")
-	ErrOrderNotFound          = errors.New("订单不存在")
-	ErrOrderInvalidState      = errors.New("订单状态不允许此操作")
-	ErrOrderNotParticipant    = errors.New("不是该订单的买方或卖方")
+	ErrOrderGoodNotFound             = errors.New("商品不存在或已下架")
+	ErrOrderGoodNotOnSale            = errors.New("商品未上架")
+	ErrOrderInsufficientStock        = errors.New("库存不足")
+	ErrOrderNotFound                 = errors.New("订单不存在")
+	ErrOrderInvalidState             = errors.New("订单状态不允许此操作")
+	ErrOrderNotParticipant           = errors.New("不是该订单的买方或卖方")
+	ErrOrderReceiverLocationRequired = errors.New("请选择收货地址")
 )
 
 // 评论

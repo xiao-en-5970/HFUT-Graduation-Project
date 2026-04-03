@@ -12,6 +12,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/graphhopper"
+	"gorm.io/gorm"
 )
 
 type orderService struct{}
@@ -29,15 +30,14 @@ func goodAddrForOrder(g *model.Good) string {
 }
 
 // CreateOrderReq 创建订单：直接进入「待卖方确认收款」；buyer_agreed_at 记下单时间（买方契约）
-// 收货：买方传 receiver_*（算距须成对传 receiver_lat/lng，表示买方/收货地图点）。发货：未传 sender_* 时由服务端用商品的 goods_addr 与 goods_lat/goods_lng（若有）写入订单（自提点=商品坐标）；仍可显式传 sender_* 覆盖。
+// 收货：必选买方地址簿 user_location_id（GET /user/locations）；服务端写入 receiver_* 快照与 receiver_user_location_id。
+// 发货：未传 sender_* 时由商品 goods_addr / goods_lat|lng 写入；可显式传 sender_* 覆盖。
 type CreateOrderReq struct {
-	GoodsID      uint     `json:"goods_id" binding:"required"`
-	ReceiverAddr string   `json:"receiver_addr"`
-	SenderAddr   string   `json:"sender_addr"`
-	ReceiverLat  *float64 `json:"receiver_lat"`
-	ReceiverLng  *float64 `json:"receiver_lng"`
-	SenderLat    *float64 `json:"sender_lat"`
-	SenderLng    *float64 `json:"sender_lng"`
+	GoodsID        uint     `json:"goods_id" binding:"required"`
+	UserLocationID uint     `json:"user_location_id" binding:"required"`
+	SenderAddr     string   `json:"sender_addr"`
+	SenderLat      *float64 `json:"sender_lat"`
+	SenderLng      *float64 `json:"sender_lng"`
 }
 
 // UpdateSellerAddrReq 卖方更新发货文字与地图坐标（坐标须成对传才写入）
@@ -48,6 +48,16 @@ type UpdateSellerAddrReq struct {
 }
 
 func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req CreateOrderReq) (uint, error) {
+	if req.UserLocationID == 0 {
+		return 0, errno.ErrOrderReceiverLocationRequired
+	}
+	loc, err := dao.UserLocation().GetByIDAndUserID(ctx.Request.Context(), req.UserLocationID, buyerID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, errno.ErrUserLocationNotFound // 地址不存在、非本人或已删除
+		}
+		return 0, err
+	}
 	good, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), req.GoodsID, schoolID)
 	if err != nil || good == nil {
 		return 0, errno.ErrOrderGoodNotFound
@@ -63,26 +73,25 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 	}
 	uid := int(buyerID)
 	gid := int(req.GoodsID)
-	receiver := strings.TrimSpace(req.ReceiverAddr)
-	if receiver == "" && good.GoodsType == constant.GoodsTypePickup {
-		receiver = goodAddrForOrder(good)
-	}
+	receiver := strings.TrimSpace(loc.Addr)
 	sender := strings.TrimSpace(req.SenderAddr)
 	if sender == "" {
 		sender = goodAddrForOrder(good)
 	}
 	now := time.Now()
+	lid := loc.ID
 	o := &model.Order{
-		UserID:        &uid,
-		GoodsID:       &gid,
-		OrderStatus:   constant.OrderStatusAwaitSellerPaymentConfirm,
-		ReceiverAddr:  receiver,
-		SenderAddr:    sender,
-		BuyerAgreedAt: &now,
+		UserID:                 &uid,
+		GoodsID:                &gid,
+		OrderStatus:            constant.OrderStatusAwaitSellerPaymentConfirm,
+		ReceiverUserLocationID: &lid,
+		ReceiverAddr:           receiver,
+		SenderAddr:             sender,
+		BuyerAgreedAt:          &now,
 	}
-	if req.ReceiverLat != nil && req.ReceiverLng != nil {
-		o.ReceiverLat = copyFloatPtr(*req.ReceiverLat)
-		o.ReceiverLng = copyFloatPtr(*req.ReceiverLng)
+	if loc.Lat != nil && loc.Lng != nil {
+		o.ReceiverLat = copyFloatPtr(*loc.Lat)
+		o.ReceiverLng = copyFloatPtr(*loc.Lng)
 	}
 	if req.SenderLat != nil && req.SenderLng != nil {
 		o.SenderLat = copyFloatPtr(*req.SenderLat)

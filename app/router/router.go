@@ -211,6 +211,7 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.GET("/orders/:id/messages", controller.AdminOrderMessages)
 		adminGroup.GET("/orders/:id", controller.AdminOrderGet)
 		adminGroup.GET("/user-locations", controller.AdminUserLocationList)
+		adminGroup.POST("/user-locations", controller.AdminUserLocationCreate)
 		adminGroup.DELETE("/user-locations/:id", controller.AdminUserLocationDelete)
 	}
 }

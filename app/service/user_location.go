@@ -52,6 +52,24 @@ func (s *userLocationService) List(ctx *gin.Context, userID uint) ([]*model.User
 }
 
 func (s *userLocationService) Create(ctx *gin.Context, userID uint, req UserLocationCreateReq) (uint, error) {
+	return s.createForUser(ctx, userID, req)
+}
+
+// AdminCreate 管理端为指定用户新增收货地址
+func (s *userLocationService) AdminCreate(ctx *gin.Context, targetUserID uint, req UserLocationCreateReq) (uint, error) {
+	if targetUserID == 0 {
+		return 0, errors.New("user_id 无效")
+	}
+	if _, err := dao.User().GetByID(ctx.Request.Context(), targetUserID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, errors.New("用户不存在")
+		}
+		return 0, err
+	}
+	return s.createForUser(ctx, targetUserID, req)
+}
+
+func (s *userLocationService) createForUser(ctx *gin.Context, userID uint, req UserLocationCreateReq) (uint, error) {
 	addr := strings.TrimSpace(req.Addr)
 	if err := validateUserLocationAddr(addr); err != nil {
 		return 0, err
