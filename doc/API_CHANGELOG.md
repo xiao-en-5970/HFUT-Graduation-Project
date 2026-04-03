@@ -6,6 +6,15 @@
 
 ---
 
+## 2026-04-03（下单必选地址簿；订单 receiver_user_location_id）
+
+- **Breaking：** `POST /api/v1/orders` 必填 **`user_location_id`**（买方 `user_locations` 有效记录）；不再接受直接传
+  `receiver_addr` / `receiver_lat` / `receiver_lng` 作为下单主路径。
+- 订单表新增 **`receiver_user_location_id`**（迁移 `package/sql/migrate_order_receiver_user_location.sql`），详情接口返回该字段。
+- 管理端 `POST /api/v1/admin/user-locations` 为指定用户新增地址；后台「收货地址」页提供 **新增地址** 按钮。
+
+---
+
 ## 2026-04-03（用户收货地址 user_locations）
 
 - 新增表 **`user_locations`**：多地址、`is_default` 默认、`status` 1 正常 2 软删除；迁移脚本 `package/sql/migrate_user_location.sql`。
@@ -83,10 +92,10 @@
 
 ### 修改（Breaking）
 
-| 接口                                         | 变更说明                                                                                                                                                   |
-|--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `POST /api/v1/orders`                      | **请求体**：仅 `goods_id`（必填）、`receiver_addr`、`sender_addr`。**不再**接受 `buyer_claim_paid` 等字段。创建成功后 **order_status 恒为 1**（待卖方确认收款），`buyer_agreed_at` 为买方下单时间。 |
-| `POST /api/v1/orders/:id/buyer-claim-paid` | **已删除**（路由不存在，调用将 404）。线下付款不再通过单独接口声明；以卖方 `seller-confirm-payment` 为准。                                                                                 |
+| 接口                                         | 变更说明                                                                                                                                                                 |
+|--------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `POST /api/v1/orders`                      | **请求体**：`goods_id`、`user_location_id`（必填，买方地址簿）、可选 `sender_*`。**不再**接受 `buyer_claim_paid` 等字段。创建成功后 **order_status 恒为 1**，`buyer_agreed_at` 为买方下单时间。详见上方「下单必选地址簿」条目。 |
+| `POST /api/v1/orders/:id/buyer-claim-paid` | **已删除**（路由不存在，调用将 404）。线下付款不再通过单独接口声明；以卖方 `seller-confirm-payment` 为准。                                                                                               |
 
 ### 订单状态 `order_status`（5 档）
 

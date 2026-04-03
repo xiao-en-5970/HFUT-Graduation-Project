@@ -1321,6 +1321,7 @@
             overlay.innerHTML = `<div class="modal modal-wide"><h4>订单 #${orderId}</h4>
         <div class="order-detail-meta">
           <p><strong>状态</strong> ${o.order_status_label || o.order_status} · 买家 user_id: ${o.user_id} · 商品: ${o.good ? o.good.title : o.goods_id}</p>
+          <p><strong>收货地址簿 ID</strong> ${o.receiver_user_location_id != null ? o.receiver_user_location_id : '—'}</p>
           <p><strong>收货（文字）</strong> ${escapeHtml(o.receiver_addr || '')}</p>
           <p><strong>收货（地图 WGS84）</strong> ${formatLngLatPair(o.receiver_lat, o.receiver_lng)}</p>
           <p><strong>发货（文字）</strong> ${escapeHtml(o.sender_addr || '')}</p>
@@ -1379,6 +1380,7 @@
                     : '<span class="text-muted">—</span>';
             });
             const extra = '<div class="filter-row" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">' +
+                '<button type="button" class="btn btn-sm btn-success" id="ul-add">新增地址</button>' +
                 '<label>用户ID <input type="number" min="0" id="ul-filter-uid" placeholder="全部" value="' + escapeHtml(userLocationsUserId || '') + '" style="width:7rem"/></label>' +
                 '<label><input type="checkbox" id="ul-filter-all"' + (userLocationsAllStatus ? ' checked' : '') + '/> 含已删除</label>' +
                 '<button type="button" class="btn btn-sm btn-primary" id="ul-filter-apply">应用</button>' +
@@ -1393,6 +1395,33 @@
                 userLocationsPage = 1;
                 renderUserLocations();
             });
+          moduleContent.querySelector('#ul-add')?.addEventListener('click', () => {
+            showModal('新增收货地址', '<p class="text-muted">为指定用户录入地址（与 App 地址簿一致）。经纬度可空；若只填一个请都留空。</p>' +
+                '<label>用户ID（必填）<input type="number" id="ul-new-uid" min="1" style="width:100%;max-width:16rem"/></label>' +
+                '<label>标签 <input type="text" id="ul-new-label" placeholder="如 寝室" style="width:100%;max-width:24rem"/></label>' +
+                '<label>详细地址（必填）<textarea id="ul-new-addr" rows="2" style="width:100%;max-width:28rem"></textarea></label>' +
+                '<label>经度 WGS84 <input type="number" step="any" id="ul-new-lng"/></label> ' +
+                '<label>纬度 <input type="number" step="any" id="ul-new-lat"/></label>' +
+                '<label><input type="checkbox" id="ul-new-def"/> 设为默认</label>', async (ov) => {
+              const uid = parseInt(ov.querySelector('#ul-new-uid').value || '0', 10);
+              const addr = ov.querySelector('#ul-new-addr').value.trim();
+              if (!uid || !addr) throw new Error('用户ID 与详细地址必填');
+              const lng = parseFloat(ov.querySelector('#ul-new-lng').value);
+              const lat = parseFloat(ov.querySelector('#ul-new-lat').value);
+              const body = {
+                user_id: uid,
+                addr: addr,
+                label: ov.querySelector('#ul-new-label').value.trim(),
+                is_default: !!ov.querySelector('#ul-new-def').checked
+              };
+              if (!Number.isNaN(lng) && !Number.isNaN(lat)) {
+                body.lng = lng;
+                body.lat = lat;
+              }
+              await api('/admin/user-locations', {method: 'POST', body: JSON.stringify(body)});
+              renderUserLocations();
+            });
+          });
             moduleContent.querySelectorAll('[data-ul-del]').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     if (!confirm('确定软删除该收货地址？')) return;
@@ -1511,10 +1540,27 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
         const gt = order && order.good ? order.good.goods_type : null;
         const os = order ? Number(order.order_status) : 0;
 
-      const mapCfg = await fetchMapTilesConfig(buyerTok || sellerTok);
-      const tilesUrl = mapCfg.tilesUrl;
-      const rcvLngVal = order && order.receiver_lng != null ? String(order.receiver_lng) : '';
-      const rcvLatVal = order && order.receiver_lat != null ? String(order.receiver_lat) : '';
+      let buyerLocations = [];
+      if (buyerTok) {
+        try {
+          const lr = await userApi(buyerTok, '/user/locations');
+          buyerLocations = lr.data?.list || [];
+        } catch (_) {
+          buyerLocations = [];
+        }
+      }
+      buyerLocations = [...buyerLocations].sort((a, b) => Number(!!b.is_default) - Number(!!a.is_default));
+      let tdLocOptions = '';
+      if (buyerLocations.length) {
+        tdLocOptions = buyerLocations.map((l) => {
+          const sel = l.is_default ? ' selected' : '';
+          const lab = escapeHtml(String(l.label || '未命名').slice(0, 20));
+          const ad = escapeHtml(String(l.addr || '').slice(0, 28));
+          return '<option value="' + l.id + '"' + sel + '>' + lab + ' · ' + ad + '</option>';
+        }).join('');
+      } else {
+        tdLocOptions = '<option value="">（无收货地址，请先新增）</option>';
+      }
 
         const msgHtml = msgs.length
             ? msgs.map(m => {
@@ -1559,8 +1605,8 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
   <p><strong>说明：</strong>管理员登录仅用于进后台；<strong>下单、聊天、确认收货</strong>必须使用<strong>普通用户</strong>的账号密码登录（与 App 相同接口）。买卖双方须<strong>绑定同一学校</strong>，且商品的 <code>user_id</code> 为卖家、<code>school_id</code> 一致。</p>
   <ol class="trade-steps">
     <li>在「用户管理」建两个普通用户并绑定同一学校；在「商品管理」新建商品：填写<strong>商品地址</strong>并在地图上选<strong>发货地坐标</strong>（与 App 一致），保存后<strong>上架</strong>。</li>
-    <li>页面<strong>左侧为买方</strong>、<strong>右侧为卖方</strong>：买方只填<strong>收货位置</strong>；卖方发货地以商品为准，无需再填发货位置。</li>
-    <li>左栏填商品 ID 与收货地址，点<strong>买家下单</strong> → 右栏<strong>确认收款</strong> → 按类型派送/自提 → 左栏<strong>确认收货</strong>。关键节点会插入<strong>官方</strong>聊天提示。</li>
+    <li>页面<strong>左侧为买方</strong>、<strong>右侧为卖方</strong>：买方须在<strong>地址簿</strong>中选一条收货地址（默认项优先）；卖方发货地在<strong>商品</strong>里选点维护。</li>
+    <li>左栏填商品 ID、选择<strong>收货地址</strong>后点<strong>买家下单</strong>（需先为买家账号新增至少一条地址，可在「收货地址」管理页代录）→ 右栏<strong>确认收款</strong> → 按类型派送/自提 → 左栏<strong>确认收货</strong>。</li>
   </ol>
 </div>
 
@@ -1576,6 +1622,7 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
     <p><strong>状态</strong> ${escapeHtml(String(order.order_status_label || ''))} <code>(${os})</code></p>
     <p><strong>买家 user_id</strong> ${buyerUid ?? '-'} · <strong>卖家 user_id</strong> ${sellerUid ?? '-'}</p>
     <p><strong>商品类型</strong> ${gt != null ? (GOODS_TYPE_MAP[gt] || gt) : '-'}</p>
+    <p><strong>收货地址簿 ID</strong> ${order.receiver_user_location_id != null ? escapeHtml(String(order.receiver_user_location_id)) : '—'}</p>
     <p><strong>收货（文字）</strong> ${escapeHtml(order.receiver_addr || '')}</p>
     <p><strong>收货（地图）</strong> ${escapeHtml(formatLngLatPair(order.receiver_lat, order.receiver_lng))}</p>
     <p><strong>发货（文字）</strong> ${escapeHtml(order.sender_addr || '')} <span class="text-muted">（默认来自商品）</span></p>
@@ -1604,16 +1651,10 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
     </div>
     <div class="trade-card trade-card-order">
       <h4>买家下单</h4>
-      <p class="text-muted trade-subsection">请先<strong>登录买家</strong>（或至少一方登录以加载地图）。瓦片经 <code>/api/v1/map/tiles</code> 转发；买方只需选<strong>收货点</strong>；卖方发货地已在<strong>商品</strong>里维护。</p>
+      <p class="text-muted trade-subsection">请先<strong>登录买家</strong>。下单须从<strong>地址簿</strong>选择一条（<code>GET /user/locations</code>）；默认地址会预选。无地址时请先到「收货地址」页为<strong>该用户</strong>新增，或用 App 自行维护。</p>
       <label>商品 ID <input type="number" id="td-goods-id" placeholder="商品管理列表中的 ID" min="1"></label>
-      <h5 class="trade-order-map-title">收货位置（地图选点）</h5>
-      ${tilesUrl ? '<div id="td-map-rcv" class="trade-map trade-map-order" title="点击选收货位置"></div><p class="text-muted trade-map-hint">在地图上点击即可写入下方经纬度；可拖动、缩放。浏览器定位需 HTTPS 或 localhost。</p>' : '<p class="error">无法显示地图：请<strong>登录买家或卖家</strong>，并配置服务端 <code>MAP_TILES_URL</code>。</p>'}
-      <div class="trade-order-coords">
-        <label>收货经度 <input type="number" step="any" id="td-rcv-lng" placeholder="地图点击填入" value="${escapeHtml(rcvLngVal)}"></label>
-        <label>收货纬度 <input type="number" step="any" id="td-rcv-lat" placeholder="地图点击填入" value="${escapeHtml(rcvLatVal)}"></label>
-        <button type="button" class="btn btn-sm" id="td-copy-rcv">复制收货坐标</button>
-      </div>
-      <label>详细位置（文字） <textarea id="td-receiver" rows="2" placeholder="寝室、楼号、约定见面点等"></textarea></label>
+      <label>收货地址 <select id="td-user-location-id" style="max-width:100%">${tdLocOptions}</select></label>
+      <p class="text-muted trade-map-hint">地址文字与坐标来自地址簿快照，写入订单。</p>
       <button type="button" class="btn btn-primary" id="td-create-order">买家下单</button>
       <p class="text-muted">不能买自己发布的商品。下单后即为<strong>待卖方确认收款</strong>。</p>
     </div>
@@ -1650,15 +1691,6 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
 
         const chatLog = moduleContent.querySelector('#td-chat-log');
         if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
-
-      if (tilesUrl) {
-        loadMapLibreScript().then(() => {
-          const uTok = buyerTok || sellerTok;
-          initMapLibrePicker('td-map-rcv', 'td-rcv-lng', 'td-rcv-lat', tilesUrl, [117.27, 31.86], uTok);
-        }).catch((e) => {
-          console.warn('地图加载失败', e);
-        });
-      }
 
         moduleContent.querySelector('#td-login-seller')?.addEventListener('click', async () => {
             const u = moduleContent.querySelector('#td-seller-user').value.trim();
@@ -1706,42 +1738,25 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
             renderTradeDemo();
         });
         moduleContent.querySelector('#td-refresh')?.addEventListener('click', () => renderTradeDemo());
-        moduleContent.querySelector('#td-copy-rcv')?.addEventListener('click', () => {
-            const lng = moduleContent.querySelector('#td-rcv-lng')?.value.trim();
-            const lat = moduleContent.querySelector('#td-rcv-lat')?.value.trim();
-            if (!lng || !lat) {
-                alert('请先在收货地图上点击选点');
-                return;
-            }
-            const text = lng + ',' + lat;
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text).then(() => alert('已复制：' + text)).catch(() => prompt('请手动复制', text));
-            } else {
-                prompt('请手动复制', text);
-            }
-        });
         moduleContent.querySelector('#td-create-order')?.addEventListener('click', async () => {
             if (!buyerTok) {
                 alert('请先登录买家');
                 return;
             }
             const gid = parseInt(moduleContent.querySelector('#td-goods-id').value || '0', 10);
-            const receiver = moduleContent.querySelector('#td-receiver').value.trim();
-          const rcvLng = parseFloat(moduleContent.querySelector('#td-rcv-lng').value);
-          const rcvLat = parseFloat(moduleContent.querySelector('#td-rcv-lat').value);
+          const ulid = parseInt(moduleContent.querySelector('#td-user-location-id')?.value || '0', 10);
             if (!gid) {
                 alert('请填写商品 ID');
                 return;
             }
+          if (!ulid) {
+            alert('请选择收货地址（请先在「收货地址」页为该买家新增，或登录 App 维护地址簿）');
+            return;
+          }
             try {
-              const payload = {goods_id: gid, receiver_addr: receiver};
-              if (!Number.isNaN(rcvLng) && !Number.isNaN(rcvLat)) {
-                payload.receiver_lng = rcvLng;
-                payload.receiver_lat = rcvLat;
-              }
                 const d = await userApi(buyerTok, '/orders', {
                     method: 'POST',
-                  body: JSON.stringify(payload)
+                  body: JSON.stringify({goods_id: gid, user_location_id: ulid})
                 });
                 const id = d.data?.id;
                 if (id) {

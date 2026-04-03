@@ -508,27 +508,18 @@
     "OrderCreateBody": {
       "type": "object",
       "required": [
-        "goods_id"
+        "goods_id",
+        "user_location_id"
       ],
-      "description": "创建订单：成功后 order_status=1（待卖方确认收款），buyer_agreed_at=下单时间。收货/发货各支持「文字 + 地图坐标（WGS84，成对）」。送货上门/自提算距：需商品有 goods_lat/lng（默认写入订单 sender_*）且买方传成对 receiver_lat/lng；服务端 GraphHopper 步行路网；需 GRAPHHOPPER_BASE_URL。",
+      "description": "创建订单：成功后 order_status=1（待卖方确认收款），buyer_agreed_at=下单时间。收货须从买方地址簿 `GET /user/locations` 选一条 `user_location_id`（服务端快照写入 receiver_* 与 receiver_user_location_id）。送货上门/自提算距：商品有 goods_lat/lng（默认 sender_*）且地址簿有成对 lat/lng 时 GraphHopper；需 GRAPHHOPPER_BASE_URL。",
       "properties": {
         "goods_id": {
           "type": "integer",
           "description": "商品 ID，须已上架、库存≥1，且不能自购"
         },
-        "receiver_addr": {
-          "type": "string",
-          "description": "收货文字地址（口头描述）"
-        },
-        "receiver_lat": {
-          "type": "number",
-          "format": "double",
-          "description": "收货地图选点纬度"
-        },
-        "receiver_lng": {
-          "type": "number",
-          "format": "double",
-          "description": "收货地图选点经度"
+        "user_location_id": {
+          "type": "integer",
+          "description": "买方收货地址 id（user_locations，须本人且 status=1）"
         },
         "sender_addr": {
           "type": "string",
@@ -559,6 +550,10 @@
         },
         "goods_id": {
           "type": "integer"
+        },
+        "receiver_user_location_id": {
+          "type": "integer",
+          "description": "下单选用的买方地址簿 id"
         },
         "receiver_addr": {
           "type": "string",
