@@ -1,6 +1,6 @@
 name: CI/CD
 
-# 分支 push：仅代码检查；tag push：代码检查 + 在 Actions 编译 Linux 二进制 + rsync 到部署机 + 部署机仅打包镜像并运行
+# 分支 push：仅静态分析；tag push：静态分析 + 部署时在 Actions 编译 Linux 二进制 + rsync + 部署机打包镜像并运行
 # 部署机 docker build 只做 COPY 二进制与静态资源，无 golang 镜像；层缓存在部署机本地，不再使用 GHCR
 # 使用 Node 24 运行时的 action 版本，避免 Node 20 弃用告警，见 doc/CI_CD.md
 permissions:
@@ -16,9 +16,9 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # 1. 代码检查（分支与 tag 均执行）
+  # 1. 静态分析（分支与 tag 均执行；不编译）
   check:
-    name: 1. 代码检查
+    name: 1. 静态分析
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -31,10 +31,7 @@ jobs:
       - name: 静态分析
         run: go vet ./...
 
-      - name: 编译验证
-        run: CGO_ENABLED=0 go build -o /dev/null .
-
-  # 2. 部署（仅 tag：Actions 产出 build/app，部署机 docker build 打包容器）
+  # 2. 部署（仅 tag：Actions 编译 build/app，部署机 docker build 打包容器）
   deploy:
     name: 2. 部署
     needs: check

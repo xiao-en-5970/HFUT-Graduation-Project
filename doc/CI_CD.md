@@ -2,7 +2,7 @@
 
 ## 流程概览
 
-- **推分支**（`main` / `master`）：仅 `go vet` + `go build` 验证。
+- **推分支**（`main` / `master`）：仅 **`go vet`** 静态分析，不编译。
 - **打 tag**（`v*`）：在通过检查后，于 **Actions 上** `go build` 产出 **`build/app`**（Linux amd64），再 **rsync** 到部署机；部署机仅 **`docker build`**（`Dockerfile` 只 `COPY` 二进制与 `package/web/admin`），然后 **`docker run`**。
 - **不再使用 GHCR**：镜像不在 Registry 里中转；部署机上的 Docker **层缓存**（`/var/lib/docker`）主要作用于 Ubuntu 基础层与静态资源，二进制随每次 tag 更新。
 
