@@ -124,11 +124,20 @@
     });
   }
 
-  /** Martin 矢量瓦片（经 /api/v1/map/tiles 转发）+ MapLibre；authToken 为买家/卖家 JWT。centerLngLat 为 [lng, lat] */
-  function initMapLibrePicker(containerId, lngId, latId, tilesUrl, centerLngLat, authToken) {
+  function destroyAdminMapPicker() {
+    if (window._adminMapPickerMap) {
+      try { window._adminMapPickerMap.remove(); } catch (_) {}
+      window._adminMapPickerMap = null;
+    }
+  }
+
+  /** Martin 矢量瓦片（经 /api/v1/map/tiles 转发）+ MapLibre。authToken 为 JWT（管理员或买卖家）。options.variant === 'admin' 时单独销毁。centerLngLat 为 [lng, lat] */
+  function initMapLibrePicker(containerId, lngId, latId, tilesUrl, centerLngLat, authToken, options) {
     const el = document.getElementById(containerId);
     if (!el || !window.maplibregl || !tilesUrl) return;
-    if (!window._tradeDemoMaps) window._tradeDemoMaps = [];
+    const opts = options || {};
+    const isAdmin = opts.variant === 'admin';
+    if (!isAdmin && !window._tradeDemoMaps) window._tradeDemoMaps = [];
     const lngInput = lngId ? document.getElementById(lngId) : null;
     const latInput = latId ? document.getElementById(latId) : null;
     const center = centerLngLat || [117.27, 31.86];
@@ -161,7 +170,14 @@
       center: center,
       zoom: 14
     });
-    window._tradeDemoMaps.push(map);
+    if (isAdmin) {
+      if (window._adminMapPickerMap) {
+        try { window._adminMapPickerMap.remove(); } catch (_) {}
+      }
+      window._adminMapPickerMap = map;
+    } else {
+      window._tradeDemoMaps.push(map);
+    }
     let marker = null;
     map.on('load', () => {
       map.resize();
@@ -228,11 +244,22 @@
         return data;
     }
 
-  /** 返回 { tilesUrl }；Martin 瓦片模板，需服务端 MAP_TILES_URL */
+  /** 返回 { tilesUrl }；Martin 瓦片模板，需服务端 MAP_TILES_URL（用户 JWT） */
   async function fetchMapTilesConfig(token) {
     if (!token) return { tilesUrl: '' };
     try {
       const d = await userApi(token, '/config/map');
+      const data = d.data || {};
+      return { tilesUrl: normalizeTilesUrl(data.map_tiles_url || '') };
+    } catch (_) {
+      return { tilesUrl: '' };
+    }
+  }
+
+  /** 管理员 JWT 拉取瓦片配置 */
+  async function fetchMapTilesConfigAdmin() {
+    try {
+      const d = await api('/config/map');
       const data = d.data || {};
       return { tilesUrl: normalizeTilesUrl(data.map_tiles_url || '') };
     } catch (_) {
@@ -297,7 +324,7 @@
   const moduleContent = document.getElementById('module-content');
   logoutBtn.addEventListener('click', redirectToLogin);
 
-    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'trade-demo', 'schools', 'bind-school'];
+    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'map-picker', 'trade-demo', 'schools', 'bind-school'];
   function getRoute() {
     const hash = (location.hash || '#/users').slice(2) || 'users';
     return routes.includes(hash) ? hash : 'users';
@@ -305,6 +332,7 @@
 
   function route() {
     const r = getRoute();
+    if (r !== 'map-picker') destroyAdminMapPicker();
     document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.route === r));
     if (r === 'users') renderUsers();
     else if (r === 'posts') renderPosts();
@@ -312,6 +340,7 @@
     else if (r === 'answers') renderAnswers();
     else if (r === 'goods') renderGoods();
     else if (r === 'orders') renderOrders();
+    else if (r === 'map-picker') renderAdminMapPicker();
     else if (r === 'trade-demo') renderTradeDemo();
     else if (r === 'schools') renderSchools();
     else if (r === 'bind-school') renderBindSchool();
@@ -1268,6 +1297,77 @@
         return d.innerHTML;
     }
 
+    /** 管理后台独立地图选点（管理员 JWT + /config/map + 瓦片转发） */
+    async function renderAdminMapPicker() {
+        destroyAdminMapPicker();
+        moduleContent.innerHTML = '<p class="text-muted">加载中…</p>';
+        let tilesUrl = '';
+        let adminTok = '';
+        try {
+            adminTok = getToken() || '';
+            const cfg = await fetchMapTilesConfigAdmin();
+            tilesUrl = cfg.tilesUrl || '';
+        } catch (e) {
+            moduleContent.innerHTML = '<p class="error">' + escapeHtml(e.message || String(e)) + '</p>';
+            return;
+        }
+        moduleContent.innerHTML = `
+<div class="module-header"><h3>地图选点</h3></div>
+<div class="trade-demo-intro">
+  <p>在地图上<strong>点击</strong>选取 <strong>WGS84</strong> 经纬度；瓦片经 <code>/api/v1/map/tiles</code> 转发。浏览器定位需 <strong>HTTPS</strong> 或 <strong>localhost</strong>。</p>
+</div>
+<div class="trade-card admin-map-picker-card">
+  <div class="admin-map-picker-fields">
+    <label>经度 <input type="number" step="any" id="adm-map-lng" placeholder="点击地图填入"></label>
+    <label>纬度 <input type="number" step="any" id="adm-map-lat" placeholder="点击地图填入"></label>
+  </div>
+  <p class="admin-map-picker-actions">
+    <button type="button" class="btn btn-sm btn-primary" id="adm-map-copy">复制「经度,纬度」</button>
+    <button type="button" class="btn btn-sm" id="adm-map-goto">飞到已填坐标</button>
+  </p>
+</div>
+${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" title="点击选点"></div><p class="text-muted" style="font-size:0.85rem">提示：坐标可粘贴到订单相关字段或交易演示。</p>' : '<p class="error">无法加载地图：请确认已<strong>登录管理后台</strong>且服务端已配置 <code>MAP_TILES_URL</code>（Martin 上游）。</p>'}`;
+
+        if (tilesUrl && adminTok) {
+            loadMapLibreScript().then(() => {
+                initMapLibrePicker('admin-map-picker', 'adm-map-lng', 'adm-map-lat', tilesUrl, [117.27, 31.86], adminTok, { variant: 'admin' });
+            }).catch((e) => {
+                console.warn('地图加载失败', e);
+                moduleContent.insertAdjacentHTML('beforeend', '<p class="error">地图脚本加载失败：' + escapeHtml(e.message || '') + '</p>');
+            });
+        }
+
+        moduleContent.querySelector('#adm-map-copy')?.addEventListener('click', () => {
+            const lng = document.getElementById('adm-map-lng')?.value.trim();
+            const lat = document.getElementById('adm-map-lat')?.value.trim();
+            if (!lng || !lat) {
+                alert('请先在地图上点击选点');
+                return;
+            }
+            const text = lng + ',' + lat;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => alert('已复制：' + text)).catch(() => {
+                    prompt('请手动复制', text);
+                });
+            } else {
+                prompt('请手动复制', text);
+            }
+        });
+        moduleContent.querySelector('#adm-map-goto')?.addEventListener('click', () => {
+            const lng = parseFloat(document.getElementById('adm-map-lng')?.value);
+            const lat = parseFloat(document.getElementById('adm-map-lat')?.value);
+            if (Number.isNaN(lng) || Number.isNaN(lat)) {
+                alert('请输入有效经度、纬度');
+                return;
+            }
+            const m = window._adminMapPickerMap;
+            if (m) {
+                m.setCenter([lng, lat]);
+                m.setZoom(16);
+            }
+        });
+    }
+
     /**
      * 用买卖双方「用户登录」JWT 走通：上架商品 → 买家下单 → 聊天 → 同意 → 送货/收货
      * 管理员 token 不能调 POST /orders，必须在此页分别登录卖家、买家账号。
@@ -1383,20 +1483,29 @@
   <label class="trade-inline"><input type="radio" name="td-role" value="buyer" ${roleSel('buyer')}> 买家</label>
 </div>
 
-<div class="trade-card">
+<div class="trade-card trade-card-order">
   <h4>1. 买家下单</h4>
-  <p class="text-muted trade-subsection">瓦片经<strong>本 API 转发</strong>，浏览器不直连 Martin。地图以<strong>浏览器定位</strong>为中心（需 HTTPS 或 localhost）；可拖动点选。<strong>详细位置</strong>手写。坐标 <strong>WGS84</strong>。</p>
+  <p class="text-muted trade-subsection">请先<strong>登录买家</strong>（或至少一方登录以加载地图）。瓦片经 <code>/api/v1/map/tiles</code> 转发；在地图上<strong>点击选收货点</strong>，再填写文字说明。坐标 <strong>WGS84</strong>。</p>
   <label>商品 ID <input type="number" id="td-goods-id" placeholder="商品管理列表中的 ID" min="1"></label>
-  <label>详细位置（文字，自填） <textarea id="td-receiver" rows="2" placeholder="寝室、楼号、约定见面点等"></textarea></label>
-  <label>收货经度 <input type="number" step="any" id="td-rcv-lng" placeholder="地图点击填入"></label>
-  <label>收货纬度 <input type="number" step="any" id="td-rcv-lat" placeholder="地图点击填入"></label>
-  ${tilesUrl ? '<div id="td-map-rcv" class="trade-map" title="点击选收货位置"></div><p class="text-muted">收货地图（经 <code>/api/v1/map/tiles</code>）</p>' : '<p class="text-muted">登录买家/卖家且服务端配置 <code>MAP_TILES_URL</code>（Martin 上游，仅后端访问）后可加载地图。</p>'}
-  <label>发货地址（文字，可选） <textarea id="td-sender-create" rows="1" placeholder="可与商品默认发货地一致；可空"></textarea></label>
-  <label>发货经度 <input type="number" step="any" id="td-snd-create-lng"></label>
-  <label>发货纬度 <input type="number" step="any" id="td-snd-create-lat"></label>
-  ${tilesUrl ? '<div id="td-map-snd-create" class="trade-map" title="点击选发货位置"></div><p class="text-muted">发货地图（可选）</p>' : ''}
+
+  <h5 class="trade-order-map-title">收货位置（地图选点）</h5>
+  ${tilesUrl ? '<div id="td-map-rcv" class="trade-map trade-map-order" title="点击选收货位置"></div><p class="text-muted trade-map-hint">在地图上点击即可写入下方经纬度；可拖动、缩放。浏览器定位需 HTTPS 或 localhost。</p>' : '<p class="error">无法显示地图：请<strong>登录买家或卖家</strong>，并配置服务端 <code>MAP_TILES_URL</code>。</p>'}
+  <div class="trade-order-coords">
+    <label>收货经度 <input type="number" step="any" id="td-rcv-lng" placeholder="地图点击填入" value="${escapeHtml(rcvLngVal)}"></label>
+    <label>收货纬度 <input type="number" step="any" id="td-rcv-lat" placeholder="地图点击填入" value="${escapeHtml(rcvLatVal)}"></label>
+    <button type="button" class="btn btn-sm" id="td-copy-rcv">复制收货坐标</button>
+  </div>
+  <label>详细位置（文字） <textarea id="td-receiver" rows="2" placeholder="寝室、楼号、约定见面点等"></textarea></label>
+
+  <h5 class="trade-order-map-title">发货位置（可选）</h5>
+  <label>发货地址（文字） <textarea id="td-sender-create" rows="1" placeholder="可与商品默认发货地一致；可空"></textarea></label>
+  <div class="trade-order-coords">
+    <label>发货经度 <input type="number" step="any" id="td-snd-create-lng"></label>
+    <label>发货纬度 <input type="number" step="any" id="td-snd-create-lat"></label>
+  </div>
+  ${tilesUrl ? '<div id="td-map-snd-create" class="trade-map trade-map-order trade-map-order-sm" title="点击选发货位置"></div><p class="text-muted">发货地图（可选；送货上门算距建议填写收发坐标）</p>' : ''}
   <button type="button" class="btn btn-primary" id="td-create-order">买家下单</button>
-  <p class="text-muted">不能买自己发布的商品。下单后即为<strong>待卖方确认收款</strong>。<strong>送货上门算距</strong>需收发两端均有经纬度，由服务端调用 GraphHopper（<code>GRAPHHOPPER_BASE_URL</code>）。</p>
+  <p class="text-muted">不能买自己发布的商品。下单后即为<strong>待卖方确认收款</strong>。<strong>送货上门算距</strong>需收发两端均有经纬度（<code>GRAPHHOPPER_BASE_URL</code>）。</p>
 </div>
 
 <div class="trade-card">
@@ -1511,6 +1620,20 @@
             renderTradeDemo();
         });
         moduleContent.querySelector('#td-refresh')?.addEventListener('click', () => renderTradeDemo());
+        moduleContent.querySelector('#td-copy-rcv')?.addEventListener('click', () => {
+            const lng = moduleContent.querySelector('#td-rcv-lng')?.value.trim();
+            const lat = moduleContent.querySelector('#td-rcv-lat')?.value.trim();
+            if (!lng || !lat) {
+                alert('请先在收货地图上点击选点');
+                return;
+            }
+            const text = lng + ',' + lat;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => alert('已复制：' + text)).catch(() => prompt('请手动复制', text));
+            } else {
+                prompt('请手动复制', text);
+            }
+        });
         moduleContent.querySelector('#td-create-order')?.addEventListener('click', async () => {
             if (!buyerTok) {
                 alert('请先登录买家');

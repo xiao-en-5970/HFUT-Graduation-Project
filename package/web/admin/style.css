@@ -280,6 +280,88 @@ td { font-size: 0.9rem; }
     overflow: hidden;
 }
 
+/* 交易演示「买家下单」：地图选点区域加大 */
+.trade-map-order {
+    max-width: 100%;
+    width: 100%;
+    height: min(52vh, 440px);
+    min-height: 280px;
+}
+
+.trade-map-order-sm {
+    max-height: 320px;
+    height: min(40vh, 300px);
+    min-height: 200px;
+}
+
+.trade-order-map-title {
+    margin: 1rem 0 0.35rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text, #e5e7eb);
+}
+
+.trade-card-order .trade-order-map-title:first-of-type {
+    margin-top: 0.5rem;
+}
+
+.trade-map-hint {
+    font-size: 0.85rem;
+    margin: 0.25rem 0 0.75rem;
+}
+
+.trade-order-coords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-end;
+    margin: 0.5rem 0 0.75rem;
+}
+
+.trade-order-coords label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 140px;
+}
+
+.trade-order-coords .btn {
+    margin-bottom: 2px;
+}
+
+/* 管理后台「地图选点」整页 */
+.admin-map-picker {
+    width: 100%;
+    max-width: 960px;
+    height: min(70vh, 560px);
+    min-height: 320px;
+    margin: 0.75rem 0 0.25rem;
+    border-radius: 8px;
+    border: 1px solid #3d424d;
+    overflow: hidden;
+}
+
+.admin-map-picker-card .admin-map-picker-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+    margin-bottom: 0.5rem;
+}
+
+.admin-map-picker-card .admin-map-picker-fields label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.admin-map-picker-actions {
+    margin: 0.5rem 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
 .trade-subsection {
     font-size: 0.88rem;
     margin: 0 0 0.75rem;
