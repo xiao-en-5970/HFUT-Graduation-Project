@@ -45,6 +45,7 @@ func PrivateRouter(api *gin.RouterGroup) {
 	userGroup := api.Group("/user")
 	{
 		userGroup.GET("/info", controller.UserInfo)
+		userGroup.GET("/chat/unread", controller.UserChatUnreadSummary)
 		userGroup.GET("/logout", controller.UserLogout)
 		userGroup.GET("/locations", controller.UserLocationList)
 		userGroup.POST("/locations", controller.UserLocationCreate)
@@ -143,6 +144,7 @@ func PrivateRouter(api *gin.RouterGroup) {
 		orderGroup.POST("", controller.OrderCreate)
 		orderGroup.GET("", controller.OrderList)
 		orderGroup.GET("/sold", controller.OrderListSold)
+		orderGroup.POST("/:id/messages/read", controller.OrderMessagesMarkRead)
 		orderGroup.GET("/:id/messages", controller.OrderMessagesList)
 		orderGroup.POST("/:id/messages", controller.OrderMessageCreate)
 		orderGroup.POST("/:id/seller-confirm-payment", controller.OrderSellerConfirmPayment)

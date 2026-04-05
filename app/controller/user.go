@@ -117,6 +117,25 @@ func UserInfo(ctx *gin.Context) {
 	reply.ReplyOKWithData(ctx, info)
 }
 
+// UserChatUnreadSummary GET /user/chat/unread 订单聊天未读汇总（总条数 + 按订单）
+func UserChatUnreadSummary(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	total, byOrder, err := service.Order().ChatUnreadSummary(ctx, userID)
+	if err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	byOrderJSON := make(map[string]uint, len(byOrder))
+	for k, v := range byOrder {
+		byOrderJSON[strconv.FormatUint(uint64(k), 10)] = v
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"total": total, "by_order": byOrderJSON})
+}
+
 // UserProfile 获取任意非删用户的公开身份信息（需 JWT）
 func UserProfile(ctx *gin.Context) {
 	idStr := ctx.Param("id")

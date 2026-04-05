@@ -242,3 +242,23 @@ func (s *orderService) CancelOrder(ctx *gin.Context, orderID uint, userID uint) 
 		return errno.ErrOrderInvalidState
 	}
 }
+
+// ChatUnreadSummary 当前用户所有订单会话的未读条数（对方发送且 id > 已读游标）
+func (s *orderService) ChatUnreadSummary(ctx *gin.Context, userID uint) (uint, map[uint]uint, error) {
+	return dao.OrderMessageRead().UnreadCountsByUser(ctx.Request.Context(), userID)
+}
+
+// MarkOrderMessagesRead 将已读游标设为 max(已有, upTo)；upTo=0 时取当前会话最大消息 id（视为全部已读）
+func (s *orderService) MarkOrderMessagesRead(ctx *gin.Context, orderID uint, userID uint, upTo uint) error {
+	if _, _, _, _, err := s.resolveOrderParticipant(ctx, orderID, userID); err != nil {
+		return err
+	}
+	if upTo == 0 {
+		var err2 error
+		upTo, err2 = dao.OrderMessage().MaxMessageIDByOrder(ctx.Request.Context(), orderID)
+		if err2 != nil {
+			return err2
+		}
+	}
+	return dao.OrderMessageRead().UpsertLastReadGreatest(ctx.Request.Context(), userID, orderID, upTo)
+}

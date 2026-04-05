@@ -36,3 +36,13 @@ func (s *OrderMessageStore) ListByOrderID(ctx context.Context, orderID uint, pag
 	err := q.Order("created_at ASC").Limit(pageSize).Offset(offset).Find(&list).Error
 	return list, total, err
 }
+
+// MaxMessageIDByOrder 订单内非官方消息的最大 id（用于全部已读）
+func (s *OrderMessageStore) MaxMessageIDByOrder(ctx context.Context, orderID uint) (uint, error) {
+	var maxID uint
+	err := pgsql.DB.WithContext(ctx).Raw(
+		`SELECT COALESCE(MAX(id), 0) FROM order_messages WHERE order_id = ? AND msg_type != ?`,
+		orderID, constant.OrderMsgTypeOfficial,
+	).Scan(&maxID).Error
+	return maxID, err
+}

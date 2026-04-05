@@ -37,6 +37,33 @@ func OrderMessagesList(ctx *gin.Context) {
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
 }
 
+// OrderMessagesMarkRead POST /orders/:id/messages/read 标记已读（默认可不传 body，视为读到当前最后一条）
+func OrderMessagesMarkRead(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	var req struct {
+		LastReadMessageID uint `json:"last_read_message_id"`
+	}
+	_ = ctx.BindJSON(&req)
+	if err := service.Order().MarkOrderMessagesRead(ctx, uint(id), userID, req.LastReadMessageID); err != nil {
+		if errors.Is(err, errno.ErrOrderNotFound) || errors.Is(err, errno.ErrOrderNotParticipant) {
+			reply.ReplyErrWithMessage(ctx, "订单不存在或无权操作")
+			return
+		}
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	reply.ReplyOK(ctx)
+}
+
 // OrderMessageCreate POST /orders/:id/messages
 func OrderMessageCreate(ctx *gin.Context) {
 	userID := middleware.GetUserID(ctx)
