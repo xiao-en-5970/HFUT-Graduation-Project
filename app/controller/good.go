@@ -272,9 +272,10 @@ func GoodListByUser(ctx *gin.Context) {
 		return
 	}
 	includeOffShelf := (viewerID != 0 && uint(targetID) == viewerID) // 本人可看下架
+	ownList := viewerID != 0 && uint(targetID) == viewerID           // 本人列表不按学校过滤，避免空列表
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
-	list, total, err := service.Good().ListByUserID(ctx, uint(targetID), schoolID, includeOffShelf, page, pageSize)
+	list, total, err := service.Good().ListByUserID(ctx, uint(targetID), schoolID, includeOffShelf, ownList, page, pageSize)
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
 		return

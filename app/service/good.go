@@ -197,8 +197,8 @@ func (s *goodService) List(ctx *gin.Context, schoolID uint, page, pageSize int, 
 	return dao.Good().List(ctx.Request.Context(), schoolID, page, pageSize, keyword, sort)
 }
 
-func (s *goodService) ListByUserID(ctx *gin.Context, targetUserID uint, viewerSchoolID uint, includeOffShelf bool, page, pageSize int) ([]*model.Good, int64, error) {
-	return dao.Good().ListByUserID(ctx.Request.Context(), targetUserID, viewerSchoolID, includeOffShelf, page, pageSize)
+func (s *goodService) ListByUserID(ctx *gin.Context, targetUserID uint, viewerSchoolID uint, includeOffShelf bool, ownList bool, page, pageSize int) ([]*model.Good, int64, error) {
+	return dao.Good().ListByUserID(ctx.Request.Context(), targetUserID, viewerSchoolID, includeOffShelf, ownList, page, pageSize)
 }
 
 func (s *goodService) uploadGoodImages(ctx *gin.Context, id uint, files []*multipart.FileHeader) ([]string, error) {

@@ -86,7 +86,8 @@ func (s *GoodStore) List(ctx context.Context, viewerSchoolID uint, page, pageSiz
 	return list, total, err
 }
 
-func (s *GoodStore) ListByUserID(ctx context.Context, userID uint, viewerSchoolID uint, includeOffShelf bool, page, pageSize int) ([]*model.Good, int64, error) {
+// ownList 为 true 时表示查看自己的商品列表，不按 viewer 学校过滤，避免 JWT 未带学籍或与商品 school_id 不一致时列表为空。
+func (s *GoodStore) ListByUserID(ctx context.Context, userID uint, viewerSchoolID uint, includeOffShelf bool, ownList bool, page, pageSize int) ([]*model.Good, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -99,7 +100,9 @@ func (s *GoodStore) ListByUserID(ctx context.Context, userID uint, viewerSchoolI
 	if !includeOffShelf {
 		q = q.Where("good_status = ?", GoodStatusOnSale)
 	}
-	q = applyGoodSchoolVisibility(q, viewerSchoolID)
+	if !ownList {
+		q = applyGoodSchoolVisibility(q, viewerSchoolID)
+	}
 	var total int64
 	q.Count(&total)
 	var list []*model.Good
