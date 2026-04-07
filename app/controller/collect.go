@@ -219,7 +219,9 @@ func UserListCollects(ctx *gin.Context) {
 			a.Images = oss.TransformImageURLs(a.Images)
 			out = append(out, enrichAnswerWithParent(ctx, schoolID, a))
 		case constant.ExtTypeGoods:
-			g, err := dao.Good().GetByIDWithSchoolAllowOffShelf(ctx.Request.Context(), uint(it.ExtID), schoolID)
+			// 我的收藏：仅按 id+有效状态加载，不按学校过滤。
+			// 否则未绑定学校(school_id=0)时本校商品会被 applyGoodSchoolVisibility 全部筛掉，列表为空。
+			g, err := dao.Good().GetByID(ctx.Request.Context(), uint(it.ExtID))
 			if err != nil || g == nil {
 				continue
 			}
