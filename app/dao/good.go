@@ -2,6 +2,7 @@ package dao
 
 import (
 	"context"
+	"strings"
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
@@ -52,7 +53,18 @@ func (s *GoodStore) GetByIDWithSchoolAllowOffShelf(ctx context.Context, id uint,
 	return g, err
 }
 
-func (s *GoodStore) List(ctx context.Context, viewerSchoolID uint, page, pageSize int) ([]*model.Good, int64, error) {
+// GoodListSort 与 GET /goods 的 sort 参数：空/newest=上架时间；updated_at=最近更新
+const GoodListSortUpdatedAt = "updated_at"
+
+func goodListOrderClause(sort string) string {
+	if strings.TrimSpace(sort) == GoodListSortUpdatedAt {
+		return "updated_at DESC"
+	}
+	return "created_at DESC"
+}
+
+// List 在售商品分页；keyword 非空时标题模糊匹配（ILIKE）；sort 见 GoodListSortUpdatedAt
+func (s *GoodStore) List(ctx context.Context, viewerSchoolID uint, page, pageSize int, keyword string, sort string) ([]*model.Good, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -63,10 +75,14 @@ func (s *GoodStore) List(ctx context.Context, viewerSchoolID uint, page, pageSiz
 	q := pgsql.DB.WithContext(ctx).Model(&model.Good{}).
 		Where("status = ? AND good_status = ?", constant.StatusValid, GoodStatusOnSale)
 	q = applyGoodSchoolVisibility(q, viewerSchoolID)
+	kw := strings.TrimSpace(keyword)
+	if kw != "" {
+		q = q.Where("title ILIKE ?", "%"+kw+"%")
+	}
 	var total int64
 	q.Count(&total)
 	var list []*model.Good
-	err := q.Order("created_at DESC").Limit(pageSize).Offset(offset).Find(&list).Error
+	err := q.Order(goodListOrderClause(sort)).Limit(pageSize).Offset(offset).Find(&list).Error
 	return list, total, err
 }
 

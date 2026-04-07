@@ -193,8 +193,8 @@ func (s *goodService) OffShelf(ctx *gin.Context, id uint, userID uint) error {
 	return dao.Good().UpdateColumns(ctx.Request.Context(), id, map[string]interface{}{"good_status": dao.GoodStatusOffShelf})
 }
 
-func (s *goodService) List(ctx *gin.Context, schoolID uint, page, pageSize int) ([]*model.Good, int64, error) {
-	return dao.Good().List(ctx.Request.Context(), schoolID, page, pageSize)
+func (s *goodService) List(ctx *gin.Context, schoolID uint, page, pageSize int, keyword string, sort string) ([]*model.Good, int64, error) {
+	return dao.Good().List(ctx.Request.Context(), schoolID, page, pageSize, keyword, sort)
 }
 
 func (s *goodService) ListByUserID(ctx *gin.Context, targetUserID uint, viewerSchoolID uint, includeOffShelf bool, page, pageSize int) ([]*model.Good, int64, error) {
