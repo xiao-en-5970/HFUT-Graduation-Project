@@ -104,11 +104,11 @@ func applyVisibility(q *gorm.DB, mode string, viewerSchoolID uint) *gorm.DB {
 // searchConfig 全文检索配置名（create.sql 默认 COPY simple；可选 zhparser_search.sql 升级）
 const searchConfig = "chinese_zh"
 
-// escapeLikePattern 转义 LIKE 通配符，避免用户输入 % _ \ 被当作模式
+// escapeLikePattern 为 ILIKE … ESCAPE '#' 转义：# → ##，% _ 变为字面量（勿用 ESCAPE '\'，PostgreSQL 易报 22025 invalid escape string）
 func escapeLikePattern(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `%`, `\%`)
-	s = strings.ReplaceAll(s, `_`, `\_`)
+	s = strings.ReplaceAll(s, "#", "##")
+	s = strings.ReplaceAll(s, "%", "#%")
+	s = strings.ReplaceAll(s, "_", "#_")
 	return s
 }
 
@@ -120,7 +120,7 @@ func applyArticleKeywordFilter(q *gorm.DB, keyword string) *gorm.DB {
 	}
 	pat := "%" + escapeLikePattern(keyword) + "%"
 	return q.Where(
-		`(search_vector @@ plainto_tsquery(?, ?)) OR (COALESCE(title, '') ILIKE ? ESCAPE '\\') OR (COALESCE(content, '') ILIKE ? ESCAPE '\\')`,
+		`(search_vector @@ plainto_tsquery(?, ?)) OR (COALESCE(title, '') ILIKE ? ESCAPE '#') OR (COALESCE(content, '') ILIKE ? ESCAPE '#')`,
 		searchConfig, keyword, pat, pat,
 	)
 }
@@ -129,8 +129,8 @@ func applyArticleKeywordFilter(q *gorm.DB, keyword string) *gorm.DB {
 func fuzzyRelevanceExpr() string {
 	return `GREATEST(
   COALESCE(ts_rank(search_vector, plainto_tsquery(?, ?)), 0),
-  CASE WHEN COALESCE(title, '') ILIKE ? ESCAPE '\\' THEN 0.25 ELSE 0 END,
-  CASE WHEN COALESCE(content, '') ILIKE ? ESCAPE '\\' THEN 0.12 ELSE 0 END
+  CASE WHEN COALESCE(title, '') ILIKE ? ESCAPE '#' THEN 0.25 ELSE 0 END,
+  CASE WHEN COALESCE(content, '') ILIKE ? ESCAPE '#' THEN 0.12 ELSE 0 END
 )`
 }
 
