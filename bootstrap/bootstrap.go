@@ -59,11 +59,16 @@ func Boot() error {
 	router.SetupRouter(service.Engine)
 	logger.Infof(ctx, "Routes initialized successfully")
 
-	// Start the server (this will block)
-	logger.Infof(ctx, "Starting server...")
+	// gin.Engine.Run → http.ListenAndServe：成功后会一直阻塞，直到进程退出。
+	// Gin 在 release 模式下不会在控制台打印监听地址，容易造成「启动后没日志」的误判，故在此显式打出。
+	logger.Info(ctx, "Starting HTTP server (blocking)",
+		zap.String("addr", config.ServerHost+":"+config.ServerPort),
+		zap.String("server_mode", config.ServerMode),
+	)
 	if err := service.Run(); err != nil {
-		logger.Fatal(ctx, "Failed to start server", zap.Error(err))
+		logger.Fatal(ctx, "HTTP server exited with error", zap.Error(err))
 		return err
 	}
+	logger.Info(ctx, "HTTP server stopped normally")
 	return nil
 }
