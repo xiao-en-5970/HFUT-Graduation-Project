@@ -57,6 +57,7 @@ func PrivateRouter(api *gin.RouterGroup) {
 	{
 		userGroup.GET("/info", controller.UserInfo)
 		userGroup.GET("/chat/unread", controller.UserChatUnreadSummary)
+		userGroup.GET("/collects", controller.UserListCollects)
 		userGroup.GET("/logout", controller.UserLogout)
 		userGroup.GET("/locations", controller.UserLocationList)
 		userGroup.POST("/locations", controller.UserLocationCreate)

@@ -5,10 +5,12 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
@@ -162,4 +164,76 @@ func ListCollectItems(ctx *gin.Context) {
 		return
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": pageSize})
+}
+
+// UserListCollects GET /user/collects?ext_type=1|2|3|4&page=&page_size=
+// 当前用户默认收藏夹下的条目（须注册在 GET /user/:id 之前，否则 "collects" 会误匹配为用户 id）
+func UserListCollects(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	schoolID := middleware.GetSchoolID(ctx)
+	extTypeStr := ctx.DefaultQuery("ext_type", "0")
+	extType, _ := strconv.Atoi(extTypeStr)
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "0"))
+	if pageSize < 1 {
+		pageSize, _ = strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	if extType < 1 || extType > 4 {
+		reply.ReplyErrWithMessage(ctx, "ext_type 无效，应为 1帖子 2提问 3回答 4商品")
+		return
+	}
+
+	items, total, err := service.Collect().ListItems(ctx, userID, 0, extType, page, pageSize)
+	if err != nil {
+		if errors.Is(err, errno.ErrCollectFolderNotFound) {
+			reply.ReplyErrWithMessage(ctx, "收藏夹不存在")
+			return
+		}
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+
+	out := make([]interface{}, 0, len(items))
+	for _, it := range items {
+		switch it.ExtType {
+		case constant.ExtTypePost, constant.ExtTypeQuestion:
+			a, err := dao.Article().GetByIDWithSchoolOrPublicAndType(ctx.Request.Context(), uint(it.ExtID), schoolID, it.ExtType)
+			if err != nil || a == nil {
+				continue
+			}
+			a.Images = oss.TransformImageURLs(a.Images)
+			aw := enrichArticleWithAuthorForViewer(ctx.Request.Context(), userID, it.ExtType, a)
+			out = append(out, aw)
+		case constant.ExtTypeAnswer:
+			a, err := dao.Article().GetByIDWithSchoolOrPublicAndType(ctx.Request.Context(), uint(it.ExtID), schoolID, constant.ArticleTypeAnswer)
+			if err != nil || a == nil {
+				continue
+			}
+			a.Images = oss.TransformImageURLs(a.Images)
+			out = append(out, enrichAnswerWithParent(ctx, schoolID, a))
+		case constant.ExtTypeGoods:
+			g, err := dao.Good().GetByIDWithSchoolAllowOffShelf(ctx.Request.Context(), uint(it.ExtID), schoolID)
+			if err != nil || g == nil {
+				continue
+			}
+			g.Images = oss.TransformImageURLs(g.Images)
+			out = append(out, enrichGoodWithAuthor(ctx, g))
+		default:
+			continue
+		}
+	}
+
+	reply.ReplyOKWithData(ctx, gin.H{
+		"list":      out,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+	})
 }
