@@ -97,10 +97,10 @@ func PrivateRouter(api *gin.RouterGroup) {
 	answerGroup := api.Group("/answer")
 	{
 		answerGroup.GET("/drafts", controller.AnswerHandlers.ListDrafts)
-		answerGroup.GET("", controller.AnswerHandlers.List)
+		answerGroup.GET("", controller.AnswerListWithParent)
 		answerGroup.GET("/search", controller.AnswerHandlers.Search)
 		answerGroup.POST("", controller.AnswerHandlers.Create)
-		answerGroup.GET("/:id", controller.AnswerHandlers.Get)
+		answerGroup.GET("/:id", controller.AnswerGetWithParent)
 		answerGroup.PUT("/:id", controller.AnswerHandlers.Update)
 		answerGroup.POST("/:id/images", controller.AnswerHandlers.UploadImages)
 		answerGroup.POST("/:id/publish", controller.AnswerHandlers.Publish)

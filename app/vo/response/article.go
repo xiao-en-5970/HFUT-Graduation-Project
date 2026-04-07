@@ -10,6 +10,20 @@ type ArticleWithAuthor struct {
 	Author *AuthorProfile `json:"author,omitempty"`
 }
 
+// ParentQuestionBrief 回答列表/详情中附带的提问摘要
+type ParentQuestionBrief struct {
+	ID       uint   `json:"id"`
+	Title    string `json:"title"`
+	Content  string `json:"content"`
+	SchoolID *int   `json:"school_id,omitempty"`
+}
+
+// AnswerWithAuthor 回答（含作者与所属提问摘要，供社区流与详情）
+type AnswerWithAuthor struct {
+	ArticleWithAuthor
+	ParentQuestion *ParentQuestionBrief `json:"parent_question,omitempty"`
+}
+
 // CommentWithAuthor 评论（含作者信息）
 type CommentWithAuthor struct {
 	model.Comment
