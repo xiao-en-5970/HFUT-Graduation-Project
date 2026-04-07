@@ -6,10 +6,27 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 )
+
+// enrichArticleWithAuthorForViewer 单篇详情：作者 + 当前用户是否已赞/已藏（extType：1帖 2问 3答）
+func enrichArticleWithAuthorForViewer(ctx context.Context, userID uint, extType int, a *model.Article) response.ArticleWithAuthor {
+	out := enrichArticleWithAuthor(ctx, a)
+	if userID == 0 {
+		return out
+	}
+	aid := int(a.ID)
+	if ok, err := dao.Like().Exists(ctx, userID, aid, extType); err == nil {
+		out.IsLiked = ok
+	}
+	if ok, err := dao.CollectItem().ExistsByUserExt(ctx, userID, aid, extType); err == nil {
+		out.IsCollected = ok
+	}
+	return out
+}
 
 // enrichArticlesWithAuthor 为文章列表填充作者信息
 func enrichArticlesWithAuthor(ctx *gin.Context, list []*model.Article) []response.ArticleWithAuthor {
@@ -127,7 +144,8 @@ func enrichAnswersWithParentQuestion(ctx *gin.Context, viewerSchoolID uint, list
 
 // enrichAnswerWithParent 单条回答详情附带提问摘要
 func enrichAnswerWithParent(ctx *gin.Context, viewerSchoolID uint, art *model.Article) response.AnswerWithAuthor {
-	base := enrichArticleWithAuthor(ctx.Request.Context(), art)
+	userID := middleware.GetUserID(ctx)
+	base := enrichArticleWithAuthorForViewer(ctx.Request.Context(), userID, constant.ExtTypeAnswer, art)
 	out := response.AnswerWithAuthor{ArticleWithAuthor: base}
 	if art.ParentID != nil && *art.ParentID > 0 {
 		pid := uint(*art.ParentID)

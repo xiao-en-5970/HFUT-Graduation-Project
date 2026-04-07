@@ -7,7 +7,9 @@ import (
 // ArticleWithAuthor 文章详情（含作者信息）
 type ArticleWithAuthor struct {
 	model.Article
-	Author *AuthorProfile `json:"author,omitempty"`
+	Author      *AuthorProfile `json:"author,omitempty"`
+	IsLiked     bool           `json:"is_liked"`
+	IsCollected bool           `json:"is_collected"`
 }
 
 // ParentQuestionBrief 回答列表/详情中附带的提问摘要

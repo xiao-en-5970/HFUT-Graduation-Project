@@ -57,6 +57,18 @@ func (s *CollectItemStore) Exists(ctx context.Context, collectID uint, extID int
 	return count > 0, err
 }
 
+// ExistsByUserExt 当前用户在任意有效收藏夹中是否已收藏该资源
+func (s *CollectItemStore) ExistsByUserExt(ctx context.Context, userID uint, extID int, extType int) (bool, error) {
+	var count int64
+	uid := int(userID)
+	err := pgsql.DB.WithContext(ctx).Model(&model.CollectItem{}).
+		Joins("JOIN collect ON collect.id = collect_item.collect_id AND collect.status = ?", constant.StatusValid).
+		Where("collect.user_id = ? AND collect_item.ext_id = ? AND collect_item.ext_type = ? AND collect_item.status = ?",
+			uid, extID, extType, constant.StatusValid).
+		Count(&count).Error
+	return count > 0, err
+}
+
 // Delete 取消收藏（惰性删除）
 func (s *CollectItemStore) Delete(ctx context.Context, collectID uint, extID int, extType int) error {
 	return pgsql.DB.WithContext(ctx).Model(&model.CollectItem{}).

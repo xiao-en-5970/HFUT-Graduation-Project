@@ -137,7 +137,8 @@ func ArticleHandlers(articleType int) struct {
 				return
 			}
 			art.Images = oss.TransformImageURLs(art.Images)
-			enriched := enrichArticleWithAuthor(ctx.Request.Context(), art)
+			// articleType 与点赞/收藏 extType 一致：1帖 2问 3答
+			enriched := enrichArticleWithAuthorForViewer(ctx.Request.Context(), userID, articleType, art)
 			reply.ReplyOKWithData(ctx, enriched)
 		},
 		Update: func(ctx *gin.Context) {
