@@ -5,10 +5,21 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/controller"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
 // SetupRouter 设置路由，接收 gin.Engine 作为参数
 func SetupRouter(engine *gin.Engine) {
+	// 根路径：运维/排障用（与业务统一返回 code=200 信封），确认进程已监听且路径前缀正确
+	engine.GET("/", func(c *gin.Context) {
+		reply.ReplyOKWithData(c, map[string]interface{}{
+			"service":   "HFUT-Graduation-Project",
+			"apiPrefix": "/api/v1",
+			"health":    "/health",
+			"hint":      "业务接口均在 /api/v1 下；直接请求 /post 会 404，应为 /api/v1/post",
+		})
+	})
+
 	// 管理平台前端静态页（/admin 及子路径）
 	// 注：Static 通配符会与 /admin/login 冲突，登录页请直接访问 /admin/login.html
 	engine.GET("/admin", func(c *gin.Context) { c.Redirect(302, "/admin/") })
