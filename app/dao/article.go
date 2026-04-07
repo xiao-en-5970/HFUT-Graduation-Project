@@ -71,11 +71,12 @@ const (
 	VisibilityAll      = "all"
 )
 
-// SortMode 排序模式：relevance=相关度(标题权重高于正文)，popularity=热度(收藏>点赞>浏览)，combined=综合；updated_at=最近更新
+// SortMode 排序模式：relevance=相关度，popularity=热度，combined=相关度+热度加权；latest=发布时间最新；updated_at=最近更新
 const (
 	SortRelevance  = "relevance"
 	SortPopularity = "popularity"
 	SortCombined   = "combined"
+	SortLatest     = "latest"
 	SortUpdatedAt  = "updated_at"
 )
 
@@ -102,6 +103,36 @@ func applyVisibility(q *gorm.DB, mode string, viewerSchoolID uint) *gorm.DB {
 
 // searchConfig 全文检索配置名（create.sql 默认 COPY simple；可选 zhparser_search.sql 升级）
 const searchConfig = "chinese_zh"
+
+// escapeLikePattern 转义 LIKE 通配符，避免用户输入 % _ \ 被当作模式
+func escapeLikePattern(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
+// applyArticleKeywordFilter 全文检索 OR 标题/正文子串 ILIKE（与 plainto_tsquery 互补，支持「含关键词即可命中」）
+func applyArticleKeywordFilter(q *gorm.DB, keyword string) *gorm.DB {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return q
+	}
+	pat := "%" + escapeLikePattern(keyword) + "%"
+	return q.Where(
+		`(search_vector @@ plainto_tsquery(?, ?)) OR (title ILIKE ? ESCAPE '\\') OR (content ILIKE ? ESCAPE '\\')`,
+		searchConfig, keyword, pat, pat,
+	)
+}
+
+// fuzzyRelevanceExpr 混合相关分：ts_rank + 标题/正文子串命中加成（参数顺序：config, keyword, likePat, likePat）
+func fuzzyRelevanceExpr() string {
+	return `GREATEST(
+  COALESCE(ts_rank(search_vector, plainto_tsquery(?, ?)), 0),
+  CASE WHEN title ILIKE ? ESCAPE '\\' THEN 0.25 ELSE 0 END,
+  CASE WHEN content ILIKE ? ESCAPE '\\' THEN 0.12 ELSE 0 END
+)`
+}
 
 // GetByIDWithSchoolAndTypeAllowDraft 按ID获取，学校+类型，允许 status=1 或 3
 func (s *ArticleStore) GetByIDWithSchoolAndTypeAllowDraft(ctx context.Context, id uint, schoolID uint, articleType int) (*model.Article, error) {
@@ -243,17 +274,21 @@ func (s *ArticleStore) Search(ctx context.Context, viewerSchoolID uint, articleT
 		return s.List(ctx, viewerSchoolID, articleType, page, pageSize, sort)
 	}
 	q := pgsql.DB.Model(&model.Article{}).
-		Where("status = ? AND publish_status = ? AND type = ?", constant.StatusValid, 2, articleType).
-		Where("search_vector @@ plainto_tsquery(?, ?)", searchConfig, keyword)
+		Where("status = ? AND publish_status = ? AND type = ?", constant.StatusValid, 2, articleType)
+	q = applyArticleKeywordFilter(q, keyword)
 	q = applySchoolVisibility(q, viewerSchoolID)
+	pat := "%" + escapeLikePattern(keyword) + "%"
 	var total int64
 	q.Count(&total)
 	var list []*model.Article
 	var err error
-	if strings.TrimSpace(sort) == SortUpdatedAt {
+	switch strings.TrimSpace(sort) {
+	case SortUpdatedAt:
 		err = q.Order("updated_at DESC").Limit(pageSize).Offset(offset).Find(&list).Error
-	} else {
-		err = q.Order(gorm.Expr("ts_rank(search_vector, plainto_tsquery(?, ?)) + like_count*0.01 + collect_count*0.01 DESC", searchConfig, keyword)).
+	case SortLatest:
+		err = q.Order("created_at DESC").Limit(pageSize).Offset(offset).Find(&list).Error
+	default:
+		err = q.Order(gorm.Expr(fuzzyRelevanceExpr()+" + like_count*0.01 + collect_count*0.01 DESC", searchConfig, keyword, pat, pat)).
 			Limit(pageSize).Offset(offset).Find(&list).Error
 	}
 	return list, total, err
@@ -268,7 +303,7 @@ type AggregateSearchParams struct {
 	TimeRange     string // 7d|30d|90d|all
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
-	Sort          string // relevance|popularity|combined|updated_at
+	Sort          string // relevance|popularity|combined|latest|updated_at
 	Page          int
 	PageSize      int
 
@@ -317,10 +352,8 @@ func (s *ArticleStore) AggregateSearch(ctx context.Context, p AggregateSearchPar
 			q = q.Where("created_at >= ?", now.AddDate(0, 0, -90))
 		}
 	}
-	// 全文检索（search_vector 已含 title A 权重 + content B 权重）
-	if keyword != "" {
-		q = q.Where("search_vector @@ plainto_tsquery(?, ?)", searchConfig, keyword)
-	}
+	// 全文检索 + 标题/正文子串模糊（search_vector 已含 title A + content B）
+	q = applyArticleKeywordFilter(q, keyword)
 
 	var total int64
 	q.Count(&total)
@@ -355,12 +388,18 @@ func (s *ArticleStore) AggregateSearch(ctx context.Context, p AggregateSearchPar
 	popExpr := fmt.Sprintf("(collect_count*%d + like_count*%d + view_count*%d) * %s", wc, wl, wv, interactionDecay)
 
 	hasKeyword := keyword != ""
+	var likePat string
+	if hasKeyword {
+		likePat = "%" + escapeLikePattern(keyword) + "%"
+	}
 	switch p.Sort {
 	case SortUpdatedAt:
 		q = q.Order("updated_at DESC")
+	case SortLatest:
+		q = q.Order("created_at DESC")
 	case SortRelevance:
 		if hasKeyword {
-			q = q.Order(gorm.Expr("ts_rank(search_vector, plainto_tsquery(?, ?)) DESC", searchConfig, keyword))
+			q = q.Order(gorm.Expr(fuzzyRelevanceExpr()+" DESC", searchConfig, keyword, likePat, likePat))
 		} else {
 			q = q.Order(gorm.Expr(popExpr + " DESC, created_at DESC"))
 		}
@@ -370,8 +409,8 @@ func (s *ArticleStore) AggregateSearch(ctx context.Context, p AggregateSearchPar
 		fallthrough
 	default:
 		if hasKeyword {
-			combined := fmt.Sprintf("ts_rank(search_vector, plainto_tsquery(?, ?))*%f + (%s)*%f DESC", combRel, popExpr, combPop)
-			q = q.Order(gorm.Expr(combined, searchConfig, keyword))
+			combined := fmt.Sprintf("(%s)*%f + (%s)*%f DESC", fuzzyRelevanceExpr(), combRel, popExpr, combPop)
+			q = q.Order(gorm.Expr(combined, searchConfig, keyword, likePat, likePat))
 		} else {
 			q = q.Order(gorm.Expr(popExpr + " DESC, created_at DESC"))
 		}

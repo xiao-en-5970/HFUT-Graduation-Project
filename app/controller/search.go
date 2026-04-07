@@ -16,6 +16,7 @@ import (
 // SearchArticles 聚合搜索：帖子+提问+回答，需 JWT
 // GET /api/v1/search/articles
 // Query: q, type, visibility, time_range, created_after, created_before, sort, page, page_size
+// sort: combined(推荐 相关度+热度) | latest(最新发布时间) | relevance | popularity | updated_at
 func SearchArticles(ctx *gin.Context) {
 	userID := middleware.GetUserID(ctx)
 	if userID == 0 {
@@ -73,7 +74,7 @@ func SearchArticles(ctx *gin.Context) {
 	}
 	if v := ctx.Query("sort"); v != "" {
 		switch v {
-		case dao.SortRelevance, dao.SortPopularity, dao.SortCombined, dao.SortUpdatedAt:
+		case dao.SortRelevance, dao.SortPopularity, dao.SortCombined, dao.SortUpdatedAt, dao.SortLatest:
 			params.Sort = v
 		}
 	}
