@@ -120,7 +120,7 @@ func applyArticleKeywordFilter(q *gorm.DB, keyword string) *gorm.DB {
 	}
 	pat := "%" + escapeLikePattern(keyword) + "%"
 	return q.Where(
-		`(search_vector @@ plainto_tsquery(?, ?)) OR (title ILIKE ? ESCAPE '\\') OR (content ILIKE ? ESCAPE '\\')`,
+		`(search_vector @@ plainto_tsquery(?, ?)) OR (COALESCE(title, '') ILIKE ? ESCAPE '\\') OR (COALESCE(content, '') ILIKE ? ESCAPE '\\')`,
 		searchConfig, keyword, pat, pat,
 	)
 }
@@ -129,8 +129,8 @@ func applyArticleKeywordFilter(q *gorm.DB, keyword string) *gorm.DB {
 func fuzzyRelevanceExpr() string {
 	return `GREATEST(
   COALESCE(ts_rank(search_vector, plainto_tsquery(?, ?)), 0),
-  CASE WHEN title ILIKE ? ESCAPE '\\' THEN 0.25 ELSE 0 END,
-  CASE WHEN content ILIKE ? ESCAPE '\\' THEN 0.12 ELSE 0 END
+  CASE WHEN COALESCE(title, '') ILIKE ? ESCAPE '\\' THEN 0.25 ELSE 0 END,
+  CASE WHEN COALESCE(content, '') ILIKE ? ESCAPE '\\' THEN 0.12 ELSE 0 END
 )`
 }
 
@@ -279,7 +279,9 @@ func (s *ArticleStore) Search(ctx context.Context, viewerSchoolID uint, articleT
 	q = applySchoolVisibility(q, viewerSchoolID)
 	pat := "%" + escapeLikePattern(keyword) + "%"
 	var total int64
-	q.Count(&total)
+	if err := q.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	var list []*model.Article
 	var err error
 	switch strings.TrimSpace(sort) {
@@ -356,7 +358,10 @@ func (s *ArticleStore) AggregateSearch(ctx context.Context, p AggregateSearchPar
 	q = applyArticleKeywordFilter(q, keyword)
 
 	var total int64
-	q.Count(&total)
+	// 独立 Session 计数，避免 Count 与后续 Order/Limit/Find 复用同一链导致 total 或分页异常
+	if err := q.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
 	// 权重默认值
 	wc, wl, wv := p.WeightCollect, p.WeightLike, p.WeightView
