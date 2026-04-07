@@ -75,6 +75,23 @@ func enrichGoodWithAuthor(ctx *gin.Context, g *model.Good) map[string]interface{
 			m["author"] = u
 		}
 	}
+	uid := middleware.GetUserID(ctx)
+	if uid > 0 {
+		gid := int(g.ID)
+		if ok, err := dao.Like().Exists(ctx.Request.Context(), uid, gid, constant.ExtTypeGoods); err == nil {
+			m["is_liked"] = ok
+		} else {
+			m["is_liked"] = false
+		}
+		if ok, err := dao.CollectItem().ExistsByUserExt(ctx.Request.Context(), uid, gid, constant.ExtTypeGoods); err == nil {
+			m["is_collected"] = ok
+		} else {
+			m["is_collected"] = false
+		}
+	} else {
+		m["is_liked"] = false
+		m["is_collected"] = false
+	}
 	return m
 }
 
