@@ -22,9 +22,19 @@ profile.cov
 go.work
 go.work.sum
 
-# env file（含敏感信息，不提交；可参考 .env.example）
+# Environment & secrets — 永不提交（含示例文件，避免误传本地配置）
 .env
+.env.*
+.env.example
+**/.env
+**/.env.example
 prod.env
+deploy/.env
+deploy/.env.example
+
+# macOS
+.DS_Store
+**/.DS_Store
 
 # 本地运行脚本（手动填入环境变量，不提交）
 run.sh
