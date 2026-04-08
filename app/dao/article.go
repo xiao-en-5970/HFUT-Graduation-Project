@@ -252,7 +252,11 @@ func (s *ArticleStore) ListByUserID(ctx context.Context, userID uint, articleTyp
 	} else {
 		q = q.Where("publish_status IN ?", []int16{1, 2})
 	}
-	q = applySchoolVisibility(q, viewerSchoolID)
+	// 看别人：按浏览者学校过滤「全站公开 or 本校」；看自己：不过滤 school_id，
+	// 否则 JWT 未带学籍(school_id=0)或与内容 school_id 不一致时，校内帖/问/答会从「我的内容」消失。
+	if onlyPublic {
+		q = applySchoolVisibility(q, viewerSchoolID)
+	}
 	var total int64
 	q.Count(&total)
 	var list []*model.Article
