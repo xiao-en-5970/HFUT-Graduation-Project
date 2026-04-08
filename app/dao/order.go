@@ -3,7 +3,6 @@ package dao
 import (
 	"context"
 
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"gorm.io/gorm"
