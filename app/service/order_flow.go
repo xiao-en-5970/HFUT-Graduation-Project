@@ -136,9 +136,9 @@ func (s *orderService) SellerConfirmPayment(ctx *gin.Context, orderID uint, user
 	return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, updates)
 }
 
-// ConfirmDeliveryReq 卖家确认送达
+// ConfirmDeliveryReq 卖家确认送达（须至少一张送达凭证图）
 type ConfirmDeliveryReq struct {
-	DeliveryImages []string `json:"delivery_images"` // 可选，OSS URL
+	DeliveryImages []string `json:"delivery_images"` // 必填，OSS URL 或完整 URL，至少 1 张
 }
 
 func (s *orderService) ConfirmDelivery(ctx *gin.Context, orderID uint, sellerID uint, req ConfirmDeliveryReq) error {
@@ -164,11 +164,12 @@ func (s *orderService) ConfirmDelivery(ctx *gin.Context, orderID uint, sellerID 
 		}
 		paths = append(paths, oss.PathForStorage(u))
 	}
-	updates := map[string]interface{}{
-		"order_status": constant.OrderStatusPendingBuyerConfirm,
+	if len(paths) == 0 {
+		return errors.New("请至少上传一张送达凭证图片")
 	}
-	if len(paths) > 0 {
-		updates["delivery_images"] = pq.StringArray(paths)
+	updates := map[string]interface{}{
+		"order_status":    constant.OrderStatusPendingBuyerConfirm,
+		"delivery_images": pq.StringArray(paths),
 	}
 	return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, updates)
 }
