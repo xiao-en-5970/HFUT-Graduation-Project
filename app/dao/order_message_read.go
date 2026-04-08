@@ -39,14 +39,14 @@ INNER JOIN (
   SELECT o.id
   FROM orders o
   INNER JOIN goods g ON g.id = o.goods_id
-  WHERE o.user_id = ? OR g.user_id = ?
+  WHERE (o.user_id = ? OR g.user_id = ?) AND o.status = ?
 ) AS p ON p.id = om.order_id
 LEFT JOIN order_message_reads r ON r.order_id = om.order_id AND r.user_id = ?
 WHERE om.sender_id <> ?
   AND om.msg_type <> ?
   AND om.id > COALESCE(r.last_read_message_id, 0)
 GROUP BY om.order_id
-`, uid, uid, uid, uid, mt).Scan(&rows).Error
+`, uid, uid, constant.StatusValid, uid, uid, mt).Scan(&rows).Error
 	if err != nil {
 		return 0, nil, err
 	}

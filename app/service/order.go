@@ -125,6 +125,12 @@ func (s *orderService) createDraft(ctx *gin.Context, buyerID uint, schoolID uint
 	if good.UserID != nil && uint(*good.UserID) == buyerID {
 		return 0, errors.New("不能购买自己发布的商品")
 	}
+	// 已存在与卖家的未完成订单则复用，避免重复会话
+	if existing, err := dao.Order().FindActiveBuyerOrderForGoods(ctx.Request.Context(), buyerID, goodsID); err == nil && existing != nil {
+		return existing.ID, nil
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, err
+	}
 	uid := int(buyerID)
 	gid := int(goodsID)
 	sender := goodAddrForOrder(good)

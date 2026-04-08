@@ -136,6 +136,7 @@ func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 	var gt int16
 	m := map[string]interface{}{
 		"id": o.ID, "user_id": o.UserID, "goods_id": o.GoodsID,
+		"status":        o.Status,
 		"receiver_addr": o.ReceiverAddr, "sender_addr": o.SenderAddr,
 		"buyer_agreed_at": o.BuyerAgreedAt, "seller_agreed_at": o.SellerAgreedAt,
 		"delivery_images":      oss.TransformImageURLs([]string(o.DeliveryImages)),
