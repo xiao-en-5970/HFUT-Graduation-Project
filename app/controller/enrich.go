@@ -72,18 +72,61 @@ func enrichArticleWithAuthor(ctx context.Context, a *model.Article) response.Art
 	return out
 }
 
-// enrichCommentsWithAuthor 为评论列表填充作者信息
+// enrichCommentsWithAuthor 为评论列表填充作者信息、回复目标作者信息及回复数
 func enrichCommentsWithAuthor(ctx *gin.Context, list []*model.Comment) []response.CommentWithAuthor {
 	if len(list) == 0 {
 		return nil
 	}
-	ids := make([]uint, 0, len(list))
+
+	userIDs := make([]uint, 0, len(list))
 	for _, c := range list {
 		if c.UserID != nil && *c.UserID > 0 {
-			ids = append(ids, uint(*c.UserID))
+			userIDs = append(userIDs, uint(*c.UserID))
 		}
 	}
-	userMap, _ := dao.User().GetByIDsIfValid(ctx.Request.Context(), ids)
+
+	// 收集回复的目标评论 ID（reply_id 优先，否则 parent_id）
+	targetCmtIDSet := make(map[uint]bool)
+	for _, c := range list {
+		if c.Type == constant.CommentTypeReply {
+			if c.ReplyID != nil && *c.ReplyID > 0 {
+				targetCmtIDSet[uint(*c.ReplyID)] = true
+			} else if c.ParentID != nil && *c.ParentID > 0 {
+				targetCmtIDSet[uint(*c.ParentID)] = true
+			}
+		}
+	}
+	targetCmtIDs := make([]uint, 0, len(targetCmtIDSet))
+	for id := range targetCmtIDSet {
+		targetCmtIDs = append(targetCmtIDs, id)
+	}
+
+	// 批量获取目标评论，提取其 user_id
+	targetCmtMap := make(map[uint]*model.Comment)
+	if len(targetCmtIDs) > 0 {
+		targets, _ := dao.Comment().GetByIDs(ctx.Request.Context(), targetCmtIDs)
+		for _, t := range targets {
+			targetCmtMap[t.ID] = t
+			if t.UserID != nil && *t.UserID > 0 {
+				userIDs = append(userIDs, uint(*t.UserID))
+			}
+		}
+	}
+
+	// 顶层评论批量统计回复数
+	var topIDs []uint
+	for _, c := range list {
+		if c.Type == constant.CommentTypeTop {
+			topIDs = append(topIDs, c.ID)
+		}
+	}
+	replyCountMap := make(map[uint]int64)
+	if len(topIDs) > 0 {
+		replyCountMap, _ = dao.Comment().CountRepliesByParentIDs(ctx.Request.Context(), topIDs)
+	}
+
+	userMap, _ := dao.User().GetByIDsIfValid(ctx.Request.Context(), userIDs)
+
 	result := make([]response.CommentWithAuthor, len(list))
 	for i, c := range list {
 		result[i] = response.CommentWithAuthor{Comment: *c}
@@ -93,6 +136,26 @@ func enrichCommentsWithAuthor(ctx *gin.Context, list []*model.Comment) []respons
 					ID:       u.ID,
 					Username: u.Username,
 					Avatar:   oss.ToFullURL(u.Avatar),
+				}
+			}
+		}
+		if c.Type == constant.CommentTypeTop {
+			result[i].ReplyCount = replyCountMap[c.ID]
+		}
+		if c.Type == constant.CommentTypeReply {
+			var tid uint
+			if c.ReplyID != nil && *c.ReplyID > 0 {
+				tid = uint(*c.ReplyID)
+			} else if c.ParentID != nil && *c.ParentID > 0 {
+				tid = uint(*c.ParentID)
+			}
+			if tc := targetCmtMap[tid]; tc != nil && tc.UserID != nil {
+				if u := userMap[uint(*tc.UserID)]; u != nil {
+					result[i].ReplyToAuthor = &response.AuthorProfile{
+						ID:       u.ID,
+						Username: u.Username,
+						Avatar:   oss.ToFullURL(u.Avatar),
+					}
 				}
 			}
 		}

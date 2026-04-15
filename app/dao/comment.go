@@ -62,6 +62,43 @@ func (s *CommentStore) ListRepliesByParentID(ctx context.Context, parentID uint,
 	return list, total, err
 }
 
+// GetByIDs 批量按 ID 获取评论
+func (s *CommentStore) GetByIDs(ctx context.Context, ids []uint) ([]*model.Comment, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var list []*model.Comment
+	err := pgsql.DB.WithContext(ctx).
+		Where("id IN ? AND status = ?", ids, constant.StatusValid).
+		Find(&list).Error
+	return list, err
+}
+
+// CountRepliesByParentIDs 批量统计每个 parentID 的回复数
+func (s *CommentStore) CountRepliesByParentIDs(ctx context.Context, parentIDs []uint) (map[uint]int64, error) {
+	result := make(map[uint]int64, len(parentIDs))
+	if len(parentIDs) == 0 {
+		return result, nil
+	}
+	type row struct {
+		ParentID int   `gorm:"column:parent_id"`
+		Cnt      int64 `gorm:"column:cnt"`
+	}
+	var rows []row
+	err := pgsql.DB.WithContext(ctx).Model(&model.Comment{}).
+		Select("parent_id, COUNT(*) AS cnt").
+		Where("parent_id IN ? AND status = ? AND type = ?", parentIDs, constant.StatusValid, constant.CommentTypeReply).
+		Group("parent_id").
+		Find(&rows).Error
+	if err != nil {
+		return result, err
+	}
+	for _, r := range rows {
+		result[uint(r.ParentID)] = r.Cnt
+	}
+	return result, nil
+}
+
 // ExistsByExtAndID 校验评论是否存在且属于指定 ext
 func (s *CommentStore) ExistsByExtAndID(ctx context.Context, extType int, extID int, commentID uint) (bool, error) {
 	var count int64
