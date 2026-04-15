@@ -13,9 +13,9 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
-// validLikeExtTypes 点赞支持的 extType：1帖子 2提问 3回答 4商品
+// validLikeExtTypes 点赞支持的 extType：1帖子 2提问 3回答 4商品 5评论
 var validLikeExtTypes = map[int]bool{
-	constant.ExtTypePost: true, constant.ExtTypeQuestion: true, constant.ExtTypeAnswer: true, constant.ExtTypeGoods: true,
+	constant.ExtTypePost: true, constant.ExtTypeQuestion: true, constant.ExtTypeAnswer: true, constant.ExtTypeGoods: true, constant.ExtTypeComment: true,
 }
 
 // LikeAdd 统一点赞接口：POST /like/:extType/:id
@@ -32,7 +32,19 @@ func LikeAdd(ctx *gin.Context) {
 		return
 	}
 	if !validLikeExtTypes[extType] {
-		reply.ReplyErrWithMessage(ctx, "extType 无效，点赞仅支持 1帖子 2提问 3回答 4商品")
+		reply.ReplyErrWithMessage(ctx, "extType 无效，点赞仅支持 1帖子 2提问 3回答 4商品 5评论")
+		return
+	}
+	if extType == constant.ExtTypeComment {
+		if err := service.Like().AddComment(ctx, userID, extID); err != nil {
+			if errors.Is(err, errno.ErrLikeArticleNotFound) {
+				reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
+				return
+			}
+			reply.ReplyInternalError(ctx, err)
+			return
+		}
+		reply.ReplyOK(ctx)
 		return
 	}
 	if err := service.Like().AddArticle(ctx, userID, schoolID, extID, extType); err != nil {
@@ -59,7 +71,19 @@ func LikeRemove(ctx *gin.Context) {
 		return
 	}
 	if !validLikeExtTypes[extType] {
-		reply.ReplyErrWithMessage(ctx, "extType 无效，点赞仅支持 1帖子 2提问 3回答 4商品")
+		reply.ReplyErrWithMessage(ctx, "extType 无效，点赞仅支持 1帖子 2提问 3回答 4商品 5评论")
+		return
+	}
+	if extType == constant.ExtTypeComment {
+		if err := service.Like().RemoveComment(ctx, userID, extID); err != nil {
+			if errors.Is(err, errno.ErrLikeArticleNotFound) {
+				reply.ReplyNotFound(ctx, errcode.ErrArticleNotFound)
+				return
+			}
+			reply.ReplyInternalError(ctx, err)
+			return
+		}
+		reply.ReplyOK(ctx)
 		return
 	}
 	if err := service.Like().RemoveArticle(ctx, userID, schoolID, extID, extType); err != nil {

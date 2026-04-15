@@ -29,7 +29,9 @@ type AnswerWithAuthor struct {
 // CommentWithAuthor 评论（含作者信息）
 type CommentWithAuthor struct {
 	model.Comment
-	Author        *AuthorProfile `json:"author,omitempty"`
-	ReplyToAuthor *AuthorProfile `json:"reply_to_author,omitempty"`
-	ReplyCount    int64          `json:"reply_count"`
+	Author        *AuthorProfile      `json:"author,omitempty"`
+	ReplyToAuthor *AuthorProfile      `json:"reply_to_author,omitempty"`
+	ReplyCount    int64               `json:"reply_count"`
+	IsLiked       bool                `json:"is_liked"`
+	TopReplies    []CommentWithAuthor `json:"top_replies,omitempty"`
 }

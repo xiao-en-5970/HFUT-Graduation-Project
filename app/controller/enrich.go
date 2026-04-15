@@ -72,11 +72,12 @@ func enrichArticleWithAuthor(ctx context.Context, a *model.Article) response.Art
 	return out
 }
 
-// enrichCommentsWithAuthor 为评论列表填充作者信息、回复目标作者信息及回复数
+// enrichCommentsWithAuthor 为评论列表填充作者信息、回复目标作者信息、回复数、点赞状态及热门预览回复
 func enrichCommentsWithAuthor(ctx *gin.Context, list []*model.Comment) []response.CommentWithAuthor {
 	if len(list) == 0 {
 		return nil
 	}
+	viewerID := middleware.GetUserID(ctx)
 
 	userIDs := make([]uint, 0, len(list))
 	for _, c := range list {
@@ -101,7 +102,6 @@ func enrichCommentsWithAuthor(ctx *gin.Context, list []*model.Comment) []respons
 		targetCmtIDs = append(targetCmtIDs, id)
 	}
 
-	// 批量获取目标评论，提取其 user_id
 	targetCmtMap := make(map[uint]*model.Comment)
 	if len(targetCmtIDs) > 0 {
 		targets, _ := dao.Comment().GetByIDs(ctx.Request.Context(), targetCmtIDs)
@@ -113,7 +113,7 @@ func enrichCommentsWithAuthor(ctx *gin.Context, list []*model.Comment) []respons
 		}
 	}
 
-	// 顶层评论批量统计回复数
+	// 顶层评论：统计回复数 + 取 top3 热门回复
 	var topIDs []uint
 	for _, c := range list {
 		if c.Type == constant.CommentTypeTop {
@@ -121,43 +121,109 @@ func enrichCommentsWithAuthor(ctx *gin.Context, list []*model.Comment) []respons
 		}
 	}
 	replyCountMap := make(map[uint]int64)
+	topRepliesMap := make(map[uint][]*model.Comment)
 	if len(topIDs) > 0 {
 		replyCountMap, _ = dao.Comment().CountRepliesByParentIDs(ctx.Request.Context(), topIDs)
+		topRepliesMap, _ = dao.Comment().TopRepliesByParentIDs(ctx.Request.Context(), topIDs, 3)
+	}
+
+	// 收集 top replies 的 user_id + 它们的 reply target
+	var allPreviewReplies []*model.Comment
+	for _, replies := range topRepliesMap {
+		allPreviewReplies = append(allPreviewReplies, replies...)
+		for _, r := range replies {
+			if r.UserID != nil && *r.UserID > 0 {
+				userIDs = append(userIDs, uint(*r.UserID))
+			}
+			if r.ReplyID != nil && *r.ReplyID > 0 {
+				if !targetCmtIDSet[uint(*r.ReplyID)] {
+					targetCmtIDSet[uint(*r.ReplyID)] = true
+					targetCmtIDs = append(targetCmtIDs, uint(*r.ReplyID))
+				}
+			} else if r.ParentID != nil && *r.ParentID > 0 {
+				if !targetCmtIDSet[uint(*r.ParentID)] {
+					targetCmtIDSet[uint(*r.ParentID)] = true
+					targetCmtIDs = append(targetCmtIDs, uint(*r.ParentID))
+				}
+			}
+		}
+	}
+	// 补充获取 preview replies 引用的目标评论
+	if newIDs := targetCmtIDs; len(newIDs) > 0 {
+		extras, _ := dao.Comment().GetByIDs(ctx.Request.Context(), newIDs)
+		for _, t := range extras {
+			if targetCmtMap[t.ID] == nil {
+				targetCmtMap[t.ID] = t
+				if t.UserID != nil && *t.UserID > 0 {
+					userIDs = append(userIDs, uint(*t.UserID))
+				}
+			}
+		}
 	}
 
 	userMap, _ := dao.User().GetByIDsIfValid(ctx.Request.Context(), userIDs)
 
+	// 批量检查当前用户对所有评论（含 preview）的点赞状态
+	allCommentIDs := make([]uint, 0, len(list)+len(allPreviewReplies))
+	for _, c := range list {
+		allCommentIDs = append(allCommentIDs, c.ID)
+	}
+	for _, r := range allPreviewReplies {
+		allCommentIDs = append(allCommentIDs, r.ID)
+	}
+	likedSet := make(map[uint]bool)
+	if viewerID > 0 && len(allCommentIDs) > 0 {
+		for _, cid := range allCommentIDs {
+			if ok, _ := dao.Like().Exists(ctx.Request.Context(), viewerID, int(cid), constant.ExtTypeComment); ok {
+				likedSet[cid] = true
+			}
+		}
+	}
+
+	makeAuthor := func(uid int) *response.AuthorProfile {
+		if u := userMap[uint(uid)]; u != nil {
+			return &response.AuthorProfile{
+				ID: u.ID, Username: u.Username, Avatar: oss.ToFullURL(u.Avatar),
+			}
+		}
+		return nil
+	}
+
+	replyToAuthor := func(c *model.Comment) *response.AuthorProfile {
+		var tid uint
+		if c.ReplyID != nil && *c.ReplyID > 0 {
+			tid = uint(*c.ReplyID)
+		} else if c.ParentID != nil && *c.ParentID > 0 {
+			tid = uint(*c.ParentID)
+		}
+		if tc := targetCmtMap[tid]; tc != nil && tc.UserID != nil {
+			return makeAuthor(*tc.UserID)
+		}
+		return nil
+	}
+
 	result := make([]response.CommentWithAuthor, len(list))
 	for i, c := range list {
-		result[i] = response.CommentWithAuthor{Comment: *c}
+		result[i] = response.CommentWithAuthor{Comment: *c, IsLiked: likedSet[c.ID]}
 		if c.UserID != nil {
-			if u := userMap[uint(*c.UserID)]; u != nil {
-				result[i].Author = &response.AuthorProfile{
-					ID:       u.ID,
-					Username: u.Username,
-					Avatar:   oss.ToFullURL(u.Avatar),
-				}
-			}
+			result[i].Author = makeAuthor(*c.UserID)
 		}
 		if c.Type == constant.CommentTypeTop {
 			result[i].ReplyCount = replyCountMap[c.ID]
+			if previews := topRepliesMap[c.ID]; len(previews) > 0 {
+				pr := make([]response.CommentWithAuthor, len(previews))
+				for j, r := range previews {
+					pr[j] = response.CommentWithAuthor{Comment: *r, IsLiked: likedSet[r.ID]}
+					if r.UserID != nil {
+						pr[j].Author = makeAuthor(*r.UserID)
+					}
+					pr[j].ReplyToAuthor = replyToAuthor(r)
+				}
+				result[i].TopReplies = pr
+			}
 		}
 		if c.Type == constant.CommentTypeReply {
-			var tid uint
-			if c.ReplyID != nil && *c.ReplyID > 0 {
-				tid = uint(*c.ReplyID)
-			} else if c.ParentID != nil && *c.ParentID > 0 {
-				tid = uint(*c.ParentID)
-			}
-			if tc := targetCmtMap[tid]; tc != nil && tc.UserID != nil {
-				if u := userMap[uint(*tc.UserID)]; u != nil {
-					result[i].ReplyToAuthor = &response.AuthorProfile{
-						ID:       u.ID,
-						Username: u.Username,
-						Avatar:   oss.ToFullURL(u.Avatar),
-					}
-				}
-			}
+			result[i].ReplyToAuthor = replyToAuthor(c)
 		}
 	}
 	return result

@@ -6,6 +6,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
+	"gorm.io/gorm"
 )
 
 type CommentStore struct{}
@@ -106,6 +107,39 @@ func (s *CommentStore) ExistsByExtAndID(ctx context.Context, extType int, extID 
 		Where("id = ? AND ext_type = ? AND ext_id = ? AND status = ?", commentID, extType, extID, constant.StatusValid).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// TopRepliesByParentIDs 为多个 parentID 取各自 like_count 最高的 N 条回复
+func (s *CommentStore) TopRepliesByParentIDs(ctx context.Context, parentIDs []uint, limit int) (map[uint][]*model.Comment, error) {
+	result := make(map[uint][]*model.Comment, len(parentIDs))
+	if len(parentIDs) == 0 {
+		return result, nil
+	}
+	if limit <= 0 {
+		limit = 3
+	}
+	// 使用 LATERAL join 等价：先取全部回复，再程序内截取 top N
+	var all []*model.Comment
+	err := pgsql.DB.WithContext(ctx).
+		Where("parent_id IN ? AND status = ? AND type = ?", parentIDs, constant.StatusValid, constant.CommentTypeReply).
+		Order("like_count DESC, created_at ASC").
+		Find(&all).Error
+	if err != nil {
+		return result, err
+	}
+	for _, c := range all {
+		pid := uint(*c.ParentID)
+		if len(result[pid]) < limit {
+			result[pid] = append(result[pid], c)
+		}
+	}
+	return result, nil
+}
+
+// UpdateLikeCountDB 事务内增减 like_count
+func (s *CommentStore) UpdateLikeCountDB(db *gorm.DB, id uint, delta int) error {
+	return db.Model(&model.Comment{}).Where("id = ?", id).
+		UpdateColumn("like_count", gorm.Expr("GREATEST(0, like_count + ?)", delta)).Error
 }
 
 // CountByExt 按 ext 统计评论数量（仅 status=1 的顶层评论）

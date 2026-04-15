@@ -115,6 +115,68 @@ func (s *likeService) addGoodLike(ctx *gin.Context, userID uint, schoolID uint, 
 	return nil
 }
 
+// AddComment 评论点赞
+func (s *likeService) AddComment(ctx *gin.Context, userID uint, commentID uint) error {
+	c, err := dao.Comment().GetByID(ctx.Request.Context(), commentID)
+	if err != nil || c == nil {
+		return errno.ErrLikeArticleNotFound
+	}
+	exist, getErr := dao.Like().GetByUserExt(ctx.Request.Context(), userID, int(commentID), constant.ExtTypeComment)
+	if getErr == nil {
+		if exist.Status == constant.StatusValid {
+			return nil
+		}
+		return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			if err := dao.Like().RestoreWithDB(tx, userID, int(commentID), constant.ExtTypeComment); err != nil {
+				return err
+			}
+			return dao.Comment().UpdateLikeCountDB(tx, commentID, 1)
+		})
+	}
+	if getErr != gorm.ErrRecordNotFound {
+		return getErr
+	}
+	uid := int(userID)
+	l := &model.Like{
+		UserID:  &uid,
+		ExtID:   int(commentID),
+		ExtType: constant.ExtTypeComment,
+		Status:  constant.StatusValid,
+	}
+	err = pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := dao.Like().CreateWithDB(tx, l); err != nil {
+			return err
+		}
+		return dao.Comment().UpdateLikeCountDB(tx, commentID, 1)
+	})
+	if err != nil {
+		exist2, _ := dao.Like().GetByUserExt(ctx.Request.Context(), userID, int(commentID), constant.ExtTypeComment)
+		if exist2 != nil && exist2.Status == constant.StatusValid {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// RemoveComment 取消评论点赞
+func (s *likeService) RemoveComment(ctx *gin.Context, userID uint, commentID uint) error {
+	c, err := dao.Comment().GetByID(ctx.Request.Context(), commentID)
+	if err != nil || c == nil {
+		return errno.ErrLikeArticleNotFound
+	}
+	ok, _ := dao.Like().Exists(ctx.Request.Context(), userID, int(commentID), constant.ExtTypeComment)
+	if !ok {
+		return nil
+	}
+	return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := dao.Like().SoftDeleteWithDB(tx, userID, int(commentID), constant.ExtTypeComment); err != nil {
+			return err
+		}
+		return dao.Comment().UpdateLikeCountDB(tx, commentID, -1)
+	})
+}
+
 // RemoveArticle 取消点赞
 func (s *likeService) RemoveArticle(ctx *gin.Context, userID uint, schoolID uint, articleID uint, extType int) error {
 	if extType == constant.ExtTypeGoods {
