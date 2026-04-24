@@ -172,6 +172,10 @@ func NotificationMarkRead(ctx *gin.Context) {
 }
 
 // parseNotifTypeFilter 将 "all"/""/"1,2" 等字符串解析为 type 列表；返回 nil 表示不过滤
+//
+// 聚合 alias 约定（前端直接用 "comment"/"like"/"official" 这类短名，可读性更好）：
+//   - "like"    = like_article + like_comment
+//   - "comment" = comment + reply（回复归入评论分类，UI 只保留「评论」一个 tab）
 func parseNotifTypeFilter(raw string) []int {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "all" {
@@ -179,15 +183,19 @@ func parseNotifTypeFilter(raw string) []int {
 	}
 	parts := strings.Split(raw, ",")
 	out := make([]int, 0, len(parts))
-	// alias 便于前端更可读
+	// 聚合 alias 的值用负数占位，见下方展开逻辑
+	const aliasLike = -1
+	const aliasComment = -2
 	alias := map[string]int{
 		"like_article": model.NotifyTypeLikeArticle,
 		"like_comment": model.NotifyTypeLikeComment,
-		"comment":      model.NotifyTypeComment,
-		"reply":        model.NotifyTypeReply,
 		"official":     model.NotifyTypeOfficial,
-		// 聚合：点赞 = like_article + like_comment
-		"like": -1,
+		// 保留 reply/comment_only 精确筛选能力，后台管理或调试时会用
+		"comment_only": model.NotifyTypeComment,
+		"reply":        model.NotifyTypeReply,
+		// 聚合类型
+		"like":    aliasLike,
+		"comment": aliasComment,
 	}
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
@@ -195,9 +203,12 @@ func parseNotifTypeFilter(raw string) []int {
 			continue
 		}
 		if v, ok := alias[p]; ok {
-			if v == -1 {
+			switch v {
+			case aliasLike:
 				out = append(out, model.NotifyTypeLikeArticle, model.NotifyTypeLikeComment)
-			} else {
+			case aliasComment:
+				out = append(out, model.NotifyTypeComment, model.NotifyTypeReply)
+			default:
 				out = append(out, v)
 			}
 			continue
