@@ -102,8 +102,10 @@ func SearchArticles(ctx *gin.Context) {
 	if params.Page == 1 && params.Keyword != "" {
 		service.Recommend().RecordBehavior(ctx.Request.Context(), userID, params.Type, 0, constant.BehaviorSearch, params.Keyword)
 	}
+	rows := enrichArticlesWithAuthor(ctx, list)
+	stampArticlesViewedBatchMixed(ctx.Request.Context(), userID, rows)
 	reply.ReplyOKWithData(ctx, gin.H{
-		"list":      enrichArticlesWithAuthor(ctx, list),
+		"list":      rows,
 		"total":     total,
 		"page":      params.Page,
 		"page_size": params.PageSize,

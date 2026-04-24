@@ -118,8 +118,10 @@ func GoodList(ctx *gin.Context) {
 		for _, g := range list {
 			g.Images = oss.TransformImageURLs(g.Images)
 		}
+		rows := enrichGoodsWithAuthor(ctx, list)
+		stampGoodsViewedBatch(ctx.Request.Context(), userID, rows)
 		reply.ReplyOKWithData(ctx, gin.H{
-			"list":          enrichGoodsWithAuthor(ctx, list),
+			"list":          rows,
 			"total":         total,
 			"page":          page,
 			"page_size":     pageSize,
@@ -136,7 +138,9 @@ func GoodList(ctx *gin.Context) {
 	for _, g := range list {
 		g.Images = oss.TransformImageURLs(g.Images)
 	}
-	reply.ReplyOKWithData(ctx, gin.H{"list": enrichGoodsWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
+	rows := enrichGoodsWithAuthor(ctx, list)
+	stampGoodsViewedBatch(ctx.Request.Context(), middleware.GetUserID(ctx), rows)
+	reply.ReplyOKWithData(ctx, gin.H{"list": rows, "total": total, "page": page, "page_size": pageSize})
 }
 
 // GoodGet 商品详情 GET /goods/:id

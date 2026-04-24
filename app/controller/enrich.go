@@ -12,6 +12,149 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 )
 
+// stampArticlesViewedBatch 批量给文章（帖/问/答）列表加「已看过」标记。
+// 仅登录用户生效；数据源是 user_behaviors 表（跨设备一致），不依赖 Redis / refresh_token，
+// 查询是单条「WHERE ext_id IN (这一页 ID)」，走索引扫描，O(page_size)。
+func stampArticlesViewedBatch(ctx context.Context, userID uint, extType int, list []response.ArticleWithAuthor) {
+	if userID == 0 || len(list) == 0 || extType <= 0 {
+		return
+	}
+	ids := make([]int, 0, len(list))
+	for i := range list {
+		ids = append(ids, int(list[i].ID))
+	}
+	viewed, err := dao.UserBehavior().ViewedInIDs(ctx, userID, extType, ids)
+	if err != nil || len(viewed) == 0 {
+		return
+	}
+	set := make(map[int]struct{}, len(viewed))
+	for _, id := range viewed {
+		set[id] = struct{}{}
+	}
+	for i := range list {
+		if _, ok := set[int(list[i].ID)]; ok {
+			list[i].IsViewed = true
+		}
+	}
+}
+
+// stampArticlesViewedBatchMixed 混合类型（帖/问/答）列表按各自 Type 分组批量打「已看过」；
+// 用于 SearchArticles 这种聚合接口：一次查询按 (user_id, ext_type) 拆多次，规模都很小。
+func stampArticlesViewedBatchMixed(ctx context.Context, userID uint, list []response.ArticleWithAuthor) {
+	if userID == 0 || len(list) == 0 {
+		return
+	}
+	byType := map[int][]int{}
+	for i := range list {
+		t := list[i].Type
+		if t <= 0 {
+			continue
+		}
+		byType[t] = append(byType[t], int(list[i].ID))
+	}
+	seenByType := make(map[int]map[int]struct{}, len(byType))
+	for t, ids := range byType {
+		viewed, err := dao.UserBehavior().ViewedInIDs(ctx, userID, t, ids)
+		if err != nil || len(viewed) == 0 {
+			continue
+		}
+		set := make(map[int]struct{}, len(viewed))
+		for _, id := range viewed {
+			set[id] = struct{}{}
+		}
+		seenByType[t] = set
+	}
+	for i := range list {
+		if set, ok := seenByType[list[i].Type]; ok {
+			if _, hit := set[int(list[i].ID)]; hit {
+				list[i].IsViewed = true
+			}
+		}
+	}
+}
+
+// stampAnswersViewedBatch AnswerWithAuthor 切片的「已看过」批量打标
+func stampAnswersViewedBatch(ctx context.Context, userID uint, list []response.AnswerWithAuthor) {
+	if userID == 0 || len(list) == 0 {
+		return
+	}
+	ids := make([]int, 0, len(list))
+	for i := range list {
+		ids = append(ids, int(list[i].ID))
+	}
+	viewed, err := dao.UserBehavior().ViewedInIDs(ctx, userID, constant.ExtTypeAnswer, ids)
+	if err != nil || len(viewed) == 0 {
+		return
+	}
+	set := make(map[int]struct{}, len(viewed))
+	for _, id := range viewed {
+		set[id] = struct{}{}
+	}
+	for i := range list {
+		if _, ok := set[int(list[i].ID)]; ok {
+			list[i].IsViewed = true
+		}
+	}
+}
+
+// stampGoodsViewedBatch GoodList 返回的 []map 批量写入 is_viewed
+func stampGoodsViewedBatch(ctx context.Context, userID uint, list []map[string]interface{}) {
+	if len(list) == 0 {
+		return
+	}
+	for _, m := range list {
+		if _, ok := m["is_viewed"]; !ok {
+			m["is_viewed"] = false
+		}
+	}
+	if userID == 0 {
+		return
+	}
+	ids := make([]int, 0, len(list))
+	for _, m := range list {
+		if v, ok := m["id"]; ok {
+			switch x := v.(type) {
+			case uint:
+				ids = append(ids, int(x))
+			case int:
+				ids = append(ids, x)
+			case int64:
+				ids = append(ids, int(x))
+			case uint32:
+				ids = append(ids, int(x))
+			}
+		}
+	}
+	viewed, err := dao.UserBehavior().ViewedInIDs(ctx, userID, constant.ExtTypeGoods, ids)
+	if err != nil || len(viewed) == 0 {
+		return
+	}
+	set := make(map[int]struct{}, len(viewed))
+	for _, id := range viewed {
+		set[id] = struct{}{}
+	}
+	for _, m := range list {
+		if v, ok := m["id"]; ok {
+			var iid int
+			switch x := v.(type) {
+			case uint:
+				iid = int(x)
+			case int:
+				iid = x
+			case int64:
+				iid = int(x)
+			case uint32:
+				iid = int(x)
+			default:
+				continue
+			}
+			if _, hit := set[iid]; hit {
+				m["is_viewed"] = true
+			}
+		}
+	}
+}
+
 // enrichArticleWithAuthorForViewer 单篇详情：作者 + 当前用户是否已赞/已藏（extType：1帖 2问 3答）
 func enrichArticleWithAuthorForViewer(ctx context.Context, userID uint, extType int, a *model.Article) response.ArticleWithAuthor {
 	out := enrichArticleWithAuthor(ctx, a)

@@ -335,6 +335,39 @@ func (s *recommendService) RecallArticles(
 	// 合并：ε-greedy 打散，按 interestQuota:1-interestQuota 交替取
 	merged := mergeArticles(interestList, exploreList, interestQuota, refreshToken, userID)
 
+	// 降级兜底：如果整个候选池已被用户刷空（即 merged 数量 < 这页需要的 + 之前需要分掉的量），
+	// 再跑一次「不排除 seen」的热度召回补齐，允许已读内容重新出现。
+	// 保证在小站点或重度用户手里，推荐流永远不会空窗。
+	needFloor := page * pageSize
+	if len(merged) < needFloor {
+		existing := articleIDSet(merged)
+		skipIDs := make([]int, 0, len(existing))
+		for id := range existing {
+			skipIDs = append(skipIDs, id)
+		}
+		want := needFloor - len(merged) + pageSize // 多抓一页的缓冲
+		fallback, ferr := dao.Article().ArticleRecommendCandidates(ctx, dao.ArticleRecommendParams{
+			ArticleType:       articleType,
+			ViewerSchoolID:    viewerSchoolID,
+			ExcludeIDs:        skipIDs, // 只排除这一页已有的，seen 不再作为排除条件
+			Limit:             want,
+			FreshnessDecay:    config.RecoFreshnessDecayDays,
+			PopularityCollect: commonPop.C,
+			PopularityLike:    commonPop.L,
+			PopularityView:    commonPop.V,
+			RequireInterest:   false,
+		})
+		if ferr == nil && len(fallback) > 0 {
+			logger.Info(ctx, "recommend: candidate pool exhausted, fallback to seen content",
+				zap.Uint("user_id", userID),
+				zap.Int("article_type", articleType),
+				zap.Int("merged_before", len(merged)),
+				zap.Int("fallback_added", len(fallback)),
+			)
+			merged = append(merged, fallback...)
+		}
+	}
+
 	// 分页切片（稳定：在同一 refreshToken 下顺序一致）
 	total := int64(len(merged))
 	start := (page - 1) * pageSize
@@ -430,6 +463,38 @@ func (s *recommendService) RecallGoods(
 	}
 
 	merged := mergeGoods(interestList, exploreList, interestQuota, refreshToken, userID)
+
+	// 降级兜底：商品库被刷空时允许已读重新出现（与 RecallArticles 策略一致）
+	needFloor := page * pageSize
+	if len(merged) < needFloor {
+		existing := make(map[uint]struct{}, len(merged))
+		for _, g := range merged {
+			existing[g.ID] = struct{}{}
+		}
+		skipIDs := make([]int, 0, len(existing))
+		for id := range existing {
+			skipIDs = append(skipIDs, int(id))
+		}
+		want := needFloor - len(merged) + pageSize
+		fallback, ferr := dao.Good().GoodRecommendCandidates(ctx, dao.GoodRecommendParams{
+			ViewerSchoolID:    viewerSchoolID,
+			ExcludeIDs:        skipIDs,
+			Limit:             want,
+			FreshnessDecay:    config.RecoFreshnessDecayDays,
+			PopularityCollect: config.SearchWeightCollect,
+			PopularityLike:    config.SearchWeightLike,
+			RequireInterest:   false,
+		})
+		if ferr == nil && len(fallback) > 0 {
+			logger.Info(ctx, "recommend: goods pool exhausted, fallback to seen content",
+				zap.Uint("user_id", userID),
+				zap.Int("merged_before", len(merged)),
+				zap.Int("fallback_added", len(fallback)),
+			)
+			merged = append(merged, fallback...)
+		}
+	}
+
 	total := int64(len(merged))
 	start := (page - 1) * pageSize
 	if start >= len(merged) {

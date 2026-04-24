@@ -33,6 +33,23 @@ func (s *UserBehaviorStore) ListRecent(ctx context.Context, userID uint, sinceDa
 	return list, err
 }
 
+// ViewedInIDs 给定一批 ext_id，返回其中当前用户曾产生正向行为（view/like/collect/comment）的子集。
+// 专供列表接口「已看过」灰字打标使用——查询仅扫描指定 ID，走 (user_id, ext_type, ext_id) 索引，
+// 不受 RecoSeenTTLDays 限制（跨设备、全量历史），但复杂度为 O(page_size)。
+func (s *UserBehaviorStore) ViewedInIDs(ctx context.Context, userID uint, extType int, ids []int) ([]int, error) {
+	if userID == 0 || len(ids) == 0 {
+		return nil, nil
+	}
+	q := pgsql.DB.WithContext(ctx).Model(&model.UserBehavior{}).
+		Where("user_id = ? AND ext_id IN ? AND action IN ?", int(userID), ids, []int{1, 2, 4, 6})
+	if extType > 0 {
+		q = q.Where("ext_type = ?", extType)
+	}
+	var out []int
+	err := q.Distinct("ext_id").Pluck("ext_id", &out).Error
+	return out, err
+}
+
 // RecentViewedIDs 近 sinceDays 天用户曾 view/comment/like/collect 过的 (ext_type, ext_id) 列表，用于推荐流去重
 // 返回按 ext_id 去重后的结果；若 extType=0 则不按类型过滤
 func (s *UserBehaviorStore) RecentViewedIDs(ctx context.Context, userID uint, extType int, sinceDays int) ([]int, error) {

@@ -34,6 +34,7 @@ func AnswerListWithParent(ctx *gin.Context) {
 			a.Images = oss.TransformImageURLs(a.Images)
 		}
 		enriched := enrichAnswersWithParentQuestion(ctx, schoolID, list)
+		stampAnswersViewedBatch(ctx.Request.Context(), userID, enriched)
 		reply.ReplyOKWithData(ctx, gin.H{
 			"list":          enriched,
 			"total":         total,
@@ -53,6 +54,7 @@ func AnswerListWithParent(ctx *gin.Context) {
 		a.Images = oss.TransformImageURLs(a.Images)
 	}
 	enriched := enrichAnswersWithParentQuestion(ctx, schoolID, list)
+	stampAnswersViewedBatch(ctx.Request.Context(), middleware.GetUserID(ctx), enriched)
 	reply.ReplyOKWithData(ctx, gin.H{"list": enriched, "total": total, "page": page, "page_size": pageSize})
 }
 

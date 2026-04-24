@@ -69,7 +69,9 @@ func ArticleHandlers(articleType int) struct {
 			for _, a := range list {
 				a.Images = oss.TransformImageURLs(a.Images)
 			}
-			reply.ReplyOKWithData(ctx, gin.H{"list": enrichArticlesWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
+			rows := enrichArticlesWithAuthor(ctx, list)
+			stampArticlesViewedBatch(ctx.Request.Context(), middleware.GetUserID(ctx), articleType, rows)
+			reply.ReplyOKWithData(ctx, gin.H{"list": rows, "total": total, "page": page, "page_size": pageSize})
 		},
 		Search: func(ctx *gin.Context) {
 			schoolID := middleware.GetSchoolID(ctx)
@@ -84,7 +86,9 @@ func ArticleHandlers(articleType int) struct {
 			for _, a := range list {
 				a.Images = oss.TransformImageURLs(a.Images)
 			}
-			reply.ReplyOKWithData(ctx, gin.H{"list": enrichArticlesWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
+			rows := enrichArticlesWithAuthor(ctx, list)
+			stampArticlesViewedBatch(ctx.Request.Context(), middleware.GetUserID(ctx), articleType, rows)
+			reply.ReplyOKWithData(ctx, gin.H{"list": rows, "total": total, "page": page, "page_size": pageSize})
 		},
 		Create: func(ctx *gin.Context) {
 			userID := middleware.GetUserID(ctx)
@@ -289,8 +293,10 @@ func recommendArticleList(
 	for _, a := range list {
 		a.Images = oss.TransformImageURLs(a.Images)
 	}
+	rows := enricher(ctx, list)
+	stampArticlesViewedBatch(ctx.Request.Context(), userID, articleType, rows)
 	reply.ReplyOKWithData(ctx, gin.H{
-		"list":          enricher(ctx, list),
+		"list":          rows,
 		"total":         total,
 		"page":          page,
 		"page_size":     pageSize,
@@ -322,5 +328,7 @@ func QuestionListAnswers(ctx *gin.Context) {
 	for _, a := range list {
 		a.Images = oss.TransformImageURLs(a.Images)
 	}
-	reply.ReplyOKWithData(ctx, gin.H{"list": enrichArticlesWithAuthor(ctx, list), "total": total, "page": page, "page_size": pageSize})
+	rows := enrichArticlesWithAuthor(ctx, list)
+	stampArticlesViewedBatch(ctx.Request.Context(), middleware.GetUserID(ctx), constant.ArticleTypeAnswer, rows)
+	reply.ReplyOKWithData(ctx, gin.H{"list": rows, "total": total, "page": page, "page_size": pageSize})
 }

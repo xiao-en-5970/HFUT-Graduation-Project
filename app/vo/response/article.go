@@ -10,6 +10,9 @@ type ArticleWithAuthor struct {
 	Author      *AuthorProfile `json:"author,omitempty"`
 	IsLiked     bool           `json:"is_liked"`
 	IsCollected bool           `json:"is_collected"`
+	// 当前登录用户是否浏览 / 点赞 / 收藏 / 评论过此内容（列表接口用来让前端显示「已看过」灰字）；
+	// 数据来源为 user_behaviors 表的正向行为，跨设备一致；未登录时永远为 false
+	IsViewed bool `json:"is_viewed"`
 }
 
 // ParentQuestionBrief 回答列表/详情中附带的提问摘要
