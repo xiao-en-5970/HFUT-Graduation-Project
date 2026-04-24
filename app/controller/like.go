@@ -44,6 +44,7 @@ func LikeAdd(ctx *gin.Context) {
 			reply.ReplyInternalError(ctx, err)
 			return
 		}
+		service.Notification().EmitLikeComment(ctx.Request.Context(), userID, extID)
 		reply.ReplyOK(ctx)
 		return
 	}
@@ -56,6 +57,7 @@ func LikeAdd(ctx *gin.Context) {
 		return
 	}
 	service.Recommend().RecordBehavior(ctx.Request.Context(), userID, extType, int(extID), constant.BehaviorLike, "")
+	service.Notification().EmitLikeArticle(ctx.Request.Context(), userID, extType, extID)
 	reply.ReplyOK(ctx)
 }
 

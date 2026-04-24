@@ -55,6 +55,10 @@ func CommentCreate(ctx *gin.Context) {
 		return
 	}
 	service.Recommend().RecordBehavior(ctx.Request.Context(), userID, extType, int(articleID), constant.BehaviorComment, "")
+	// 发送评论/回复通知：内部按 parent_id/reply_id 决定是「评论」(type=3) 还是「回复」(type=4)
+	service.Notification().EmitCommentOrReply(
+		ctx.Request.Context(), userID, extType, articleID, commentID, req.Content, req.ParentID, req.ReplyID,
+	)
 	reply.ReplyOKWithData(ctx, gin.H{"id": commentID})
 }
 

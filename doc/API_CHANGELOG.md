@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-04-15（新增：站内消息通知系统）
+
+- **新增** 数据迁移：`package/sql/migrate_notifications.sql` — 建 `notifications` 表；预置 `user_id=0` 的 **「官方」** 账号（
+  `role=3 超级管理员`，`password=!locked-cannot-login!` 永不可登录）。**部署后请先执行该迁移。**
+- **新增** `GET /api/v1/notifications` — 普通消息列表（点赞/评论/回复/官方）。查询参数：`type`（可选，见下）、`unread_only=1`、
+  `page`、`page_size`。返回 `items[]` + `total`，每项包含 `from_user` 最小信息与跳转所需 `target_type/target_id`。
+- **新增** `GET /api/v1/notifications/unread_count` — 返回
+  `{ total, by_type: { like_article, like_comment, comment, reply, official } }`。
+- **新增** `POST /api/v1/notifications/read` — `body: { ids?: number[], all?: boolean, type?: string }` 三选一；批量/按类型/全部已读。
+- **已接入事件**：
+    - 点赞帖子/求助/回答/商品 → `like_article`
+    - 点赞评论/回复 → `like_comment`
+    - 评论某作品 → `comment`
+    - 回复某评论 → `reply`
+    - 官方通知（`uid=0` 下发）→ `official`
+- **行为约定**：自己的动作不会给自己产生通知；被自己删除的评论/内容不补发；评论/点赞失败时**不**产生通知。
+
+---
+
 ## 2026-04-03（订单聊天：仅买卖双方，不再插入官方消息）
 
 - **Breaking / 行为变更：** 确认收款、确认送达、确认收货 **不再** 向 `order_messages` 写入 `msg_type=3`；聊天仅买卖双方用户发送。

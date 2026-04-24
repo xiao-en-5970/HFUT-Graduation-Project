@@ -139,6 +139,13 @@ func PrivateRouter(api *gin.RouterGroup) {
 		likeGroup.POST("/:extType/:id", controller.LikeAdd)
 		likeGroup.DELETE("/:extType/:id", controller.LikeRemove)
 	}
+	// 站内通知：点赞/评论/回复/官方通知
+	notifyGroup := api.Group("/notifications")
+	{
+		notifyGroup.GET("", controller.NotificationList)
+		notifyGroup.GET("/unread_count", controller.NotificationUnreadCount)
+		notifyGroup.POST("/read", controller.NotificationMarkRead)
+	}
 	// 商品模块
 	goodGroup := api.Group("/goods")
 	{
