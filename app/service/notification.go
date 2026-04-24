@@ -65,7 +65,8 @@ func (s *notificationService) EmitLikeComment(ctx context.Context, fromUserID ui
 	if err != nil || c == nil || c.UserID == nil || *c.UserID <= 0 {
 		return
 	}
-	// 评论所属对象，便于前端点击回跳
+	// 评论所属对象，便于前端点击回跳 + 展示「在哪个帖子/回答下」
+	_, refTitle, _, _ := s.resolveArticleOrGoodOwner(ctx, c.ExtType, uint(c.ExtID))
 	go s.emit(context.Background(), &model.Notification{
 		UserID:     *c.UserID,
 		FromUserID: int(fromUserID),
@@ -74,6 +75,7 @@ func (s *notificationService) EmitLikeComment(ctx context.Context, fromUserID ui
 		TargetID:   int(commentID),
 		RefExtType: int16(c.ExtType),
 		RefID:      c.ExtID,
+		Title:      refTitle,
 		Summary:    snippet(c.Content),
 	})
 }
@@ -102,6 +104,8 @@ func (s *notificationService) EmitCommentOrReply(
 		if err != nil || c == nil || c.UserID == nil || *c.UserID <= 0 {
 			return
 		}
+		// 附带回复所在的帖子/回答/商品标题，列表页展示「⟶ 《标题》」
+		_, refTitle, _, _ := s.resolveArticleOrGoodOwner(ctx, extType, articleID)
 		go s.emit(context.Background(), &model.Notification{
 			UserID:     *c.UserID,
 			FromUserID: int(fromUserID),
@@ -110,6 +114,7 @@ func (s *notificationService) EmitCommentOrReply(
 			TargetID:   int(targetCommentID),
 			RefExtType: int16(extType),
 			RefID:      int(articleID),
+			Title:      refTitle,
 			Summary:    snippet(content),
 		})
 		return
