@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
@@ -20,6 +21,29 @@ func AnswerListWithParent(ctx *gin.Context) {
 	schoolID := middleware.GetSchoolID(ctx)
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
+	// sort=recommend 走推荐链路
+	if ctx.Query("sort") == dao.SortRecommend {
+		userID := middleware.GetUserID(ctx)
+		token := service.Recommend().EnsureRefreshToken(ctx.Query("refresh_token"))
+		list, total, err := service.Recommend().RecallArticles(ctx.Request.Context(), userID, schoolID, constant.ArticleTypeAnswer, page, pageSize, token)
+		if err != nil {
+			reply.ReplyInternalError(ctx, err)
+			return
+		}
+		for _, a := range list {
+			a.Images = oss.TransformImageURLs(a.Images)
+		}
+		enriched := enrichAnswersWithParentQuestion(ctx, schoolID, list)
+		reply.ReplyOKWithData(ctx, gin.H{
+			"list":          enriched,
+			"total":         total,
+			"page":          page,
+			"page_size":     pageSize,
+			"refresh_token": token,
+			"sort":          dao.SortRecommend,
+		})
+		return
+	}
 	list, total, err := service.Article().List(ctx, schoolID, constant.ArticleTypeAnswer, page, pageSize, articleListSort(ctx))
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
@@ -61,5 +85,8 @@ func AnswerGetWithParent(ctx *gin.Context) {
 	}
 	art.Images = oss.TransformImageURLs(art.Images)
 	enriched := enrichAnswerWithParent(ctx, schoolID, art)
+	if art.Status == constant.StatusValid && art.PublishStatus == 2 {
+		service.Recommend().RecordBehavior(ctx.Request.Context(), userID, constant.ArticleTypeAnswer, int(art.ID), constant.BehaviorView, "")
+	}
 	reply.ReplyOKWithData(ctx, enriched)
 }

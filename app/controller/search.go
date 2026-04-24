@@ -9,6 +9,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
@@ -96,6 +97,10 @@ func SearchArticles(ctx *gin.Context) {
 	}
 	for _, a := range list {
 		a.Images = oss.TransformImageURLs(a.Images)
+	}
+	// 打点：搜索关键词（仅首页、有关键词、非空时记录一次，避免翻页重复打点）
+	if params.Page == 1 && params.Keyword != "" {
+		service.Recommend().RecordBehavior(ctx.Request.Context(), userID, params.Type, 0, constant.BehaviorSearch, params.Keyword)
 	}
 	reply.ReplyOKWithData(ctx, gin.H{
 		"list":      enrichArticlesWithAuthor(ctx, list),

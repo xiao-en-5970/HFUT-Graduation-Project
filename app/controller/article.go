@@ -6,9 +6,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/errcode"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
@@ -54,6 +56,11 @@ func ArticleHandlers(articleType int) struct {
 			schoolID := middleware.GetSchoolID(ctx)
 			page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 			pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
+			// sort=recommend 时走推荐链路；返回附带 refresh_token 用于稳定翻页
+			if ctx.Query("sort") == dao.SortRecommend {
+				recommendArticleList(ctx, articleType, schoolID, page, pageSize, enrichArticlesWithAuthor)
+				return
+			}
 			list, total, err := service.Article().List(ctx, schoolID, articleType, page, pageSize, articleListSort(ctx))
 			if err != nil {
 				reply.ReplyInternalError(ctx, err)
@@ -139,6 +146,10 @@ func ArticleHandlers(articleType int) struct {
 			art.Images = oss.TransformImageURLs(art.Images)
 			// articleType 与点赞/收藏 extType 一致：1帖 2问 3答
 			enriched := enrichArticleWithAuthorForViewer(ctx.Request.Context(), userID, articleType, art)
+			// 打点：浏览行为（异步），用于推荐系统画像构建
+			if art.Status == constant.StatusValid && art.PublishStatus == 2 {
+				service.Recommend().RecordBehavior(ctx.Request.Context(), userID, articleType, int(art.ID), constant.BehaviorView, "")
+			}
 			reply.ReplyOKWithData(ctx, enriched)
 		},
 		Update: func(ctx *gin.Context) {
@@ -257,6 +268,36 @@ var (
 	QuestionHandlers = ArticleHandlers(constant.ArticleTypeQuestion)
 	AnswerHandlers   = ArticleHandlers(constant.ArticleTypeAnswer)
 )
+
+// recommendArticleList 推荐链路列表（sort=recommend）：
+// 接收 refresh_token（空则生成新的），内部走画像+召回+合并打散，响应附带 refresh_token 用于翻页稳定。
+// 登录用户：个性化；未登录：走冷启动纯热度+新鲜度探索。
+func recommendArticleList(
+	ctx *gin.Context,
+	articleType int,
+	schoolID uint,
+	page, pageSize int,
+	enricher func(*gin.Context, []*model.Article) []response.ArticleWithAuthor,
+) {
+	userID := middleware.GetUserID(ctx)
+	token := service.Recommend().EnsureRefreshToken(ctx.Query("refresh_token"))
+	list, total, err := service.Recommend().RecallArticles(ctx.Request.Context(), userID, schoolID, articleType, page, pageSize, token)
+	if err != nil {
+		reply.ReplyInternalError(ctx, err)
+		return
+	}
+	for _, a := range list {
+		a.Images = oss.TransformImageURLs(a.Images)
+	}
+	reply.ReplyOKWithData(ctx, gin.H{
+		"list":          enricher(ctx, list),
+		"total":         total,
+		"page":          page,
+		"page_size":     pageSize,
+		"refresh_token": token,
+		"sort":          dao.SortRecommend,
+	})
+}
 
 // QuestionListAnswers 列出某提问下的回答 GET /question/:id/answers
 func QuestionListAnswers(ctx *gin.Context) {

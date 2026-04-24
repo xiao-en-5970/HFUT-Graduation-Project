@@ -71,13 +71,14 @@ const (
 	VisibilityAll      = "all"
 )
 
-// SortMode 排序模式：relevance=相关度，popularity=热度，combined=相关度+热度加权；latest=发布时间最新；updated_at=最近更新
+// SortMode 排序模式：relevance=相关度，popularity=热度，combined=相关度+热度加权；latest=发布时间最新；updated_at=最近更新；recommend=个性化推荐
 const (
 	SortRelevance  = "relevance"
 	SortPopularity = "popularity"
 	SortCombined   = "combined"
 	SortLatest     = "latest"
 	SortUpdatedAt  = "updated_at"
+	SortRecommend  = "recommend"
 )
 
 // listOrderClause 列表/用户列表：created_at 默认；updated_at 按最近更新时间

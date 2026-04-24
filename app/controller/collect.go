@@ -52,6 +52,7 @@ func CollectAdd(ctx *gin.Context) {
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
+	service.Recommend().RecordBehavior(ctx.Request.Context(), userID, extType, int(extID), constant.BehaviorCollect, "")
 	reply.ReplyOK(ctx)
 }
 
@@ -80,6 +81,7 @@ func CollectRemove(ctx *gin.Context) {
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
+	service.Recommend().RecordBehavior(ctx.Request.Context(), userID, extType, int(extID), constant.BehaviorUncollect, "")
 	reply.ReplyOK(ctx)
 }
 

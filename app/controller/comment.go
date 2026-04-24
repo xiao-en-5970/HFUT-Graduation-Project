@@ -54,6 +54,7 @@ func CommentCreate(ctx *gin.Context) {
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
+	service.Recommend().RecordBehavior(ctx.Request.Context(), userID, extType, int(articleID), constant.BehaviorComment, "")
 	reply.ReplyOKWithData(ctx, gin.H{"id": commentID})
 }
 

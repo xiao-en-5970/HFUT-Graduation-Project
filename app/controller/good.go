@@ -96,7 +96,7 @@ func enrichGoodWithAuthor(ctx *gin.Context, g *model.Good) map[string]interface{
 }
 
 // GoodList 商品列表 GET /goods
-// Query: page, pageSize, q（标题模糊）, sort（空/newest=上架时间降序；updated_at=最近更新降序）
+// Query: page, pageSize, q（标题模糊）, sort（空/newest=上架时间降序；updated_at=最近更新降序；recommend=个性化推荐）
 func GoodList(ctx *gin.Context) {
 	schoolID := middleware.GetSchoolID(ctx)
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
@@ -105,6 +105,28 @@ func GoodList(ctx *gin.Context) {
 	sort := strings.TrimSpace(ctx.Query("sort"))
 	if sort == "newest" {
 		sort = ""
+	}
+	// sort=recommend 走推荐链路；关键字搜索仍走原流程
+	if sort == dao.SortRecommend && keyword == "" {
+		userID := middleware.GetUserID(ctx)
+		token := service.Recommend().EnsureRefreshToken(ctx.Query("refresh_token"))
+		list, total, err := service.Recommend().RecallGoods(ctx.Request.Context(), userID, schoolID, page, pageSize, token)
+		if err != nil {
+			reply.ReplyInternalError(ctx, err)
+			return
+		}
+		for _, g := range list {
+			g.Images = oss.TransformImageURLs(g.Images)
+		}
+		reply.ReplyOKWithData(ctx, gin.H{
+			"list":          enrichGoodsWithAuthor(ctx, list),
+			"total":         total,
+			"page":          page,
+			"page_size":     pageSize,
+			"refresh_token": token,
+			"sort":          dao.SortRecommend,
+		})
+		return
 	}
 	list, total, err := service.Good().List(ctx, schoolID, page, pageSize, keyword, sort)
 	if err != nil {
@@ -137,6 +159,9 @@ func GoodGet(ctx *gin.Context) {
 		return
 	}
 	g.Images = oss.TransformImageURLs(g.Images)
+	if g.Status == constant.StatusValid && userID > 0 {
+		service.Recommend().RecordBehavior(ctx.Request.Context(), userID, constant.ExtTypeGoods, int(g.ID), constant.BehaviorView, "")
+	}
 	reply.ReplyOKWithData(ctx, enrichGoodWithAuthor(ctx, g))
 }
 

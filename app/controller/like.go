@@ -55,6 +55,7 @@ func LikeAdd(ctx *gin.Context) {
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
+	service.Recommend().RecordBehavior(ctx.Request.Context(), userID, extType, int(extID), constant.BehaviorLike, "")
 	reply.ReplyOK(ctx)
 }
 
@@ -94,6 +95,7 @@ func LikeRemove(ctx *gin.Context) {
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
+	service.Recommend().RecordBehavior(ctx.Request.Context(), userID, extType, int(extID), constant.BehaviorUnlike, "")
 	reply.ReplyOK(ctx)
 }
 

@@ -36,3 +36,14 @@ const (
 	RoleSuper     = 3 // 超级管理员
 	RoleAnonymous = 4 // 匿名用户
 )
+
+// BehaviorAction 用户行为类型（user_behaviors.action）
+const (
+	BehaviorView      = 1 // 浏览 / 点击详情
+	BehaviorLike      = 2 // 点赞
+	BehaviorUnlike    = 3 // 取消点赞
+	BehaviorCollect   = 4 // 收藏
+	BehaviorUncollect = 5 // 取消收藏
+	BehaviorComment   = 6 // 评论
+	BehaviorSearch    = 7 // 搜索（关键词）
+)
