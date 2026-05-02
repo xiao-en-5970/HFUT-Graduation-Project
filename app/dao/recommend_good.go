@@ -21,7 +21,8 @@ type GoodRecommendParams struct {
 	FreshnessDecay    float64
 	PopularityCollect int
 	PopularityLike    int
-	PopularityView    int // goods 表没有 view_count，保留参数占位兼容 config
+	PopularityView    int   // goods 表没有 view_count，保留参数占位兼容 config
+	Category          int16 // 0=不过滤；1=二手买卖；2=有偿求助
 	RequireInterest   bool
 }
 
@@ -40,6 +41,9 @@ func (s *GoodStore) GoodRecommendCandidates(ctx context.Context, p GoodRecommend
 	q := pgsql.DB.WithContext(ctx).Model(&model.Good{}).
 		Where("goods.status = ? AND goods.good_status = ?", constant.StatusValid, GoodStatusOnSale)
 	q = applySchoolVisibilityTable(q, p.ViewerSchoolID, "goods.school_id")
+	if p.Category == constant.GoodsCategoryNormal || p.Category == constant.GoodsCategoryHelp {
+		q = q.Where("goods.goods_category = ?", p.Category)
+	}
 	if len(p.ExcludeIDs) > 0 {
 		q = q.Where("goods.id NOT IN ?", p.ExcludeIDs)
 	}

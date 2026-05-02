@@ -394,12 +394,14 @@ func (s *recommendService) RecallArticles(
 }
 
 // RecallGoods 商品推荐召回，语义同 RecallArticles
+// category: 0/其它=不过滤；1 二手买卖；2 有偿求助
 func (s *recommendService) RecallGoods(
 	ctx context.Context,
 	userID uint,
 	viewerSchoolID uint,
 	page, pageSize int,
 	refreshToken string,
+	category int16,
 ) ([]*model.Good, int64, error) {
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
@@ -436,6 +438,7 @@ func (s *recommendService) RecallGoods(
 			FreshnessDecay:    config.RecoFreshnessDecayDays,
 			PopularityCollect: config.SearchWeightCollect,
 			PopularityLike:    config.SearchWeightLike,
+			Category:          category,
 			RequireInterest:   true,
 		})
 		if err != nil {
@@ -455,6 +458,7 @@ func (s *recommendService) RecallGoods(
 			FreshnessDecay:    config.RecoFreshnessDecayDays,
 			PopularityCollect: config.SearchWeightCollect,
 			PopularityLike:    config.SearchWeightLike,
+			Category:          category,
 			RequireInterest:   false,
 		})
 		if err != nil {
@@ -483,6 +487,7 @@ func (s *recommendService) RecallGoods(
 			FreshnessDecay:    config.RecoFreshnessDecayDays,
 			PopularityCollect: config.SearchWeightCollect,
 			PopularityLike:    config.SearchWeightLike,
+			Category:          category,
 			RequireInterest:   false,
 		})
 		if ferr == nil && len(fallback) > 0 {

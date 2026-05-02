@@ -126,7 +126,7 @@ func GoodList(ctx *gin.Context) {
 	if sort == dao.SortRecommend && keyword == "" {
 		userID := middleware.GetUserID(ctx)
 		token := service.Recommend().EnsureRefreshToken(ctx.Query("refresh_token"))
-		list, total, err := service.Recommend().RecallGoods(ctx.Request.Context(), userID, schoolID, page, pageSize, token)
+		list, total, err := service.Recommend().RecallGoods(ctx.Request.Context(), userID, schoolID, page, pageSize, token, category)
 		if err != nil {
 			reply.ReplyInternalError(ctx, err)
 			return
