@@ -110,7 +110,21 @@ func OrderList(ctx *gin.Context) {
 	reply.ReplyOKWithData(ctx, gin.H{"list": out, "total": total, "page": page, "page_size": pageSize})
 }
 
-func orderStatusLabel(st int16, goodsType int16) string {
+func orderStatusLabel(st int16, goodsType int16, goodsCategory int16) string {
+	if goodsCategory == constant.GoodsCategoryHelp {
+		switch st {
+		case constant.OrderStatusAwaitSellerPaymentConfirm:
+			return "进行中 · 待发布者付酬"
+		case constant.OrderStatusPendingBuyerConfirm:
+			return "已付酬 · 待接单者确认"
+		case constant.OrderStatusCompleted:
+			return "已完成"
+		case constant.OrderStatusCancelled:
+			return "已取消"
+		default:
+			return ""
+		}
+	}
 	switch st {
 	case constant.OrderStatusAwaitBuyerLocation:
 		return "待买方完善地址与付款"
@@ -134,6 +148,7 @@ func orderStatusLabel(st int16, goodsType int16) string {
 
 func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 	var gt int16
+	var gc int16
 	m := map[string]interface{}{
 		"id": o.ID, "user_id": o.UserID, "goods_id": o.GoodsID,
 		"status":        o.Status,
@@ -194,6 +209,7 @@ func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 		g, err := dao.Good().GetByID(ctx.Request.Context(), uint(*o.GoodsID))
 		if err == nil && g != nil {
 			gt = g.GoodsType
+			gc = g.GoodsCategory
 			g.Images = oss.TransformImageURLs(g.Images)
 			ga := effectiveGoodAddr(g)
 			gm := map[string]interface{}{
@@ -220,7 +236,7 @@ func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 		}
 	}
 	m["order_status"] = o.OrderStatus
-	m["order_status_label"] = orderStatusLabel(o.OrderStatus, gt)
+	m["order_status_label"] = orderStatusLabel(o.OrderStatus, gt, gc)
 	return m
 }
 

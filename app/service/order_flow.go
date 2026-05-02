@@ -174,6 +174,64 @@ func (s *orderService) ConfirmDelivery(ctx *gin.Context, orderID uint, sellerID 
 	return dao.Order().UpdateColumns(ctx.Request.Context(), orderID, updates)
 }
 
+// HelpPublisherPayReq 有偿求助发布者上传付酬截图
+type HelpPublisherPayReq struct {
+	PaymentImage string `json:"payment_image"` // 必填，OSS URL 或完整 URL
+	Note         string `json:"note"`          // 可选附言，随截图一并发至会话
+}
+
+// HelpPublisherPay 有偿求助：发布者（schema seller）上传付酬截图 → 订单从"进行中"进入"待接单者确认"
+//
+// 同时把付酬说明文字 + 截图写入订单会话（两条 order_message），方便接单者核对后再确认。
+func (s *orderService) HelpPublisherPay(ctx *gin.Context, orderID uint, userID uint, req HelpPublisherPayReq) error {
+	o, g, _, isSeller, err := s.resolveOrderParticipant(ctx, orderID, userID)
+	if err != nil {
+		return err
+	}
+	if !isSeller {
+		return errno.ErrOrderNotParticipant
+	}
+	if g.GoodsCategory != constant.GoodsCategoryHelp {
+		return errno.ErrOrderInvalidState
+	}
+	if o.OrderStatus != constant.OrderStatusAwaitSellerPaymentConfirm {
+		return errno.ErrOrderInvalidState
+	}
+	imgPath := strings.TrimSpace(req.PaymentImage)
+	if imgPath == "" {
+		return errors.New("请上传付酬截图")
+	}
+	imgPath = oss.PathForStorage(imgPath)
+	sid := int(userID)
+	note := strings.TrimSpace(req.Note)
+	if note == "" {
+		note = "我已支付酬劳，请核对下图付款凭证并确认收到。"
+	}
+	return pgsql.DB.WithContext(ctx.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if err := dao.Order().UpdateColumnsTx(ctx.Request.Context(), tx, orderID, map[string]interface{}{
+			"order_status": constant.OrderStatusPendingBuyerConfirm,
+		}); err != nil {
+			return err
+		}
+		text := &model.OrderMessage{
+			OrderID:  orderID,
+			SenderID: sid,
+			MsgType:  constant.OrderMsgTypeText,
+			Content:  note,
+		}
+		if err := dao.OrderMessage().Create(ctx.Request.Context(), text); err != nil {
+			return err
+		}
+		img := &model.OrderMessage{
+			OrderID:  orderID,
+			SenderID: sid,
+			MsgType:  constant.OrderMsgTypeImage,
+			ImageURL: imgPath,
+		}
+		return dao.OrderMessage().Create(ctx.Request.Context(), img)
+	})
+}
+
 // ConfirmReceiptReq 买家确认收货
 type ConfirmReceiptReq struct {
 	Images []string `json:"images"` // 可选

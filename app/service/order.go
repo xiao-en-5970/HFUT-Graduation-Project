@@ -49,6 +49,11 @@ type UpdateSellerAddrReq struct {
 
 func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req CreateOrderReq) (uint, error) {
 	if req.UserLocationID == 0 {
+		// 有偿求助不走"完善地址"流程：接单者点「我来接」直接建单进行中
+		good, gerr := dao.Good().GetByIDWithSchool(ctx.Request.Context(), req.GoodsID, schoolID)
+		if gerr == nil && good != nil && good.GoodsCategory == constant.GoodsCategoryHelp {
+			return s.createHelpOrder(ctx, buyerID, good)
+		}
 		return s.createDraft(ctx, buyerID, schoolID, req.GoodsID)
 	}
 	loc, err := dao.UserLocation().GetByIDAndUserID(ctx.Request.Context(), req.UserLocationID, buyerID)
@@ -106,6 +111,37 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 		if d := computeOrderDistanceMeters(sender, receiver, o.SenderLat, o.SenderLng, o.ReceiverLat, o.ReceiverLng); d != nil {
 			o.DistanceMeters = d
 		}
+	}
+	return dao.Order().Create(ctx.Request.Context(), o)
+}
+
+// createHelpOrder 有偿求助「我来接」：无需收货地址，订单直接进入进行中
+//
+// 复用 schema 状态值：status=AwaitSellerPaymentConfirm(1) 表示"进行中（待发布者付酬）"。
+// 发布者在聊天里上传付酬截图后转到 PendingBuyerConfirm(3)；接单者确认收到后 → Completed(4)。
+func (s *orderService) createHelpOrder(ctx *gin.Context, takerID uint, good *model.Good) (uint, error) {
+	if good.GoodStatus != dao.GoodStatusOnSale {
+		return 0, errno.ErrOrderGoodNotOnSale
+	}
+	if good.Stock < 1 {
+		return 0, errno.ErrOrderInsufficientStock
+	}
+	if good.UserID != nil && uint(*good.UserID) == takerID {
+		return 0, errors.New("不能接自己发布的求助")
+	}
+	if existing, err := dao.Order().FindActiveBuyerOrderForGoods(ctx.Request.Context(), takerID, uint(good.ID)); err == nil && existing != nil {
+		return existing.ID, nil
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, err
+	}
+	uid := int(takerID)
+	gid := int(good.ID)
+	now := time.Now()
+	o := &model.Order{
+		UserID:        &uid,
+		GoodsID:       &gid,
+		OrderStatus:   constant.OrderStatusAwaitSellerPaymentConfirm,
+		BuyerAgreedAt: &now,
 	}
 	return dao.Order().Create(ctx.Request.Context(), o)
 }

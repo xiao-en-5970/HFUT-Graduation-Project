@@ -181,6 +181,38 @@ func OrderConfirmReceipt(ctx *gin.Context) {
 	reply.ReplyOK(ctx)
 }
 
+// OrderHelpPublisherPay POST /orders/:id/help/pay 有偿求助发布者上传付酬截图
+func OrderHelpPublisherPay(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	var req service.HelpPublisherPayReq
+	if err := ctx.BindJSON(&req); err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	if err := service.Order().HelpPublisherPay(ctx, uint(id), userID, req); err != nil {
+		if errors.Is(err, errno.ErrOrderNotFound) || errors.Is(err, errno.ErrOrderNotParticipant) {
+			reply.ReplyErrWithMessage(ctx, "订单不存在或仅求助发布者可操作")
+			return
+		}
+		if errors.Is(err, errno.ErrOrderInvalidState) {
+			reply.ReplyErrWithMessage(ctx, "当前状态不可支付酬劳")
+			return
+		}
+		reply.ReplyErrWithMessage(ctx, err.Error())
+		return
+	}
+	reply.ReplyOK(ctx)
+}
+
 // OrderCancel POST /orders/:id/cancel
 func OrderCancel(ctx *gin.Context) {
 	userID := middleware.GetUserID(ctx)
