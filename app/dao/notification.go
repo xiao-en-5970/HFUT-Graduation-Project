@@ -2,17 +2,83 @@ package dao
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
+	"gorm.io/gorm"
 )
 
 type NotificationStore struct{}
 
 // Create 写入一条通知；失败不会上报 panic，由调用方决定是否忽略。
 func (s *NotificationStore) Create(ctx context.Context, n *model.Notification) error {
+	if n.Contributors == nil {
+		// 保证 JSONB 字段永远可序列化（GORM 不会自动填默认值）
+		if n.FromUserID > 0 {
+			n.Contributors = model.ContributorsJSON{n.FromUserID}
+		} else {
+			n.Contributors = model.ContributorsJSON{}
+		}
+	}
 	return pgsql.DB.WithContext(ctx).Create(n).Error
+}
+
+// UpsertAggregatedLike 聚合写入点赞类通知（type=1 赞作品 / type=2 赞评论）。
+//
+// 规则：
+//   - 命中"同接收者 + 同类型 + 同目标 + 未读"的已存在行 → 若 fromUserID 未计入则 count+1、追加到 contributors、刷新 updated_at 与展示字段；已计入则静默跳过（同人反复点赞不再提醒）。
+//   - 没有未读聚合行 → 插入新行，count=1、contributors=[fromUserID]。
+//
+// 返回 created 标识本次是否新建了一条通知（供调用方决定是否需要移动端弹窗）。
+func (s *NotificationStore) UpsertAggregatedLike(ctx context.Context, n *model.Notification) (created bool, err error) {
+	if n == nil {
+		return false, errors.New("nil notification")
+	}
+	err = pgsql.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.Notification
+		q := tx.Model(&model.Notification{}).
+			Where("user_id = ? AND type = ? AND target_type = ? AND target_id = ? AND is_read = FALSE AND status = ?",
+				n.UserID, n.Type, n.TargetType, n.TargetID, constant.StatusValid).
+			Order("id DESC").
+			Limit(1)
+		if err := q.First(&existing).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				if n.Contributors == nil {
+					n.Contributors = model.ContributorsJSON{n.FromUserID}
+				}
+				if n.Count <= 0 {
+					n.Count = 1
+				}
+				created = true
+				return tx.Create(n).Error
+			}
+			return err
+		}
+		// 同人去重
+		for _, uid := range existing.Contributors {
+			if uid == n.FromUserID {
+				return nil
+			}
+		}
+		existing.Contributors = append(existing.Contributors, n.FromUserID)
+		return tx.Model(&model.Notification{}).
+			Where("id = ?", existing.ID).
+			Updates(map[string]interface{}{
+				"count":        existing.Count + 1,
+				"from_user_id": n.FromUserID,
+				"contributors": existing.Contributors,
+				"title":        n.Title,
+				"summary":      n.Summary,
+				"image":        n.Image,
+				"updated_at":   time.Now(),
+				"ref_ext_type": n.RefExtType,
+				"ref_id":       n.RefID,
+			}).Error
+	})
+	return created, err
 }
 
 // List 查询通知流水
@@ -41,7 +107,7 @@ func (s *NotificationStore) List(ctx context.Context, userID uint, types []int, 
 	}
 
 	var list []*model.Notification
-	err := q.Order("id DESC").
+	err := q.Order("updated_at DESC, id DESC").
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).
 		Find(&list).Error

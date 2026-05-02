@@ -21,18 +21,21 @@ type notificationAuthor struct {
 
 // notificationVO 列表返回的单条通知
 type notificationVO struct {
-	ID         uint                `json:"id"`
-	Type       int                 `json:"type"`
-	TargetType int                 `json:"target_type"`
-	TargetID   int                 `json:"target_id"`
-	RefExtType int                 `json:"ref_ext_type"`
-	RefID      int                 `json:"ref_id"`
-	Title      string              `json:"title"`
-	Summary    string              `json:"summary"`
-	Image      string              `json:"image"`
-	IsRead     bool                `json:"is_read"`
-	CreatedAt  string              `json:"created_at"`
-	From       *notificationAuthor `json:"from,omitempty"`
+	ID         uint   `json:"id"`
+	Type       int    `json:"type"`
+	TargetType int    `json:"target_type"`
+	TargetID   int    `json:"target_id"`
+	RefExtType int    `json:"ref_ext_type"`
+	RefID      int    `json:"ref_id"`
+	Title      string `json:"title"`
+	Summary    string `json:"summary"`
+	Image      string `json:"image"`
+	IsRead     bool   `json:"is_read"`
+	// Count 聚合触发者人数：点赞类可能 >1（N 人点赞了你）；顶层评论与回复始终 =1。
+	Count     int                 `json:"count"`
+	CreatedAt string              `json:"created_at"`
+	UpdatedAt string              `json:"updated_at"`
+	From      *notificationAuthor `json:"from,omitempty"`
 }
 
 // NotificationList GET /notifications?type=all|like|comment|reply|official[,...]&page&page_size&only_unread=1
@@ -68,6 +71,10 @@ func NotificationList(ctx *gin.Context) {
 
 	vos := make([]notificationVO, 0, len(list))
 	for _, n := range list {
+		cnt := n.Count
+		if cnt <= 0 {
+			cnt = 1
+		}
 		v := notificationVO{
 			ID:         n.ID,
 			Type:       int(n.Type),
@@ -79,7 +86,9 @@ func NotificationList(ctx *gin.Context) {
 			Summary:    n.Summary,
 			Image:      oss.ToFullURL(n.Image),
 			IsRead:     n.IsRead,
+			Count:      cnt,
 			CreatedAt:  n.CreatedAt.Format("2006-01-02 15:04:05"),
+			UpdatedAt:  n.UpdatedAt.Format("2006-01-02 15:04:05"),
 		}
 		// 官方通知：0 号用户可能存在或不存在；都以「官方」展示
 		if n.FromUserID == model.OfficialUserID {

@@ -40,6 +40,27 @@ func (s *notificationService) emit(ctx context.Context, n *model.Notification) {
 	}
 }
 
+// emitAggregatedLike 聚合写入点赞通知（type=1/2）。同作品/评论内的多个点赞在"未读窗口"内合并成 1 条。
+func (s *notificationService) emitAggregatedLike(ctx context.Context, n *model.Notification) {
+	if n == nil || n.UserID <= 0 {
+		return
+	}
+	if n.FromUserID != 0 && n.FromUserID == n.UserID {
+		return
+	}
+	n.Status = constant.StatusValid
+	if _, err := dao.Notification().UpsertAggregatedLike(ctx, n); err != nil {
+		logger.Warn(ctx, "notification aggregated like emit failed",
+			zap.Int("user_id", n.UserID),
+			zap.Int("from_user_id", n.FromUserID),
+			zap.Int16("type", n.Type),
+			zap.Int16("target_type", n.TargetType),
+			zap.Int("target_id", n.TargetID),
+			zap.Error(err),
+		)
+	}
+}
+
 // EmitLikeArticle 有人点赞了你的帖子/提问/回答/商品
 // extType: 1帖子 2提问 3回答 4商品
 func (s *notificationService) EmitLikeArticle(ctx context.Context, fromUserID uint, targetExtType int, targetID uint) {
@@ -47,7 +68,7 @@ func (s *notificationService) EmitLikeArticle(ctx context.Context, fromUserID ui
 	if ownerID <= 0 {
 		return
 	}
-	go s.emit(context.Background(), &model.Notification{
+	go s.emitAggregatedLike(context.Background(), &model.Notification{
 		UserID:     ownerID,
 		FromUserID: int(fromUserID),
 		Type:       model.NotifyTypeLikeArticle,
@@ -67,7 +88,7 @@ func (s *notificationService) EmitLikeComment(ctx context.Context, fromUserID ui
 	}
 	// 评论所属对象，便于前端点击回跳 + 展示「在哪个帖子/回答下」
 	_, refTitle, _, _ := s.resolveArticleOrGoodOwner(ctx, c.ExtType, uint(c.ExtID))
-	go s.emit(context.Background(), &model.Notification{
+	go s.emitAggregatedLike(context.Background(), &model.Notification{
 		UserID:     *c.UserID,
 		FromUserID: int(fromUserID),
 		Type:       model.NotifyTypeLikeComment,
