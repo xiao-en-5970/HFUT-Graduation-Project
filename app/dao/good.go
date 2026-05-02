@@ -159,6 +159,16 @@ func (s *GoodStore) GetByIDAdmin(ctx context.Context, id uint) (*model.Good, err
 	return g, err
 }
 
+// AutoOffShelfExpired 把所有 has_deadline=true 且 deadline<=now 的在售商品批量下架。
+// 返回被下架的条数，供调度器日志。
+func (s *GoodStore) AutoOffShelfExpired(ctx context.Context) (int64, error) {
+	res := pgsql.DB.WithContext(ctx).Model(&model.Good{}).
+		Where("good_status = ? AND has_deadline = ? AND deadline IS NOT NULL AND deadline <= NOW()",
+			GoodStatusOnSale, true).
+		UpdateColumn("good_status", GoodStatusOffShelf)
+	return res.RowsAffected, res.Error
+}
+
 // ListAllForAdmin 管理端：全站商品分页，可选按学校筛选；includeInvalid=false 仅 status=正常
 func (s *GoodStore) ListAllForAdmin(ctx context.Context, page, pageSize int, schoolID uint, includeInvalid bool) ([]*model.Good, int64, error) {
 	if page < 1 {

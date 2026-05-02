@@ -4,6 +4,7 @@ import (
 	"errors"
 	"mime/multipart"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lib/pq"
@@ -19,31 +20,63 @@ import (
 type goodService struct{}
 
 type CreateGoodReq struct {
-	Title       string   `json:"title" binding:"required"`
-	Content     string   `json:"content" binding:"required"`
-	GoodsType   int16    `json:"goods_type"`   // 1送货上门 2自提 3在线，默认1
-	GoodsAddr   string   `json:"goods_addr"`   // 商品地址：默认发货地/自提点（优先）
-	PickupAddr  string   `json:"pickup_addr"`  // 兼容旧字段，与 goods_addr 合并存库
-	Price       int      `json:"price"`        // 价格（分）
-	MarkedPrice int      `json:"marked_price"` // 标价（分）
-	Stock       int      `json:"stock"`        // 库存
-	Images      []string `json:"images"`       // 图片 URL 列表
-	GoodsLat    *float64 `json:"goods_lat"`    // 商品位置纬度 WGS84，与发货地一致
-	GoodsLng    *float64 `json:"goods_lng"`    // 商品位置经度 WGS84
+	Title         string   `json:"title" binding:"required"`
+	Content       string   `json:"content" binding:"required"`
+	GoodsCategory int16    `json:"goods_category"` // 1二手买卖 2有偿求助，默认1
+	GoodsType     int16    `json:"goods_type"`     // 1送货上门 2自提 3在线，默认1
+	GoodsAddr     string   `json:"goods_addr"`     // 商品地址：默认发货地/自提点（优先）
+	PickupAddr    string   `json:"pickup_addr"`    // 兼容旧字段，与 goods_addr 合并存库
+	Price         int      `json:"price"`          // 价格（分）
+	MarkedPrice   int      `json:"marked_price"`   // 标价（分）
+	Stock         int      `json:"stock"`          // 库存
+	Images        []string `json:"images"`         // 图片 URL 列表
+	PaymentQRURL  string   `json:"payment_qr_url"` // 收款码图片 URL；仅二手买卖有效
+	HasDeadline   bool     `json:"has_deadline"`   // 是否启用定时下架
+	Deadline      *string  `json:"deadline"`       // RFC3339/"2006-01-02 15:04:05" 时间字符串；HasDeadline=true 时必填
+	GoodsLat      *float64 `json:"goods_lat"`      // 商品位置纬度 WGS84，与发货地一致
+	GoodsLng      *float64 `json:"goods_lng"`      // 商品位置经度 WGS84
 }
 
 type UpdateGoodReq struct {
-	Title       *string   `json:"title"`
-	Content     *string   `json:"content"`
-	GoodsType   *int16    `json:"goods_type"`
-	GoodsAddr   *string   `json:"goods_addr"`
-	PickupAddr  *string   `json:"pickup_addr"`
-	Price       *int      `json:"price"`
-	MarkedPrice *int      `json:"marked_price"`
-	Stock       *int      `json:"stock"`
-	Images      *[]string `json:"images"`
-	GoodsLat    *float64  `json:"goods_lat"`
-	GoodsLng    *float64  `json:"goods_lng"`
+	Title         *string   `json:"title"`
+	Content       *string   `json:"content"`
+	GoodsCategory *int16    `json:"goods_category"`
+	GoodsType     *int16    `json:"goods_type"`
+	GoodsAddr     *string   `json:"goods_addr"`
+	PickupAddr    *string   `json:"pickup_addr"`
+	Price         *int      `json:"price"`
+	MarkedPrice   *int      `json:"marked_price"`
+	Stock         *int      `json:"stock"`
+	Images        *[]string `json:"images"`
+	PaymentQRURL  *string   `json:"payment_qr_url"`
+	HasDeadline   *bool     `json:"has_deadline"`
+	Deadline      *string   `json:"deadline"` // 字符串；空串或 "null" 表示清空 deadline
+	GoodsLat      *float64  `json:"goods_lat"`
+	GoodsLng      *float64  `json:"goods_lng"`
+}
+
+// parseDeadline 解析前端传来的 deadline 字符串；接受 RFC3339 或 "2006-01-02 15:04:05"。
+// 返回 *time.Time（nil 表示无截止时间），以及可能的校验错误。
+// 可接受的"空"输入：空串 / "null"。
+func parseDeadline(s string, hasDeadline bool) (*time.Time, error) {
+	s = strings.TrimSpace(s)
+	if !hasDeadline || s == "" || strings.EqualFold(s, "null") {
+		return nil, nil
+	}
+	// 优先 RFC3339
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return &t, nil
+	}
+	// 退化为本地时区的 "YYYY-MM-DD HH:MM:SS"
+	if t, err := time.ParseInLocation("2006-01-02 15:04:05", s, time.Local); err == nil {
+		return &t, nil
+	}
+	// 只给日期，按当天 23:59:59
+	if t, err := time.ParseInLocation("2006-01-02", s, time.Local); err == nil {
+		tt := t.Add(24*time.Hour - time.Second)
+		return &tt, nil
+	}
+	return nil, errors.New("deadline 格式非法，应为 RFC3339 或 YYYY-MM-DD [HH:MM:SS]")
 }
 
 func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req CreateGoodReq) (uint, error) {
@@ -60,6 +93,23 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 	if gt != constant.GoodsTypeDelivery && gt != constant.GoodsTypePickup && gt != constant.GoodsTypeOnline {
 		gt = constant.GoodsTypeDelivery
 	}
+	category := req.GoodsCategory
+	if !constant.IsValidGoodsCategory(category) {
+		category = constant.GoodsCategoryNormal
+	}
+	qr := strings.TrimSpace(req.PaymentQRURL)
+	if category == constant.GoodsCategoryHelp {
+		// 有偿求助：发布者是付款方，创建时不接受收款码；安全清空
+		qr = ""
+	}
+	deadlineAt, err := parseDeadline(safeDeref(req.Deadline), req.HasDeadline)
+	if err != nil {
+		return 0, err
+	}
+	// 启用 deadline 但时间已过去，拒绝创建
+	if req.HasDeadline && deadlineAt != nil && !deadlineAt.After(time.Now()) {
+		return 0, errors.New("deadline 必须晚于当前时间")
+	}
 	uid := int(userID)
 	sid := int(schoolID)
 	addr := strings.TrimSpace(req.GoodsAddr)
@@ -67,18 +117,22 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 		addr = strings.TrimSpace(req.PickupAddr)
 	}
 	g := &model.Good{
-		UserID:      &uid,
-		SchoolID:    &sid,
-		Title:       req.Title,
-		Content:     req.Content,
-		GoodsType:   gt,
-		GoodsAddr:   addr,
-		PickupAddr:  addr,
-		Price:       req.Price,
-		MarkedPrice: req.MarkedPrice,
-		Stock:       req.Stock,
-		GoodStatus:  dao.GoodStatusOffShelf, // 新建为下架，需上架后才可见
-		Status:      constant.StatusValid,
+		UserID:        &uid,
+		SchoolID:      &sid,
+		Title:         req.Title,
+		Content:       req.Content,
+		GoodsCategory: category,
+		GoodsType:     gt,
+		GoodsAddr:     addr,
+		PickupAddr:    addr,
+		Price:         req.Price,
+		MarkedPrice:   req.MarkedPrice,
+		Stock:         req.Stock,
+		PaymentQRURL:  oss.PathForStorage(qr),
+		HasDeadline:   req.HasDeadline && deadlineAt != nil,
+		Deadline:      deadlineAt,
+		GoodStatus:    dao.GoodStatusOffShelf, // 新建为下架，需上架后才可见
+		Status:        constant.StatusValid,
 	}
 	if req.GoodsLat != nil && req.GoodsLng != nil {
 		g.GoodsLat = req.GoodsLat
@@ -93,6 +147,14 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 		g.ImageCount = len(req.Images)
 	}
 	return dao.Good().Create(ctx.Request.Context(), g)
+}
+
+// safeDeref 简化 *string 取值，nil 返回空串
+func safeDeref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 func (s *goodService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID uint) (*model.Good, error) {
@@ -154,6 +216,48 @@ func (s *goodService) Update(ctx *gin.Context, id uint, userID uint, schoolID ui
 		gt := *req.GoodsType
 		if gt == constant.GoodsTypeDelivery || gt == constant.GoodsTypePickup || gt == constant.GoodsTypeOnline {
 			updates["goods_type"] = gt
+		}
+	}
+	if req.GoodsCategory != nil {
+		if constant.IsValidGoodsCategory(*req.GoodsCategory) {
+			updates["goods_category"] = *req.GoodsCategory
+			// 切换到有偿求助时，顺手清空收款码
+			if *req.GoodsCategory == constant.GoodsCategoryHelp {
+				updates["payment_qr_url"] = ""
+			}
+		}
+	}
+	if req.PaymentQRURL != nil {
+		// 如果同 payload 里已显式把 category 切成求助，尊重那次清空，不覆盖
+		if _, alreadyCleared := updates["payment_qr_url"]; !alreadyCleared {
+			updates["payment_qr_url"] = oss.PathForStorage(strings.TrimSpace(*req.PaymentQRURL))
+		}
+	}
+	if req.HasDeadline != nil {
+		updates["has_deadline"] = *req.HasDeadline
+		// 关闭 deadline 时一并清空时间点
+		if !*req.HasDeadline {
+			updates["deadline"] = nil
+		}
+	}
+	if req.Deadline != nil {
+		// 允许前端传空串主动清空
+		want := req.HasDeadline != nil && *req.HasDeadline
+		// 若本次 payload 没显式传 HasDeadline，则沿用当前 has_deadline=true 的意图
+		if req.HasDeadline == nil {
+			want = true
+		}
+		t, err := parseDeadline(*req.Deadline, want)
+		if err != nil {
+			return err
+		}
+		if want && t != nil && !t.After(time.Now()) {
+			return errors.New("deadline 必须晚于当前时间")
+		}
+		if t != nil {
+			updates["deadline"] = *t
+		} else {
+			updates["deadline"] = nil
 		}
 	}
 	if req.GoodsAddr != nil || req.PickupAddr != nil {

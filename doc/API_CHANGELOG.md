@@ -6,6 +6,36 @@
 
 ---
 
+## 2026-05-02（商品：类别 / 收款码 / 定时下架）
+
+- **新增** 数据迁移：`package/sql/migrate_goods_category_qr_deadline.sql`。部署前务必执行。新增列：
+    - `goods_category  SMALLINT NOT NULL DEFAULT 1`（1 二手买卖 / 2 有偿求助）
+    - `payment_qr_url  VARCHAR(255) NOT NULL DEFAULT ''`（OSS 相对路径）
+    - `has_deadline    BOOLEAN NOT NULL DEFAULT FALSE`
+    - `deadline        TIMESTAMPTZ`（nullable；仅 `has_deadline=true` 时有意义）
+    - 同时创建部分索引 `idx_goods_auto_offshelf` 供 cron 扫描。
+- **新增** 商品类别常量：`package/constant/goods_category.go`。**GoodsCategory** 与 **GoodsType（履约方式）** 正交。
+- **修改** `POST /api/v1/goods`、`PUT /api/v1/goods/:id` 请求体新增字段：
+    - `goods_category`（1/2；默认 1）
+    - `payment_qr_url`（字符串；仅 category=1 有效，category=2 时后端强制置空）
+    - `has_deadline`（布尔）
+    - `deadline`（RFC3339 / `"YYYY-MM-DD HH:MM:SS"` / `"YYYY-MM-DD"` 三选一；仅 `has_deadline=true` 时必填；必须晚于 NOW()）
+- **修改** `GET /api/v1/goods`、`GET /api/v1/goods/:id`、订单详情 `GET /api/v1/orders/:id` 返回体新增字段（映射到前端）：
+    - `goods_category` / `goods_category_label`
+    - `payment_qr_url`（完整 URL 已做 `oss.ToFullURL`）
+    - `has_deadline` / `deadline`（ISO 字符串）
+    - `deadline_remaining_seconds`（服务端基于 `NOW()` 计算，负数=已过期）
+- **新增** 后台任务：`app/scheduler/goods_deadline.go`。进程启动后每 **5 分钟** 扫描一次，把满足条件的商品自动下架（
+  `good_status = 2`）：
+    - `good_status = 1 AND has_deadline = TRUE AND deadline <= NOW()`
+- **语义约定**：
+    - **二手买卖 (1)**：发布者 = 卖家 = 收款方；可在创建时上传收款码，买家在待付款阶段点付款横幅可看到大图并保存到相册。
+    - **有偿求助 (2)**：发布者 = 付款方；接单者（后台数据里仍叫「买家」）= 收款方。`payment_qr_url`
+      对该类别无效，创建/更新时会被强制置空；前端隐藏收款码上传入口。
+- **不影响** 现有接口字段：历史商品 `goods_category=1`、`has_deadline=false`、`payment_qr_url=''`，均为默认值，前端兼容。
+
+---
+
 ## 2026-04-15（新增：站内消息通知系统）
 
 - **新增** 数据迁移：`package/sql/migrate_notifications.sql` — 建 `notifications` 表；预置 `user_id=0` 的 **「官方」** 账号（
@@ -25,7 +55,13 @@
     - `like_article` / `comment`：对应帖子/提问/回答/商品的标题；
     - `like_comment` / `reply`：所在帖子/提问/回答/商品的标题（前端用来展示「在《xxx》下赞了/回复了你」）；
     - `official`：官方通知自定义标题；老数据可能为空，前端应兼容。
+- **分类别名（2026-04-15 补充）**：`GET /notifications?type=` 支持的聚合别名：
+    - `like`    → `like_article + like_comment`
+    - `comment` → `comment + reply`（**回复统一归入评论分类**，客户端只需一个「评论」tab）
+    - `official` / `like_article` / `like_comment` / `comment_only` / `reply` → 精确 type
 - **行为约定**：自己的动作不会给自己产生通知；被自己删除的评论/内容不补发；评论/点赞失败时**不**产生通知。
+- **本地弹窗策略（客户端约定）**：点赞类通知（`like_article` / `like_comment`）**始终不弹系统通知栏**，仅在消息页可见；
+  `comment` / `reply` / `official` / 订单聊天允许用户在「个人主页 → 设置」中独立开关。
 
 ---
 

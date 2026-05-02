@@ -29,8 +29,14 @@ type Good struct {
 	CollectCount int            `gorm:"column:collect_count;type:integer;not null;default:0" json:"collect_count"` // 收藏次数
 	StartTime    int            `gorm:"column:start_time;type:integer;not null;default:0" json:"start_time"`       // 开始时间
 	EndTime      int            `gorm:"column:end_time;type:integer;not null;default:0" json:"end_time"`           // 结束时间
-	CreatedAt    time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt    time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	// 类别与收款码：二手买卖 (1) 才有意义传收款码图，有偿求助 (2) 时 PaymentQRURL 固定为空
+	GoodsCategory int16  `gorm:"column:goods_category;type:smallint;not null;default:1" json:"goods_category"` // 1 二手买卖 / 2 有偿求助
+	PaymentQRURL  string `gorm:"column:payment_qr_url;type:varchar(255);not null;default:''" json:"payment_qr_url,omitempty"`
+	// 定时下架：仅 HasDeadline=true 时 Deadline 有意义；过期后 cron 会把 good_status 置为 2
+	HasDeadline bool       `gorm:"column:has_deadline;type:boolean;not null;default:false" json:"has_deadline"`
+	Deadline    *time.Time `gorm:"column:deadline" json:"deadline,omitempty"`
+	CreatedAt   time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (Good) TableName() string {

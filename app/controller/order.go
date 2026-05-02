@@ -200,8 +200,11 @@ func orderToMap(ctx *gin.Context, o *model.Order) map[string]interface{} {
 				"id": g.ID, "title": g.Title, "images": g.Images, "price": g.Price,
 				"user_id":    g.UserID,
 				"goods_type": g.GoodsType, "goods_type_label": constant.GoodsTypeLabel(g.GoodsType),
-				"goods_addr":  ga,
-				"pickup_addr": ga,
+				"goods_category":       g.GoodsCategory,
+				"goods_category_label": constant.GoodsCategoryLabel(g.GoodsCategory),
+				"payment_qr_url":       oss.ToFullURL(g.PaymentQRURL),
+				"goods_addr":           ga,
+				"pickup_addr":          ga,
 			}
 			if g.GoodsLat != nil {
 				gm["goods_lat"] = *g.GoodsLat

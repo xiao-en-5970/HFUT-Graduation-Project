@@ -7,6 +7,7 @@ import (
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/config"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/router"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/scheduler"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
@@ -69,6 +70,10 @@ func Boot() error {
 		zap.Int("route_count", len(routes)),
 		zap.String("engine_ptr", fmt.Sprintf("%p", service.Engine)),
 	)
+
+	// 启动后台任务（非阻塞）：商品到期自动下架，每 5 分钟扫描一次。
+	// 进程退出时由 ctx 被 GC（main 阻塞在 service.Run），协程随主进程一起结束。
+	scheduler.StartGoodsAutoOffShelf(ctx)
 
 	// gin.Engine.Run → http.ListenAndServe：成功后会一直阻塞，直到进程退出。
 	// Gin 在 release 模式下不会在控制台打印监听地址，容易造成「启动后没日志」的误判，故在此显式打出。
