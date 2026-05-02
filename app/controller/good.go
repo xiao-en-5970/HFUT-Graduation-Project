@@ -110,12 +110,15 @@ func enrichGoodWithAuthor(ctx *gin.Context, g *model.Good) map[string]interface{
 
 // GoodList 商品列表 GET /goods
 // Query: page, pageSize, q（标题模糊）, sort（空/newest=上架时间降序；updated_at=最近更新降序；recommend=个性化推荐）
+// category: 0/缺省=不过滤；1=二手买卖；2=有偿求助
 func GoodList(ctx *gin.Context) {
 	schoolID := middleware.GetSchoolID(ctx)
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
 	keyword := strings.TrimSpace(ctx.Query("q"))
 	sort := strings.TrimSpace(ctx.Query("sort"))
+	cat, _ := strconv.Atoi(ctx.Query("category"))
+	category := int16(cat)
 	if sort == "newest" {
 		sort = ""
 	}
@@ -143,7 +146,7 @@ func GoodList(ctx *gin.Context) {
 		})
 		return
 	}
-	list, total, err := service.Good().List(ctx, schoolID, page, pageSize, keyword, sort)
+	list, total, err := service.Good().List(ctx, schoolID, page, pageSize, keyword, sort, category)
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
 		return

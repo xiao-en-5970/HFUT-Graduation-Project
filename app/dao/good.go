@@ -64,7 +64,8 @@ func goodListOrderClause(sort string) string {
 }
 
 // List 在售商品分页；keyword 非空时标题模糊匹配（ILIKE）；sort 见 GoodListSortUpdatedAt
-func (s *GoodStore) List(ctx context.Context, viewerSchoolID uint, page, pageSize int, keyword string, sort string) ([]*model.Good, int64, error) {
+// category: 0 不过滤；1 二手买卖；2 有偿求助
+func (s *GoodStore) List(ctx context.Context, viewerSchoolID uint, page, pageSize int, keyword string, sort string, category int16) ([]*model.Good, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -75,6 +76,9 @@ func (s *GoodStore) List(ctx context.Context, viewerSchoolID uint, page, pageSiz
 	q := pgsql.DB.WithContext(ctx).Model(&model.Good{}).
 		Where("status = ? AND good_status = ?", constant.StatusValid, GoodStatusOnSale)
 	q = applyGoodSchoolVisibility(q, viewerSchoolID)
+	if category == constant.GoodsCategoryNormal || category == constant.GoodsCategoryHelp {
+		q = q.Where("goods_category = ?", category)
+	}
 	kw := strings.TrimSpace(keyword)
 	if kw != "" {
 		q = q.Where("title ILIKE ?", "%"+kw+"%")

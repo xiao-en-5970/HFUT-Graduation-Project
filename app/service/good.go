@@ -89,13 +89,18 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 	if req.Stock < 0 {
 		req.Stock = 0
 	}
-	gt := req.GoodsType
-	if gt != constant.GoodsTypeDelivery && gt != constant.GoodsTypePickup && gt != constant.GoodsTypeOnline {
-		gt = constant.GoodsTypeDelivery
-	}
 	category := req.GoodsCategory
 	if !constant.IsValidGoodsCategory(category) {
 		category = constant.GoodsCategoryNormal
+	}
+	gt := req.GoodsType
+	if gt != constant.GoodsTypeDelivery && gt != constant.GoodsTypePickup && gt != constant.GoodsTypeOnline {
+		// 求助默认在线协作（无物流）；二手默认送货上门
+		if category == constant.GoodsCategoryHelp {
+			gt = constant.GoodsTypeOnline
+		} else {
+			gt = constant.GoodsTypeDelivery
+		}
 	}
 	qr := strings.TrimSpace(req.PaymentQRURL)
 	if category == constant.GoodsCategoryHelp {
@@ -297,8 +302,8 @@ func (s *goodService) OffShelf(ctx *gin.Context, id uint, userID uint) error {
 	return dao.Good().UpdateColumns(ctx.Request.Context(), id, map[string]interface{}{"good_status": dao.GoodStatusOffShelf})
 }
 
-func (s *goodService) List(ctx *gin.Context, schoolID uint, page, pageSize int, keyword string, sort string) ([]*model.Good, int64, error) {
-	return dao.Good().List(ctx.Request.Context(), schoolID, page, pageSize, keyword, sort)
+func (s *goodService) List(ctx *gin.Context, schoolID uint, page, pageSize int, keyword string, sort string, category int16) ([]*model.Good, int64, error) {
+	return dao.Good().List(ctx.Request.Context(), schoolID, page, pageSize, keyword, sort, category)
 }
 
 func (s *goodService) ListByUserID(ctx *gin.Context, targetUserID uint, viewerSchoolID uint, includeOffShelf bool, ownList bool, page, pageSize int) ([]*model.Good, int64, error) {
