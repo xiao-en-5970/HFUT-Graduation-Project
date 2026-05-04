@@ -1,34 +1,16 @@
 -- ============================================================================
--- 服务间互信 token: 给 QQ-bot 等服务调 hfut /api/v1/bot/* 用的鉴权凭证
+-- bot_service_tokens 表已废弃。
 --
--- 设计要点（参考 QQ-bot 仓库 skill/bot/SKILL.md）:
---   - 不存明文，只存 sha256 hex；明文仅在创建时返回一次给管理员妥善保管
---   - 支持滚动作废: revoked_at 置时间 = 立即失效；可发新的、保留旧的"过渡期"双 token 共存
---   - 支持过期时间(可选): expires_at 不传则无限期
---   - 记录 last_used_at: 让 admin 看到哪些 token 还在用、哪些可以清理
+-- 历史：原计划在数据库里维护 service-to-service 鉴权 token 元数据（创建/作废/列出），
+-- 让 admin 在 web 后台管理。
+--
+-- 现状：方案改为"共享 secret + bot 自签短期 JWT"——bot 跟 hfut 都拿同一个 HS256 secret，
+-- bot 每次请求自签 60s 有效期 JWT，hfut 端用同一 secret 验签即放行，**不需要 DB 维护**。
+-- 旋转 secret = 让所有旧 token 失效；不再有 admin 创建/作废 token 的概念。
+--
+-- 详细设计见 QQ-bot 仓库 skill/bot/SKILL.md。
+--
+-- 这条 migration 把废弃表删掉，幂等：表不存在也不报错。
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS bot_service_tokens
-(
-    id           SERIAL PRIMARY KEY,
-    name         VARCHAR(64)  NOT NULL,
-    description  VARCHAR(255),
-    token_hash   VARCHAR(255) NOT NULL UNIQUE,
-    created_by   INTEGER REFERENCES users (id),
-    created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at   TIMESTAMP,
-    revoked_at   TIMESTAMP,
-    last_used_at TIMESTAMP
-);
-
-COMMENT ON TABLE bot_service_tokens IS 'service-to-service 鉴权 token；用于 QQ-bot 等服务调 hfut /api/v1/bot/*';
-COMMENT ON COLUMN bot_service_tokens.name IS '可读名称(如 "qq-bot-prod"），辅助管理员区分';
-COMMENT ON COLUMN bot_service_tokens.description IS '备注说明';
-COMMENT ON COLUMN bot_service_tokens.token_hash IS 'sha256(明文) hex；明文不入库';
-COMMENT ON COLUMN bot_service_tokens.created_by IS '创建该 token 的管理员 user_id';
-COMMENT ON COLUMN bot_service_tokens.expires_at IS '过期时间，NULL=不过期';
-COMMENT ON COLUMN bot_service_tokens.revoked_at IS '主动作废时间；NULL=有效，非 NULL=立即失效';
-COMMENT ON COLUMN bot_service_tokens.last_used_at IS '最后一次成功鉴权的时间，方便清理冷 token';
-
-CREATE INDEX IF NOT EXISTS idx_bot_service_tokens_revoked_expires
-    ON bot_service_tokens (revoked_at, expires_at);
+DROP TABLE IF EXISTS bot_service_tokens;

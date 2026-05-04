@@ -219,11 +219,6 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.DELETE("/schools/:id", controller.AdminSchoolDisable)
 		adminGroup.POST("/schools/:id/restore", controller.AdminSchoolRestore)
 
-		// bot service token 管理（admin 创建/列出/作废 service-to-service 鉴权 token）
-		adminGroup.POST("/bot/service-tokens", controller.AdminBotServiceTokenCreate)
-		adminGroup.GET("/bot/service-tokens", controller.AdminBotServiceTokenList)
-		adminGroup.POST("/bot/service-tokens/:id/revoke", controller.AdminBotServiceTokenRevoke)
-
 		// 商品管理（全站）
 		adminGroup.GET("/goods", controller.AdminGoodList)
 		adminGroup.GET("/goods/:id", controller.AdminGoodGet)

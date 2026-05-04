@@ -15,5 +15,3 @@ func OrderMessageRead() *OrderMessageReadStore { return &OrderMessageReadStore{}
 func UserLocation() *UserLocationStore         { return &UserLocationStore{} }
 func UserBehavior() *UserBehaviorStore         { return &UserBehaviorStore{} }
 func Notification() *NotificationStore         { return &NotificationStore{} }
-
-// BotServiceToken() 在 bot_service_token.go 里定义，给 admin / middleware.BotServiceAuth 用。

@@ -5,28 +5,31 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/util"
 )
 
 // botServiceTokenHeader bot 调 hfut 时携带 service token 的 header 名。
 //
-// 用 X- 前缀表明这是非标准（自定义）头；跟 JWT 的 Authorization: Bearer 区分开，
-// 避免反代或日志中间件把它当登录凭证打日志（日志已有屏蔽规则的话会少漏）。
+// 用 X- 前缀表明这是非标准（自定义）头；跟 user JWT 的 Authorization: Bearer 区分开。
 const botServiceTokenHeader = "X-Bot-Service-Token"
 
-// botServiceTokenIDCtxKey ctx 里存"当前用的 token id"用的 key。
-// 业务 handler 可以拿这个值做审计 / 限流（"这次操作是哪个 token 发起的"）。
-const botServiceTokenIDCtxKey = "bot_service_token_id"
+// ctx key
+const (
+	botServiceCtxKeyService = "bot_service_service_name"
+	botServiceCtxKeyJTI     = "bot_service_jti"
+)
 
-// BotServiceAuth 校验 X-Bot-Service-Token header；token 有效（未作废 + 未过期）才放行。
+// BotServiceAuth 校验 X-Bot-Service-Token header 里的 service-to-service JWT。
 //
-// 跟 JWTAuth 不一样的是：
-//   - 不依赖用户身份；这是服务间互信
-//   - 任何调用都必须显式带 token；缺失 = 401
-//   - 校验方式：sha256(明文) → 查 bot_service_tokens 表
+// 流程（**纯本地验签，不查任何 DB**）：
+//  1. JWT 验签（HS256 + 共享 secret BotServiceJWTSecret）
+//  2. 校验 iss = "HFUT-Graduation-Project-bot"，防止 user 登录 JWT 误用
+//  3. 校验 exp 未过期（jwt 库自动）
+//  4. 通过后把 service / jti 写进 ctx 给 handler 审计 / log
 //
-// 校验通过后把 token id 写进 ctx；handler 可用 GetBotServiceTokenID(ctx) 取。
+// 不再有"DB token 表 + revoke 机制"——bot 端每次签发短期 token（60s）已经是默认快速失效；
+// 真泄漏想立刻让所有现存 token 失效，rotate BotServiceJWTSecret 即可。
 func BotServiceAuth() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		plain := ctx.GetHeader(botServiceTokenHeader)
@@ -38,34 +41,40 @@ func BotServiceAuth() gin.HandlerFunc {
 			ctx.Abort()
 			return
 		}
-		t, err := service.VerifyBotServiceToken(ctx.Request.Context(), plain)
+		claims, err := util.ParseBotServiceToken(plain)
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, response.Response{
-				Code:    500,
-				Message: "service token 校验失败: " + err.Error(),
-			})
-			ctx.Abort()
-			return
-		}
-		if t == nil {
 			ctx.JSON(http.StatusUnauthorized, response.Response{
 				Code:    401,
-				Message: "service token 无效（已作废 / 已过期 / 不存在）",
+				Message: "service token 无效: " + err.Error(),
 			})
 			ctx.Abort()
 			return
 		}
-		ctx.Set(botServiceTokenIDCtxKey, t.ID)
+		ctx.Set(botServiceCtxKeyService, claims.Service)
+		ctx.Set(botServiceCtxKeyJTI, claims.RegisteredClaims.ID)
 		ctx.Next()
 	}
 }
 
-// GetBotServiceTokenID 从 ctx 取出当前请求用的 token id；非 bot 路由组返回 0。
-func GetBotServiceTokenID(ctx *gin.Context) uint {
-	v, ok := ctx.Get(botServiceTokenIDCtxKey)
+// GetBotServiceServiceName 从 ctx 取出 token 里的服务名（"qq-bot" 等）。
+//
+// 业务 handler 想 log "这次操作来自哪个 service" 时用。
+func GetBotServiceServiceName(ctx *gin.Context) string {
+	v, ok := ctx.Get(botServiceCtxKeyService)
 	if !ok {
-		return 0
+		return ""
 	}
-	id, _ := v.(uint)
-	return id
+	s, _ := v.(string)
+	return s
+}
+
+// GetBotServiceJTI 从 ctx 取出当前请求 JWT 的 jti。每次 bot 签发的 jti 都不一样，
+// 适合做 trace id（一次端到端调用串起来）。
+func GetBotServiceJTI(ctx *gin.Context) string {
+	v, ok := ctx.Get(botServiceCtxKeyJTI)
+	if !ok {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
 }

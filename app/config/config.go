@@ -39,6 +39,12 @@ var (
 	JWTSecret     string
 	JWTExpireHour int
 
+	// BotServiceJWTSecret 是 bot 调 hfut /api/v1/bot/* 的服务间 JWT 共享 secret。
+	// bot 端用同一个 secret 自签 60s 有效期 token 放 X-Bot-Service-Token 头；
+	// 这边 middleware 验签即放行，不查 DB。
+	// 跟上面 JWTSecret（user 登录用）独立，方便单独 rotate；空 = 拒绝所有 bot 调用。
+	BotServiceJWTSecret string
+
 	OSSRoot           string // OSS 存储根路径，容器内 /oss，对应宿主机 /var/oss
 	OSSHost           string // OSS 对外访问域名，如 http://api.xiaoen.xyz，用于返回完整 URL 给前端
 	OSSSmallImageSize int    // 压缩图最大边长（像素），如 720 或 540，0 表示不生成压缩图
@@ -114,6 +120,9 @@ func LoadConfigFrom(path string) error {
 
 	JWTSecret = getEnv("JWT_SECRET", "your-secret-key-change-in-production")
 	JWTExpireHour = getEnvInt("JWT_EXPIRE_HOUR", 24)
+	// 默认空——表示禁用 bot 服务间 JWT 鉴权。任何 bot 调 /api/v1/bot/* 的请求都会 401。
+	// 部署时务必通过 env BOT_SERVICE_JWT_SECRET 设置，跟 QQ-bot 那边的 HFUT_API_JWT_SECRET 对齐
+	BotServiceJWTSecret = getEnv("BOT_SERVICE_JWT_SECRET", "")
 	OSSRoot = getEnv("OSS_ROOT", "/oss")
 	OSSHost = getEnv("OSS_HOST", "")
 	OSSSmallImageSize = getEnvInt("OSS_SMALL_IMAGE_SIZE", 720)
