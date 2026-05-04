@@ -30,8 +30,13 @@ func SetupRouter(engine *gin.Engine) {
 	// 应用 zap 日志中间件到所有 API 路由
 	api.Use(middleware.ZapLogger())
 	PublicRouter(api)
-	PrivateRouter(api)
+	// BotRouter 必须在 PrivateRouter 之前注册——
+	// PrivateRouter 内部会调 api.Use(middleware.JWTAuth())，那个 Use 修改的是 api 这个
+	// RouterGroup 自身的中间件链，影响之后**所有**在 api 上注册的路由（包括 bot 路由组）。
+	// BotRouter 的 /api/v1/bot/* 用 BotServiceAuth（X-Bot-Service-Token），不应该被 user
+	// JWTAuth 拦截——所以提前注册避开。
 	BotRouter(api)
+	PrivateRouter(api)
 }
 
 func PublicRouter(api *gin.RouterGroup) {
