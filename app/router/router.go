@@ -31,6 +31,7 @@ func SetupRouter(engine *gin.Engine) {
 	api.Use(middleware.ZapLogger())
 	PublicRouter(api)
 	PrivateRouter(api)
+	BotRouter(api)
 }
 
 func PublicRouter(api *gin.RouterGroup) {
@@ -218,6 +219,11 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.DELETE("/schools/:id", controller.AdminSchoolDisable)
 		adminGroup.POST("/schools/:id/restore", controller.AdminSchoolRestore)
 
+		// bot service token 管理（admin 创建/列出/作废 service-to-service 鉴权 token）
+		adminGroup.POST("/bot/service-tokens", controller.AdminBotServiceTokenCreate)
+		adminGroup.GET("/bot/service-tokens", controller.AdminBotServiceTokenList)
+		adminGroup.POST("/bot/service-tokens/:id/revoke", controller.AdminBotServiceTokenRevoke)
+
 		// 商品管理（全站）
 		adminGroup.GET("/goods", controller.AdminGoodList)
 		adminGroup.GET("/goods/:id", controller.AdminGoodGet)
@@ -236,5 +242,28 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.GET("/user-locations", controller.AdminUserLocationList)
 		adminGroup.POST("/user-locations", controller.AdminUserLocationCreate)
 		adminGroup.DELETE("/user-locations/:id", controller.AdminUserLocationDelete)
+	}
+}
+
+// BotRouter 挂载 /api/v1/bot/* 路由组——给 QQ-bot 这类 service account 用。
+//
+// 鉴权：middleware.BotServiceAuth 要求 X-Bot-Service-Token header；token 不通过 = 401。
+// 不依赖 JWT、不依赖学校隔离中间件（service token 自带"信任"语义，business 层自己处理学校归属）。
+func BotRouter(api *gin.RouterGroup) {
+	bot := api.Group("/bot")
+	bot.Use(middleware.BotServiceAuth())
+	{
+		// 旗下账号 upsert
+		bot.POST("/users/qq-child", controller.BotQQChildUpsert)
+
+		// 商品上下架 + 在售列表
+		bot.POST("/goods", controller.BotPublishGood)
+		bot.POST("/goods/:id/off-shelf", controller.BotOffShelfGood)
+		bot.GET("/users/:user_id/goods/active", controller.BotListActiveGoods)
+
+		// 提问 / 回答 / 关闭提问 / 群内开放提问列表
+		bot.POST("/articles", controller.BotPublishArticle)
+		bot.POST("/articles/:id/close", controller.BotCloseArticle)
+		bot.GET("/groups/:group_id/articles/open", controller.BotListOpenQuestions)
 	}
 }

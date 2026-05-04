@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // FormFieldItem 单个表单字段，每学校可自定义 label
@@ -92,18 +94,39 @@ func defaultFormFieldLabel(key string) FormFieldItem {
 
 // School 学校表
 type School struct {
-	ID         uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name       *string        `gorm:"type:varchar(50)" json:"name"`
-	Code       *string        `gorm:"type:varchar(32);uniqueIndex" json:"code"`
-	LoginURL       *string        `gorm:"column:login_url;type:varchar(512)" json:"login_url"`
-	FormFields     FormFieldsJSON `gorm:"column:form_fields;type:jsonb" json:"form_fields"`
-	CaptchaURL     *string        `gorm:"column:captcha_url;type:varchar(512)" json:"captcha_url"`
-	EAMServiceURL  *string        `gorm:"column:eam_service_url;type:varchar(512)" json:"-"` // 仅后端 info 流程用，不暴露给前端
-	InfoURL       *string        `gorm:"column:info_url;type:varchar(512)" json:"-"`       // 仅后端 info 流程用，不暴露给前端
-	UserCount  int            `gorm:"column:user_count;default:0" json:"user_count"`
-	Status     int16          `gorm:"type:smallint;default:1" json:"status"`
-	CreatedAt  time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt  time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	ID            uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name          *string        `gorm:"type:varchar(50)" json:"name"`
+	Code          *string        `gorm:"type:varchar(32);uniqueIndex" json:"code"`
+	LoginURL      *string        `gorm:"column:login_url;type:varchar(512)" json:"login_url"`
+	FormFields    FormFieldsJSON `gorm:"column:form_fields;type:jsonb" json:"form_fields"`
+	CaptchaURL    *string        `gorm:"column:captcha_url;type:varchar(512)" json:"captcha_url"`
+	EAMServiceURL *string        `gorm:"column:eam_service_url;type:varchar(512)" json:"-"` // 仅后端 info 流程用，不暴露给前端
+	InfoURL       *string        `gorm:"column:info_url;type:varchar(512)" json:"-"`        // 仅后端 info 流程用，不暴露给前端
+
+	// QQGroups 映射到该学校的 QQ 群号列表。
+	//
+	// bot 在这些群里识别到未注册的 QQ 用户时，会创建归属本校的 QQ 旗下账号；
+	// 旗下账号也只能在本校列表里的群通过 bot 上架——这是"学校隔离"的额外约束。
+	// 详见 QQ-bot 仓库 skill/bot/SKILL.md 的"学校归属"段。
+	QQGroups pq.Int64Array `gorm:"column:qq_groups;type:bigint[];not null;default:'{}'" json:"qq_groups,omitempty"`
+
+	UserCount int       `gorm:"column:user_count;default:0" json:"user_count"`
+	Status    int16     `gorm:"type:smallint;default:1" json:"status"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+// HasQQGroup 当前学校是否启用了某个 QQ 群（用于 bot 创建旗下账号 / 限制旗下账号上架）。
+func (s *School) HasQQGroup(groupID int64) bool {
+	if s == nil {
+		return false
+	}
+	for _, g := range s.QQGroups {
+		if g == groupID {
+			return true
+		}
+	}
+	return false
 }
 
 func (School) TableName() string {
