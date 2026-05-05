@@ -24,11 +24,17 @@ func notifAccountIDs(ctx *gin.Context, callerID uint) []uint {
 	return ids.AllIDs
 }
 
-// notificationAuthor 发送者缩略信息，嵌入 notificationVO，供前端展示头像与昵称
+// notificationAuthor 发送者缩略信息，嵌入 notificationVO，供前端展示头像与昵称。
+//
+// QQ 旗下号语义：跟 vo.AuthorProfile 一致——非孤儿旗下号作为通知发起者时，会额外
+// 带 from_user_id + from_username 让前端拼"username（来自用户 xxx）"展示。
+// 这样"我点赞 / 评论 / 回复 / 关注的人是 X 通过 QQ 发的"在通知里也可见。
 type notificationAuthor struct {
-	ID       uint   `json:"id"`
-	Username string `json:"username"`
-	Avatar   string `json:"avatar"`
+	ID           uint   `json:"id"`
+	Username     string `json:"username"`
+	Avatar       string `json:"avatar"`
+	FromUserID   uint   `json:"from_user_id,omitempty"`
+	FromUsername string `json:"from_username,omitempty"`
 }
 
 // notificationVO 列表返回的单条通知
@@ -80,6 +86,18 @@ func NotificationList(ctx *gin.Context) {
 		fromIDs = append(fromIDs, id)
 	}
 	userMap, _ := dao.User().GetByIDs(ctx.Request.Context(), fromIDs)
+	// 非孤儿 QQ 旗下号 → 拉它们的主账号信息，用来拼"（来自用户 xxx）"——跟
+	// buildAuthorVO 走同一套语义；详见 vo/response.AuthorProfile 注释。
+	parentMap := make(map[uint]*model.User, 0)
+	if len(userMap) > 0 {
+		validMap := make(map[uint]*model.User, len(userMap))
+		for id, u := range userMap {
+			if u != nil {
+				validMap[id] = u
+			}
+		}
+		parentMap = fetchAuthorParents(ctx.Request.Context(), validMap)
+	}
 
 	vos := make([]notificationVO, 0, len(list))
 	for _, n := range list {
@@ -113,11 +131,18 @@ func NotificationList(ctx *gin.Context) {
 			}
 			v.From = fromVO
 		} else if u := userMap[uint(n.FromUserID)]; u != nil {
-			v.From = &notificationAuthor{
+			fromVO := &notificationAuthor{
 				ID:       u.ID,
 				Username: u.Username,
 				Avatar:   u.Avatar,
 			}
+			if u.IsQQChild() && u.ParentUserID != nil && *u.ParentUserID > 0 {
+				if parent := parentMap[uint(*u.ParentUserID)]; parent != nil {
+					fromVO.FromUserID = parent.ID
+					fromVO.FromUsername = parent.Username
+				}
+			}
+			v.From = fromVO
 		}
 		vos = append(vos, v)
 	}
