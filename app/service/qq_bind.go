@@ -350,6 +350,24 @@ func QQBindConfirm(ctx context.Context, callerUserID uint, qqNumber, code string
 	// 4) 删验证码（tx 外面删，redis 失败不回滚 DB）
 	_ = commonredis.Client.Del(ctx, qqBindCodeKey(qqNumber)).Err()
 
+	// 5) 给 QQ 发绑定成功通知——让用户感知账号变更，发现异常时能立刻去解绑/找回
+	//
+	// 通知发不出去**不影响**绑定结果（事务已 commit）：仅 log warn，不重试也不报错。
+	// 用 noticeCtx 隔离父 ctx 的 cancel 影响——前端如果 confirm 已经超时取消，
+	// 我们仍要把通知发出去；30s 通知超时跟 SendPrivate 内置超时对齐就够了。
+	noticeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if botinternal.Default != nil {
+		qqInt, _ := strconv.ParseInt(qqNumber, 10, 64)
+		text := fmt.Sprintf(
+			"【HFUT 校园平台】绑定成功 ✅ 当前 QQ %s 已成功绑定到 app 账号 %q。如非本人操作，请立即在 app 里解绑并修改密码。",
+			qqNumber, user.Username,
+		)
+		if nerr := botinternal.Default.SendPrivate(noticeCtx, qqInt, text); nerr != nil {
+			logger.Warnf(ctx, "qq_bind: 绑定成功通知发送失败（不影响绑定结果） qq=%d err=%v", qqInt, nerr)
+		}
+	}
+
 	return nil
 }
 
@@ -521,6 +539,21 @@ func QQUnbindConfirm(ctx context.Context, callerUserID uint, code string) error 
 
 	// 4) 删 code（事务外，redis 失败不回滚 DB）
 	_ = commonredis.Client.Del(ctx, qqUnbindCodeKey(qqNumber)).Err()
+
+	// 5) 给 QQ 发解绑成功通知——让用户确认操作生效，万一是被盗号也能立刻发现
+	noticeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if botinternal.Default != nil {
+		qqInt, _ := strconv.ParseInt(qqNumber, 10, 64)
+		text := fmt.Sprintf(
+			"【HFUT 校园平台】解绑成功 ✅ QQ %s 已与 app 账号 %q 解除绑定，旗下账号变成孤儿状态（商品/提问数据保留）。如非本人操作，请立即修改 app 密码并重新绑定。",
+			qqNumber, user.Username,
+		)
+		if nerr := botinternal.Default.SendPrivate(noticeCtx, qqInt, text); nerr != nil {
+			logger.Warnf(ctx, "qq_unbind: 解绑成功通知发送失败（不影响解绑结果） qq=%d err=%v", qqInt, nerr)
+		}
+	}
+
 	return nil
 }
 

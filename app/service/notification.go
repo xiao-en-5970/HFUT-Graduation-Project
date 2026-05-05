@@ -16,8 +16,30 @@ type notificationService struct{}
 // Notification 工厂入口：service.Notification().XXX(...)
 func Notification() *notificationService { return &notificationService{} }
 
+// redirectToParent 接收人重定向——把指向 QQ 旗下号的通知转给它的主账号。
+//
+// 详见 service/user_account.go::ResolveTargetUserID 注释；旗下号是"发布渠道标签"，
+// inbound 通知应该直接落到主账号身上，不让旗下号持有 inbox。
+//
+// 重定向后 user_id 跟 from_user_id 的"自己给自己"判定要重做一次：避免主账号 X
+// 给自己旗下号点赞 → 重定向后 user_id == from_user_id 自己通知自己。
+func (s *notificationService) redirectToParent(ctx context.Context, n *model.Notification) (skip bool) {
+	resolved := int(ResolveTargetUserID(ctx, uint(n.UserID)))
+	if resolved != n.UserID {
+		n.UserID = resolved
+	}
+	// 重新 dedup 自己给自己（重定向后才能识别"主账号 X 点赞了 X 旗下号的内容"这种情况）
+	if n.FromUserID != 0 && n.FromUserID == n.UserID {
+		return true
+	}
+	return false
+}
+
 // emit 的统一入口；内部做了空参容错、自己给自己触发时跳过。
 // 所有参数均非严格校验（保持对 emit 调用方的宽容），异常仅写日志不影响主接口。
+//
+// **接收人重定向**（QQ 旗下号 → 主账号）：详见 redirectToParent / SKILL.md "数据聚合 /
+// 操作权限"。所有点赞 / 评论 / 回复 / 官方通知都自动适配——单点改造覆盖全链路。
 func (s *notificationService) emit(ctx context.Context, n *model.Notification) {
 	if n == nil {
 		return
@@ -27,6 +49,9 @@ func (s *notificationService) emit(ctx context.Context, n *model.Notification) {
 	}
 	// 自己对自己的行为不通知（例：给自己点赞、给自己评论）
 	if n.FromUserID != 0 && n.FromUserID == n.UserID {
+		return
+	}
+	if s.redirectToParent(ctx, n) {
 		return
 	}
 	n.Status = constant.StatusValid
@@ -46,6 +71,9 @@ func (s *notificationService) emitAggregatedLike(ctx context.Context, n *model.N
 		return
 	}
 	if n.FromUserID != 0 && n.FromUserID == n.UserID {
+		return
+	}
+	if s.redirectToParent(ctx, n) {
 		return
 	}
 	n.Status = constant.StatusValid

@@ -8,9 +8,21 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/middleware"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
+
+// notifAccountIDs caller 在做"我的通知"操作时能 access 的 user_id 集合（含旗下号）。
+//
+// 失败时降级到 [callerID]——通知功能不该因为聚合查询出错而整体挂掉。
+func notifAccountIDs(ctx *gin.Context, callerID uint) []uint {
+	ids, err := service.GetAccountIDsForOps(ctx.Request.Context(), callerID)
+	if err != nil || !ids.IsAggregated() {
+		return []uint{callerID}
+	}
+	return ids.AllIDs
+}
 
 // notificationAuthor 发送者缩略信息，嵌入 notificationVO，供前端展示头像与昵称
 type notificationAuthor struct {
@@ -52,7 +64,7 @@ func NotificationList(ctx *gin.Context) {
 	types := parseNotifTypeFilter(ctx.Query("type"))
 	onlyUnread := ctx.Query("only_unread") == "1" || ctx.Query("only_unread") == "true"
 
-	list, total, err := dao.Notification().List(ctx.Request.Context(), userID, types, onlyUnread, page, pageSize)
+	list, total, err := dao.Notification().ListByUserIDs(ctx.Request.Context(), notifAccountIDs(ctx, userID), types, onlyUnread, page, pageSize)
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
 		return
@@ -126,7 +138,7 @@ func NotificationUnreadCount(ctx *gin.Context) {
 		reply.ReplyUnauthorized(ctx)
 		return
 	}
-	byType, total, err := dao.Notification().UnreadCountByType(ctx.Request.Context(), userID)
+	byType, total, err := dao.Notification().UnreadCountByTypeForUsers(ctx.Request.Context(), notifAccountIDs(ctx, userID))
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
 		return
@@ -162,7 +174,7 @@ func NotificationMarkRead(ctx *gin.Context) {
 		return
 	}
 	if req.All {
-		if err := dao.Notification().MarkAllRead(ctx.Request.Context(), userID, req.Type); err != nil {
+		if err := dao.Notification().MarkAllReadForUsers(ctx.Request.Context(), notifAccountIDs(ctx, userID), req.Type); err != nil {
 			reply.ReplyInternalError(ctx, err)
 			return
 		}
@@ -173,7 +185,7 @@ func NotificationMarkRead(ctx *gin.Context) {
 		reply.ReplyErrWithMessage(ctx, "ids 不能为空，或传 all=true")
 		return
 	}
-	if err := dao.Notification().MarkReadByIDs(ctx.Request.Context(), userID, req.IDs); err != nil {
+	if err := dao.Notification().MarkReadByIDsForUsers(ctx.Request.Context(), notifAccountIDs(ctx, userID), req.IDs); err != nil {
 		reply.ReplyInternalError(ctx, err)
 		return
 	}

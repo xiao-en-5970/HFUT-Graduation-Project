@@ -92,6 +92,26 @@ func (s *GoodStore) List(ctx context.Context, viewerSchoolID uint, page, pageSiz
 
 // ownList 为 true 时表示查看自己的商品列表，不按 viewer 学校过滤，避免 JWT 未带学籍或与商品 school_id 不一致时列表为空。
 func (s *GoodStore) ListByUserID(ctx context.Context, userID uint, viewerSchoolID uint, includeOffShelf bool, ownList bool, page, pageSize int) ([]*model.Good, int64, error) {
+	return s.ListByUserIDs(ctx, []uint{userID}, viewerSchoolID, includeOffShelf, ownList, page, pageSize)
+}
+
+// ListByUserIDs 同 ListByUserID，但 user_id 接受一组——用于"账号集"语义下的"我的商品"
+// 列表：当 caller 在看自己的列表时把它和旗下号的商品合并起来按时间倒序展示。
+//
+// 上层使用：
+//
+//	if targetUserID == callerUserID {
+//	    ids, _ := GetAccountIDsForOps(ctx, callerUserID)
+//	    list, total := dao.Good().ListByUserIDs(ctx, ids.AllIDs, ...)  // 合并视图
+//	} else {
+//	    dao.Good().ListByUserID(ctx, targetUserID, ...)                // 看别人不聚合
+//	}
+//
+// userIDs 空时返回空 list、total=0（不报错）。
+func (s *GoodStore) ListByUserIDs(ctx context.Context, userIDs []uint, viewerSchoolID uint, includeOffShelf bool, ownList bool, page, pageSize int) ([]*model.Good, int64, error) {
+	if len(userIDs) == 0 {
+		return nil, 0, nil
+	}
 	if page < 1 {
 		page = 1
 	}
@@ -100,7 +120,7 @@ func (s *GoodStore) ListByUserID(ctx context.Context, userID uint, viewerSchoolI
 	}
 	offset := (page - 1) * pageSize
 	q := pgsql.DB.WithContext(ctx).Model(&model.Good{}).
-		Where("user_id = ? AND status = ?", userID, constant.StatusValid)
+		Where("user_id IN ? AND status = ?", userIDs, constant.StatusValid)
 	if !includeOffShelf {
 		q = q.Where("good_status = ?", GoodStatusOnSale)
 	}
@@ -170,6 +190,23 @@ func (s *GoodStore) IsOwnedByUser(ctx context.Context, id uint, userID uint) (bo
 	var count int64
 	err := pgsql.DB.WithContext(ctx).Model(&model.Good{}).
 		Where("id = ? AND user_id = ? AND status = ?", id, userID, constant.StatusValid).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// IsOwnedByOneOf 是不是这组 user_id 中**任一个**拥有该商品。
+//
+// 用于"账号集"权限模型：主账号 ops 一个商品时，IDs 是 [主账号 id, 旗下账号 id]——
+// 商品 owner 是其中任一个就放行，对应 SKILL.md "主账号可以读写旗下账号全部数据"。
+//
+// IDs 空 / 长度 1 时退化为简单等值查询，不影响行为。
+func (s *GoodStore) IsOwnedByOneOf(ctx context.Context, id uint, userIDs []uint) (bool, error) {
+	if len(userIDs) == 0 {
+		return false, nil
+	}
+	var count int64
+	err := pgsql.DB.WithContext(ctx).Model(&model.Good{}).
+		Where("id = ? AND user_id IN ? AND status = ?", id, userIDs, constant.StatusValid).
 		Count(&count).Error
 	return count > 0, err
 }

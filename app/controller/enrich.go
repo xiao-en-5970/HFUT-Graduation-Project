@@ -155,6 +155,58 @@ func stampGoodsViewedBatch(ctx context.Context, userID uint, list []map[string]i
 	}
 }
 
+// fetchAuthorParents 给一组用户里的"非孤儿 QQ 旗下号"查它们的主账号信息——
+// 给 buildAuthorVO 把 FromUserID + FromUsername 字段填进 AuthorProfile 用。
+//
+// 设计动机：详见 vo/response.AuthorProfile 注释 + QQ-bot/skill/bot/SKILL.md
+// "数据聚合 / 操作权限"段——QQ 旗下号是"发布渠道标签"，作者展示要带"来自用户 xxx"
+// 让主账号身份可见。
+//
+// 为了批量减少 SQL，本函数一次性把所有"非孤儿旗下号"的 parent 拉出来。
+// users 里全是普通账号 / 孤儿时，返回空 map，零数据库开销。
+func fetchAuthorParents(ctx context.Context, users map[uint]*model.User) map[uint]*model.User {
+	parentIDs := make([]uint, 0, len(users))
+	for _, u := range users {
+		if u != nil && u.IsQQChild() && u.ParentUserID != nil && *u.ParentUserID > 0 {
+			parentIDs = append(parentIDs, uint(*u.ParentUserID))
+		}
+	}
+	if len(parentIDs) == 0 {
+		return nil
+	}
+	parentMap, _ := dao.User().GetByIDsIfValid(ctx, parentIDs)
+	return parentMap
+}
+
+// buildAuthorVO 把一个 user model 转成 AuthorProfile——附带"来自主账号"信息（如果适用）。
+//
+// parentMap 是 fetchAuthorParents 的产物；为 nil 时只填基础字段不做主账号回填（适合
+// 单篇 enrich 不批量查询的场景，会在 IsQQChild 时单独查一次）。
+func buildAuthorVO(ctx context.Context, u *model.User, parentMap map[uint]*model.User) *response.AuthorProfile {
+	if u == nil {
+		return nil
+	}
+	out := &response.AuthorProfile{
+		ID:       u.ID,
+		Username: u.Username,
+		Avatar:   oss.ToFullURL(u.Avatar),
+	}
+	if u.IsQQChild() && u.ParentUserID != nil && *u.ParentUserID > 0 {
+		var parent *model.User
+		if parentMap != nil {
+			parent = parentMap[uint(*u.ParentUserID)]
+		}
+		if parent == nil {
+			parent, _ = dao.User().GetByIDIfValid(ctx, uint(*u.ParentUserID))
+		}
+		if parent != nil {
+			out.FromUserID = parent.ID
+			out.FromUsername = parent.Username
+		}
+	}
+	return out
+}
+
 // enrichArticleWithAuthorForViewer 单篇详情：作者 + 当前用户是否已赞/已藏（extType：1帖 2问 3答）
 func enrichArticleWithAuthorForViewer(ctx context.Context, userID uint, extType int, a *model.Article) response.ArticleWithAuthor {
 	out := enrichArticleWithAuthor(ctx, a)
@@ -183,17 +235,12 @@ func enrichArticlesWithAuthor(ctx *gin.Context, list []*model.Article) []respons
 		}
 	}
 	userMap, _ := dao.User().GetByIDsIfValid(ctx.Request.Context(), ids)
+	parentMap := fetchAuthorParents(ctx.Request.Context(), userMap)
 	result := make([]response.ArticleWithAuthor, len(list))
 	for i, a := range list {
 		result[i] = response.ArticleWithAuthor{Article: *a}
 		if a.UserID != nil {
-			if u := userMap[uint(*a.UserID)]; u != nil {
-				result[i].Author = &response.AuthorProfile{
-					ID:       u.ID,
-					Username: u.Username,
-					Avatar:   oss.ToFullURL(u.Avatar),
-				}
-			}
+			result[i].Author = buildAuthorVO(ctx.Request.Context(), userMap[uint(*a.UserID)], parentMap)
 		}
 	}
 	return result
@@ -205,11 +252,7 @@ func enrichArticleWithAuthor(ctx context.Context, a *model.Article) response.Art
 	if a.UserID != nil && *a.UserID > 0 {
 		u, err := dao.User().GetByIDIfValid(ctx, uint(*a.UserID))
 		if err == nil && u != nil {
-			out.Author = &response.AuthorProfile{
-				ID:       u.ID,
-				Username: u.Username,
-				Avatar:   oss.ToFullURL(u.Avatar),
-			}
+			out.Author = buildAuthorVO(ctx, u, nil) // 单篇 enrich 不批量；buildAuthorVO 会按需单独拉 parent
 		}
 	}
 	return out
@@ -305,6 +348,7 @@ func enrichCommentsWithAuthor(ctx *gin.Context, list []*model.Comment) []respons
 	}
 
 	userMap, _ := dao.User().GetByIDsIfValid(ctx.Request.Context(), userIDs)
+	parentMap := fetchAuthorParents(ctx.Request.Context(), userMap)
 
 	// 批量检查当前用户对所有评论（含 preview）的点赞状态
 	allCommentIDs := make([]uint, 0, len(list)+len(allPreviewReplies))
@@ -324,12 +368,7 @@ func enrichCommentsWithAuthor(ctx *gin.Context, list []*model.Comment) []respons
 	}
 
 	makeAuthor := func(uid int) *response.AuthorProfile {
-		if u := userMap[uint(uid)]; u != nil {
-			return &response.AuthorProfile{
-				ID: u.ID, Username: u.Username, Avatar: oss.ToFullURL(u.Avatar),
-			}
-		}
-		return nil
+		return buildAuthorVO(ctx.Request.Context(), userMap[uint(uid)], parentMap)
 	}
 
 	replyToAuthor := func(c *model.Comment) *response.AuthorProfile {

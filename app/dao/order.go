@@ -39,6 +39,15 @@ func (s *OrderStore) FindActiveBuyerOrderForGoods(ctx context.Context, buyerID u
 }
 
 func (s *OrderStore) ListByUserID(ctx context.Context, userID uint, page, pageSize int) ([]*model.Order, int64, error) {
+	return s.ListByUserIDs(ctx, []uint{userID}, page, pageSize)
+}
+
+// ListByUserIDs 同 ListByUserID，但 buyer user_id 接受一组——给"账号集"语义下
+// "我作为买家的订单"列表用：caller 的主账号 + 旗下号都可能下过单，合并展示。
+func (s *OrderStore) ListByUserIDs(ctx context.Context, userIDs []uint, page, pageSize int) ([]*model.Order, int64, error) {
+	if len(userIDs) == 0 {
+		return nil, 0, nil
+	}
 	if page < 1 {
 		page = 1
 	}
@@ -47,7 +56,7 @@ func (s *OrderStore) ListByUserID(ctx context.Context, userID uint, page, pageSi
 	}
 	offset := (page - 1) * pageSize
 	q := pgsql.DB.WithContext(ctx).Model(&model.Order{}).
-		Where("user_id = ?", userID).
+		Where("user_id IN ?", userIDs).
 		Where("status = ?", constant.StatusValid)
 	var total int64
 	q.Count(&total)
@@ -57,6 +66,15 @@ func (s *OrderStore) ListByUserID(ctx context.Context, userID uint, page, pageSi
 }
 
 func (s *OrderStore) ListBySellerID(ctx context.Context, sellerID uint, page, pageSize int) ([]*model.Order, int64, error) {
+	return s.ListBySellerIDs(ctx, []uint{sellerID}, page, pageSize)
+}
+
+// ListBySellerIDs 同 ListBySellerID，但 seller user_id 接受一组——给"账号集"语义下
+// "我作为卖家的订单"列表用：caller 的主账号 + 旗下号都可能挂过商品，合并展示对应订单。
+func (s *OrderStore) ListBySellerIDs(ctx context.Context, sellerIDs []uint, page, pageSize int) ([]*model.Order, int64, error) {
+	if len(sellerIDs) == 0 {
+		return nil, 0, nil
+	}
 	if page < 1 {
 		page = 1
 	}
@@ -64,10 +82,10 @@ func (s *OrderStore) ListBySellerID(ctx context.Context, sellerID uint, page, pa
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
-	// 通过 goods 表关联：订单的 goods 属于 seller
+	// 通过 goods 表关联：订单的 goods 属于 sellerIDs 中任一个
 	q := pgsql.DB.WithContext(ctx).Model(&model.Order{}).
 		Joins("JOIN goods ON goods.id = orders.goods_id").
-		Where("goods.user_id = ?", sellerID).
+		Where("goods.user_id IN ?", sellerIDs).
 		Where("orders.status = ?", constant.StatusValid)
 	var total int64
 	q.Count(&total)

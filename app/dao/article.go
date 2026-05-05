@@ -239,6 +239,17 @@ func (s *ArticleStore) List(ctx context.Context, viewerSchoolID uint, articleTyp
 
 // ListByUserID 按用户 ID 分页列出文章，onlyPublic=true 仅公开(publish_status=2)，false 含私密(1,2)
 func (s *ArticleStore) ListByUserID(ctx context.Context, userID uint, articleType int, onlyPublic bool, viewerSchoolID uint, page, pageSize int, sort string) ([]*model.Article, int64, error) {
+	return s.ListByUserIDs(ctx, []uint{userID}, articleType, onlyPublic, viewerSchoolID, page, pageSize, sort)
+}
+
+// ListByUserIDs 同 ListByUserID，但 user_id 接受一组——给"账号集"语义下的"我的文章"
+// 列表用：caller 看自己时把它和旗下号的文章合并起来按时间倒序展示。
+//
+// userIDs 空时返回空 list、total=0（不报错）。
+func (s *ArticleStore) ListByUserIDs(ctx context.Context, userIDs []uint, articleType int, onlyPublic bool, viewerSchoolID uint, page, pageSize int, sort string) ([]*model.Article, int64, error) {
+	if len(userIDs) == 0 {
+		return nil, 0, nil
+	}
 	if page < 1 {
 		page = 1
 	}
@@ -246,8 +257,12 @@ func (s *ArticleStore) ListByUserID(ctx context.Context, userID uint, articleTyp
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
+	intIDs := make([]int, len(userIDs))
+	for i, id := range userIDs {
+		intIDs[i] = int(id)
+	}
 	q := pgsql.DB.WithContext(ctx).Model(&model.Article{}).
-		Where("user_id = ? AND status = ? AND type = ?", int(userID), constant.StatusValid, articleType)
+		Where("user_id IN ? AND status = ? AND type = ?", intIDs, constant.StatusValid, articleType)
 	if onlyPublic {
 		q = q.Where("publish_status = ?", 2)
 	} else {
@@ -474,8 +489,60 @@ func (s *ArticleStore) ExistsAndOwnedByWithSchoolAndTypeAllowDraft(ctx context.C
 	return count > 0, err
 }
 
+// ExistsAndOwnedByOneOfWithSchoolAndTypeAllowDraft 同 AllowDraft，但允许 owner 是给定 user_id 集合中**任一个**。
+//
+// 用于"账号集"权限模型——主账号能管理"自己 + 旗下号"创建的文章。
+//
+// userIDs 空时返回 (false, nil)（防御性兜底，不报错）。
+func (s *ArticleStore) ExistsAndOwnedByOneOfWithSchoolAndTypeAllowDraft(ctx context.Context, id uint, userIDs []uint, schoolID uint, articleType int) (bool, error) {
+	if len(userIDs) == 0 {
+		return false, nil
+	}
+	// 把 []uint 转成 gorm IN 接受的 []int（dao 现有写法用 int(userID) 写 user_id 字段，保持一致）
+	intIDs := make([]int, len(userIDs))
+	for i, id := range userIDs {
+		intIDs[i] = int(id)
+	}
+	var count int64
+	q := pgsql.DB.Model(&model.Article{}).
+		Where("id = ? AND user_id IN ? AND type = ?", id, intIDs, articleType).
+		Where("status IN ?", []int16{constant.StatusValid, constant.StatusDraft})
+	q = applySchoolVisibility(q, schoolID)
+	err := q.Count(&count).Error
+	return count > 0, err
+}
+
+// PublishDraftByOneOf 同 PublishDraft，但允许 owner 是 user_id 集合中任一个。
+//
+// 跟 PublishDraft 一致：只对 status=draft 的记录生效（避免把已发布或已删除的状态翻乱）。
+func (s *ArticleStore) PublishDraftByOneOf(ctx context.Context, id uint, userIDs []uint) (bool, error) {
+	if len(userIDs) == 0 {
+		return false, nil
+	}
+	intIDs := make([]int, len(userIDs))
+	for i, id := range userIDs {
+		intIDs[i] = int(id)
+	}
+	result := pgsql.DB.WithContext(ctx).Model(&model.Article{}).
+		Where("id = ? AND user_id IN ? AND status = ?", id, intIDs, constant.StatusDraft).
+		Update("status", constant.StatusValid)
+	return result.RowsAffected > 0, result.Error
+}
+
 // ListDrafts 草稿列表，按用户汇总，type=0 全部 1帖子 2提问 3回答（viewerSchoolID 用于过滤本人可编辑的草稿）
 func (s *ArticleStore) ListDrafts(ctx context.Context, userID uint, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
+	return s.ListDraftsByUserIDs(ctx, []uint{userID}, viewerSchoolID, articleType, page, pageSize)
+}
+
+// ListDraftsByUserIDs 同 ListDrafts，但 user_id 接受一组——给"账号集"语义下的"我的草稿"
+// 用：caller 看自己的草稿列表时把它和旗下号的草稿合并起来。
+//
+// （bot 在群里识别到的提问 / 回答虽然主要是 ArticleStatusValid 直接发布，但极端情况下
+// 用户可能在 app 里改成草稿存盘——这里也支持把这类草稿一起列出来）
+func (s *ArticleStore) ListDraftsByUserIDs(ctx context.Context, userIDs []uint, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
+	if len(userIDs) == 0 {
+		return nil, 0, nil
+	}
 	if page < 1 {
 		page = 1
 	}
@@ -483,7 +550,11 @@ func (s *ArticleStore) ListDrafts(ctx context.Context, userID uint, viewerSchool
 		pageSize = 20
 	}
 	offset := (page - 1) * pageSize
-	q := pgsql.DB.WithContext(ctx).Model(&model.Article{}).Where("status = ? AND user_id = ?", constant.StatusDraft, int(userID))
+	intIDs := make([]int, len(userIDs))
+	for i, id := range userIDs {
+		intIDs[i] = int(id)
+	}
+	q := pgsql.DB.WithContext(ctx).Model(&model.Article{}).Where("status = ? AND user_id IN ?", constant.StatusDraft, intIDs)
 	if articleType > 0 {
 		q = q.Where("type = ?", articleType)
 	}

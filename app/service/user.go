@@ -143,6 +143,19 @@ func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, e
 			userInfo.SchoolName = *school.Name
 		}
 	}
+	// 把当前主账号挂着的 QQ 旗下账号信息一并返回，给前端做"来自 QQ" tag 用——
+	// 详见 vo/response.UserInfo 的 QQChildUserID 字段注释 + SKILL.md "数据聚合 / 操作权限" 段。
+	// 查询失败 / 没绑：保持零值，不报错（不阻塞主信息返回）
+	if !userDao.IsQQChild() {
+		ids, ierr := GetAccountIDsForOps(ctx.Request.Context(), userID)
+		if ierr == nil && ids.ChildID != 0 {
+			userInfo.QQChildUserID = ids.ChildID
+			// 同时拉一次旗下账号的 qq_number 给前端展示"已绑 QQ XXX"
+			if child, cerr := dao.User().GetByID(ctx.Request.Context(), ids.ChildID); cerr == nil && child != nil && child.QQNumber != nil {
+				userInfo.QQChildQQNumber = *child.QQNumber
+			}
+		}
+	}
 	return userInfo, nil
 }
 

@@ -86,14 +86,27 @@ func (s *NotificationStore) UpsertAggregatedLike(ctx context.Context, n *model.N
 //	types: 若为空则不限类型；否则只返回指定 type
 //	onlyUnread: 仅未读
 func (s *NotificationStore) List(ctx context.Context, userID uint, types []int, onlyUnread bool, page, pageSize int) ([]*model.Notification, int64, error) {
+	return s.ListByUserIDs(ctx, []uint{userID}, types, onlyUnread, page, pageSize)
+}
+
+// ListByUserIDs 同 List，但 user_id 接受一组——给"账号集"语义下的"我的通知"用：
+// caller 主账号 + 旗下号的通知合并展示。
+func (s *NotificationStore) ListByUserIDs(ctx context.Context, userIDs []uint, types []int, onlyUnread bool, page, pageSize int) ([]*model.Notification, int64, error) {
+	if len(userIDs) == 0 {
+		return nil, 0, nil
+	}
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
 	}
+	intIDs := make([]int, len(userIDs))
+	for i, id := range userIDs {
+		intIDs[i] = int(id)
+	}
 	q := pgsql.DB.WithContext(ctx).Model(&model.Notification{}).
-		Where("user_id = ? AND status = ?", int(userID), constant.StatusValid)
+		Where("user_id IN ? AND status = ?", intIDs, constant.StatusValid)
 	if len(types) > 0 {
 		q = q.Where("type IN ?", types)
 	}
@@ -117,6 +130,18 @@ func (s *NotificationStore) List(ctx context.Context, userID uint, types []int, 
 // UnreadCountByType 返回当前用户各 type 的未读数。
 // 返回 map[type]count；另单独返回 total 便于前端直接使用。
 func (s *NotificationStore) UnreadCountByType(ctx context.Context, userID uint) (map[int]int64, int64, error) {
+	return s.UnreadCountByTypeForUsers(ctx, []uint{userID})
+}
+
+// UnreadCountByTypeForUsers 同 UnreadCountByType，但 user_id 接受一组——账号集合并未读。
+func (s *NotificationStore) UnreadCountByTypeForUsers(ctx context.Context, userIDs []uint) (map[int]int64, int64, error) {
+	if len(userIDs) == 0 {
+		return nil, 0, nil
+	}
+	intIDs := make([]int, len(userIDs))
+	for i, id := range userIDs {
+		intIDs[i] = int(id)
+	}
 	type row struct {
 		Type  int
 		Count int64
@@ -124,7 +149,7 @@ func (s *NotificationStore) UnreadCountByType(ctx context.Context, userID uint) 
 	var rows []row
 	err := pgsql.DB.WithContext(ctx).Model(&model.Notification{}).
 		Select("type, COUNT(1) AS count").
-		Where("user_id = ? AND status = ? AND is_read = FALSE", int(userID), constant.StatusValid).
+		Where("user_id IN ? AND status = ? AND is_read = FALSE", intIDs, constant.StatusValid).
 		Group("type").
 		Scan(&rows).Error
 	if err != nil {
@@ -139,20 +164,41 @@ func (s *NotificationStore) UnreadCountByType(ctx context.Context, userID uint) 
 	return out, total, nil
 }
 
-// MarkReadByIDs 按 ID 批量标记已读（仅本人数据）
+// MarkReadByIDs 按 ID 批量标记已读（仅本人数据；P2b 后含"账号集"——主账号也可标旗下号的通知）
 func (s *NotificationStore) MarkReadByIDs(ctx context.Context, userID uint, ids []uint) error {
-	if len(ids) == 0 {
+	return s.MarkReadByIDsForUsers(ctx, []uint{userID}, ids)
+}
+
+// MarkReadByIDsForUsers 同 MarkReadByIDs 但 user_id 接受一组——主账号能标旗下号的通知已读。
+func (s *NotificationStore) MarkReadByIDsForUsers(ctx context.Context, userIDs []uint, ids []uint) error {
+	if len(ids) == 0 || len(userIDs) == 0 {
 		return nil
 	}
+	intIDs := make([]int, len(userIDs))
+	for i, id := range userIDs {
+		intIDs[i] = int(id)
+	}
 	return pgsql.DB.WithContext(ctx).Model(&model.Notification{}).
-		Where("user_id = ? AND id IN ?", int(userID), ids).
+		Where("user_id IN ? AND id IN ?", intIDs, ids).
 		UpdateColumn("is_read", true).Error
 }
 
 // MarkAllRead 全部已读（可按 type 过滤；type=0 表示全部）
 func (s *NotificationStore) MarkAllRead(ctx context.Context, userID uint, typ int) error {
+	return s.MarkAllReadForUsers(ctx, []uint{userID}, typ)
+}
+
+// MarkAllReadForUsers 同 MarkAllRead 但 user_id 接受一组——主账号一键全标。
+func (s *NotificationStore) MarkAllReadForUsers(ctx context.Context, userIDs []uint, typ int) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+	intIDs := make([]int, len(userIDs))
+	for i, id := range userIDs {
+		intIDs[i] = int(id)
+	}
 	q := pgsql.DB.WithContext(ctx).Model(&model.Notification{}).
-		Where("user_id = ? AND is_read = FALSE AND status = ?", int(userID), constant.StatusValid)
+		Where("user_id IN ? AND is_read = FALSE AND status = ?", intIDs, constant.StatusValid)
 	if typ > 0 {
 		q = q.Where("type = ?", typ)
 	}

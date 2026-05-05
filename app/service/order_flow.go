@@ -16,7 +16,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// resolveOrderParticipant 校验 user 为买方或卖方，返回订单与商品
+// resolveOrderParticipant 校验 user 为买方或卖方，返回订单与商品。
+//
+// "账号集"权限：caller 是 buyer/seller 本人 **或** 是 buyer/seller 的主账号 / 旗下号
+// 都算合法参与方——这样旗下号挂的商品被买后，主账号能在 app 内继续操作订单状态机
+// （确认收款、确认发货等），不会因为"我不是这个订单的本人"被拒。
 func (s *orderService) resolveOrderParticipant(ctx *gin.Context, orderID uint, userID uint) (*model.Order, *model.Good, bool, bool, error) {
 	o, err := dao.Order().GetByID(ctx.Request.Context(), orderID)
 	if err != nil || o == nil {
@@ -29,8 +33,12 @@ func (s *orderService) resolveOrderParticipant(ctx *gin.Context, orderID uint, u
 	if err != nil || g == nil {
 		return nil, nil, false, false, errno.ErrOrderNotFound
 	}
-	isBuyer := o.UserID != nil && uint(*o.UserID) == userID
-	isSeller := g.UserID != nil && uint(*g.UserID) == userID
+	ids, ierr := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if ierr != nil {
+		return nil, nil, false, false, errno.ErrOrderNotParticipant
+	}
+	isBuyer := o.UserID != nil && ids.IsOwnedByOneOf(uint(*o.UserID))
+	isSeller := g.UserID != nil && ids.IsOwnedByOneOf(uint(*g.UserID))
 	if !isBuyer && !isSeller {
 		return nil, nil, false, false, errno.ErrOrderNotParticipant
 	}

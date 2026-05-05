@@ -105,9 +105,15 @@ func (s *articleService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID 
 	return art, nil
 }
 
-// Update 更新，类型不可修改。支持草稿编辑，status 可设为 1 发布
+// Update 更新，类型不可修改。支持草稿编辑，status 可设为 1 发布。
+//
+// "账号集"权限：主账号能编辑"自己 + 旗下号"创建的文章（详见 SKILL.md "数据聚合 / 操作权限"）。
 func (s *articleService) Update(ctx *gin.Context, id uint, userID uint, schoolID uint, articleType int, req UpdateArticleReq) error {
-	ok, err := dao.Article().ExistsAndOwnedByWithSchoolAndTypeAllowDraft(ctx.Request.Context(), id, userID, schoolID, articleType)
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if err != nil {
+		return err
+	}
+	ok, err := dao.Article().ExistsAndOwnedByOneOfWithSchoolAndTypeAllowDraft(ctx.Request.Context(), id, ids.AllIDs, schoolID, articleType)
 	if err != nil {
 		return err
 	}
@@ -143,7 +149,11 @@ func (s *articleService) Update(ctx *gin.Context, id uint, userID uint, schoolID
 
 // UploadImages 批量上传图片到 OSS，使用雪花 ID 路径，仅返回 URL，不更新文章。草稿也可上传
 func (s *articleService) UploadImages(ctx *gin.Context, id uint, userID uint, schoolID uint, articleType int, files []*multipart.FileHeader) ([]string, error) {
-	ok, err := dao.Article().ExistsAndOwnedByWithSchoolAndTypeAllowDraft(ctx.Request.Context(), id, userID, schoolID, articleType)
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if err != nil {
+		return nil, err
+	}
+	ok, err := dao.Article().ExistsAndOwnedByOneOfWithSchoolAndTypeAllowDraft(ctx.Request.Context(), id, ids.AllIDs, schoolID, articleType)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +179,11 @@ func (s *articleService) UploadImages(ctx *gin.Context, id uint, userID uint, sc
 
 // Delete 软删除，类型隔离。草稿也可删除（丢弃）
 func (s *articleService) Delete(ctx *gin.Context, id uint, userID uint, schoolID uint, articleType int) error {
-	ok, err := dao.Article().ExistsAndOwnedByWithSchoolAndTypeAllowDraft(ctx.Request.Context(), id, userID, schoolID, articleType)
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if err != nil {
+		return err
+	}
+	ok, err := dao.Article().ExistsAndOwnedByOneOfWithSchoolAndTypeAllowDraft(ctx.Request.Context(), id, ids.AllIDs, schoolID, articleType)
 	if err != nil {
 		return err
 	}
@@ -184,7 +198,11 @@ func (s *articleService) List(ctx *gin.Context, viewerSchoolID uint, articleType
 	return dao.Article().List(ctx.Request.Context(), viewerSchoolID, articleType, page, pageSize, sort)
 }
 
-// ListByUser 按用户分页列出文章。自己看自己：含私密(publish_status=1)；看别人：仅公开(publish_status=2)
+// ListByUser 按用户分页列出文章。自己看自己：含私密(publish_status=1)；看别人：仅公开(publish_status=2)。
+//
+// "账号集"聚合：caller 看自己时把主账号 + 旗下号的文章合并展示——前端可通过
+// article.user_id != viewerID 判断"是否旗下号"给条目打 tag；旗下账号本身就是"来自 QQ"
+// 的资源标签。
 func (s *articleService) ListByUser(ctx *gin.Context, targetUserID uint, viewerID uint, viewerSchoolID uint, articleType int, page, pageSize int, sort string) ([]*model.Article, int64, error) {
 	if targetUserID == 0 {
 		return nil, 0, errno.ErrArticleNotFoundOrNoPermission
@@ -195,6 +213,12 @@ func (s *articleService) ListByUser(ctx *gin.Context, targetUserID uint, viewerI
 		if _, err := dao.User().GetByIDIfValid(ctx.Request.Context(), targetUserID); err != nil {
 			return nil, 0, errno.ErrArticleNotFoundOrNoPermission
 		}
+		return dao.Article().ListByUserID(ctx.Request.Context(), targetUserID, articleType, onlyPublic, viewerSchoolID, page, pageSize, sort)
+	}
+	// 看自己 → 聚合主账号 + 旗下号
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), targetUserID)
+	if err == nil && ids.IsAggregated() {
+		return dao.Article().ListByUserIDs(ctx.Request.Context(), ids.AllIDs, articleType, onlyPublic, viewerSchoolID, page, pageSize, sort)
 	}
 	return dao.Article().ListByUserID(ctx.Request.Context(), targetUserID, articleType, onlyPublic, viewerSchoolID, page, pageSize, sort)
 }
@@ -219,16 +243,28 @@ func (s *articleService) ListAnswersByQuestionID(ctx *gin.Context, questionID ui
 }
 
 // ListDrafts 草稿列表，汇总帖子/提问/回答。type=0 全部 1帖子 2提问 3回答
+//
+// "账号集"聚合：把主账号 + 旗下号的草稿合并展示。
 func (s *articleService) ListDrafts(ctx *gin.Context, userID uint, viewerSchoolID uint, articleType int, page, pageSize int) ([]*model.Article, int64, error) {
 	if userID == 0 {
 		return nil, 0, errors.New("请先登录")
 	}
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if err == nil && ids.IsAggregated() {
+		return dao.Article().ListDraftsByUserIDs(ctx.Request.Context(), ids.AllIDs, viewerSchoolID, articleType, page, pageSize)
+	}
 	return dao.Article().ListDrafts(ctx.Request.Context(), userID, viewerSchoolID, articleType, page, pageSize)
 }
 
-// PublishDraft 草稿发布为正式文章
+// PublishDraft 草稿发布为正式文章。
+//
+// "账号集"权限：主账号能把"自己 + 旗下号"的草稿发布出去。
 func (s *articleService) PublishDraft(ctx *gin.Context, id uint, userID uint) error {
-	ok, err := dao.Article().PublishDraft(ctx.Request.Context(), id, userID)
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if err != nil {
+		return err
+	}
+	ok, err := dao.Article().PublishDraftByOneOf(ctx.Request.Context(), id, ids.AllIDs)
 	if err != nil {
 		return err
 	}

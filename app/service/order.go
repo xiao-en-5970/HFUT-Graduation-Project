@@ -392,11 +392,21 @@ func computeOrderDistanceMeters(senderAddr, receiverAddr string, senderLat, send
 	return &v
 }
 
+// ListByBuyer "我的买家订单"——把 caller 主账号 + 旗下号下过的单合并展示。
 func (s *orderService) ListByBuyer(ctx *gin.Context, userID uint, page, pageSize int) ([]*model.Order, int64, error) {
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if err == nil && ids.IsAggregated() {
+		return dao.Order().ListByUserIDs(ctx.Request.Context(), ids.AllIDs, page, pageSize)
+	}
 	return dao.Order().ListByUserID(ctx.Request.Context(), userID, page, pageSize)
 }
 
+// ListBySeller "我的卖家订单"——把 caller 主账号 + 旗下号挂的商品对应的订单合并展示。
 func (s *orderService) ListBySeller(ctx *gin.Context, sellerID uint, page, pageSize int) ([]*model.Order, int64, error) {
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), sellerID)
+	if err == nil && ids.IsAggregated() {
+		return dao.Order().ListBySellerIDs(ctx.Request.Context(), ids.AllIDs, page, pageSize)
+	}
 	return dao.Order().ListBySellerID(ctx.Request.Context(), sellerID, page, pageSize)
 }
 
@@ -409,6 +419,8 @@ func (s *orderService) UpdateStatus(ctx *gin.Context, id uint, orderStatus int16
 }
 
 // UpdateSellerInfo 卖家更新发货文字地址与/或地图坐标；订单为待卖方确认收款或履约中时可改。
+//
+// "账号集"权限：caller (sellerID) 是商品 owner 本人 **或** 是 owner 的主账号 / 旗下号 都允许。
 func (s *orderService) UpdateSellerInfo(ctx *gin.Context, id uint, sellerID uint, req UpdateSellerAddrReq) error {
 	o, err := dao.Order().GetByID(ctx.Request.Context(), id)
 	if err != nil || o == nil {
@@ -418,7 +430,11 @@ func (s *orderService) UpdateSellerInfo(ctx *gin.Context, id uint, sellerID uint
 		return errno.ErrOrderNotFound
 	}
 	g, err := dao.Good().GetByID(ctx.Request.Context(), uint(*o.GoodsID))
-	if err != nil || g == nil || g.UserID == nil || uint(*g.UserID) != sellerID {
+	if err != nil || g == nil || g.UserID == nil {
+		return errors.New("订单不存在或无权操作")
+	}
+	ids, ierr := GetAccountIDsForOps(ctx.Request.Context(), sellerID)
+	if ierr != nil || !ids.IsOwnedByOneOf(uint(*g.UserID)) {
 		return errors.New("订单不存在或无权操作")
 	}
 	if o.OrderStatus != constant.OrderStatusAwaitBuyerLocation &&

@@ -189,7 +189,12 @@ func (s *goodService) GetAllowOffShelf(ctx *gin.Context, id uint, viewerID uint,
 }
 
 func (s *goodService) Update(ctx *gin.Context, id uint, userID uint, schoolID uint, req UpdateGoodReq) error {
-	ok, err := dao.Good().IsOwnedByUser(ctx.Request.Context(), id, userID)
+	// "账号集"权限：主账号能管理"自己 + 旗下号"创建的商品（详见 SKILL.md "数据聚合 / 操作权限"）
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if err != nil {
+		return err
+	}
+	ok, err := dao.Good().IsOwnedByOneOf(ctx.Request.Context(), id, ids.AllIDs)
 	if err != nil || !ok {
 		return errno.ErrGoodNotFoundOrNoPermission
 	}
@@ -287,7 +292,11 @@ func (s *goodService) Update(ctx *gin.Context, id uint, userID uint, schoolID ui
 }
 
 func (s *goodService) Publish(ctx *gin.Context, id uint, userID uint) error {
-	ok, err := dao.Good().IsOwnedByUser(ctx.Request.Context(), id, userID)
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if err != nil {
+		return err
+	}
+	ok, err := dao.Good().IsOwnedByOneOf(ctx.Request.Context(), id, ids.AllIDs)
 	if err != nil || !ok {
 		return errno.ErrGoodNotFoundOrNoPermission
 	}
@@ -295,7 +304,11 @@ func (s *goodService) Publish(ctx *gin.Context, id uint, userID uint) error {
 }
 
 func (s *goodService) OffShelf(ctx *gin.Context, id uint, userID uint) error {
-	ok, err := dao.Good().IsOwnedByUser(ctx.Request.Context(), id, userID)
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if err != nil {
+		return err
+	}
+	ok, err := dao.Good().IsOwnedByOneOf(ctx.Request.Context(), id, ids.AllIDs)
 	if err != nil || !ok {
 		return errno.ErrGoodNotFoundOrNoPermission
 	}
@@ -306,7 +319,21 @@ func (s *goodService) List(ctx *gin.Context, schoolID uint, page, pageSize int, 
 	return dao.Good().List(ctx.Request.Context(), schoolID, page, pageSize, keyword, sort, category)
 }
 
+// ListByUserID 列出指定用户的商品。
+//
+// "账号集"聚合：当 ownList=true（caller 在看自己的列表）时，把主账号 + 旗下号的商品
+// 合并起来按时间倒序展示——前端可通过 good.user_id 跟主账号 id 比较判断"是否旗下号"
+// 给条目打 "来自 QQ" tag。
+//
+// ownList=false（看别人的列表）时不聚合——别人的旗下号资源不该让外部看到。
 func (s *goodService) ListByUserID(ctx *gin.Context, targetUserID uint, viewerSchoolID uint, includeOffShelf bool, ownList bool, page, pageSize int) ([]*model.Good, int64, error) {
+	if ownList {
+		ids, err := GetAccountIDsForOps(ctx.Request.Context(), targetUserID)
+		if err == nil && ids.IsAggregated() {
+			return dao.Good().ListByUserIDs(ctx.Request.Context(), ids.AllIDs, viewerSchoolID, includeOffShelf, ownList, page, pageSize)
+		}
+		// fallthrough: caller 没绑旗下号 / GetAccountIDsForOps 报错 → 退化为单 user_id 查询
+	}
 	return dao.Good().ListByUserID(ctx.Request.Context(), targetUserID, viewerSchoolID, includeOffShelf, ownList, page, pageSize)
 }
 
@@ -329,7 +356,11 @@ func (s *goodService) uploadGoodImages(ctx *gin.Context, id uint, files []*multi
 }
 
 func (s *goodService) UploadImages(ctx *gin.Context, id uint, userID uint, files []*multipart.FileHeader) ([]string, error) {
-	ok, err := dao.Good().IsOwnedByUser(ctx.Request.Context(), id, userID)
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), userID)
+	if err != nil {
+		return nil, err
+	}
+	ok, err := dao.Good().IsOwnedByOneOf(ctx.Request.Context(), id, ids.AllIDs)
 	if err != nil || !ok {
 		return nil, errno.ErrGoodNotFoundOrNoPermission
 	}

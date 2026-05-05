@@ -18,14 +18,23 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
+// getUserBrief 拿"作者简要"——非孤儿 QQ 旗下号会带上 from_user_id + from_username 让前端
+// 拼成"username（来自用户 xxx）"展示（详见 vo/response.AuthorProfile 注释）。
 func getUserBrief(ctx *gin.Context, userID uint) (map[string]interface{}, error) {
 	u, err := dao.User().GetByIDIfValid(ctx.Request.Context(), userID)
 	if err != nil || u == nil {
 		return nil, err
 	}
-	return map[string]interface{}{
+	out := map[string]interface{}{
 		"id": u.ID, "username": u.Username, "avatar": oss.ToFullURL(u.Avatar),
-	}, nil
+	}
+	if u.IsQQChild() && u.ParentUserID != nil && *u.ParentUserID > 0 {
+		if parent, perr := dao.User().GetByIDIfValid(ctx.Request.Context(), uint(*u.ParentUserID)); perr == nil && parent != nil {
+			out["from_user_id"] = parent.ID
+			out["from_username"] = parent.Username
+		}
+	}
+	return out, nil
 }
 
 // effectiveGoodAddr 商品展示用统一地址：优先 goods_addr，兼容仅填过 pickup_addr 的旧数据
