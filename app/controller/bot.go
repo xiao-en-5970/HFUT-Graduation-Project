@@ -40,6 +40,9 @@ func BotQQChildUpsert(ctx *gin.Context) {
 }
 
 // BotPublishGood: POST /api/v1/bot/goods
+//
+// 命中去重时返回 409 + biz code 4090，body 含已存在商品的 id + title——
+// bot 客户端按这俩字段做提示。
 func BotPublishGood(ctx *gin.Context) {
 	var body service.BotPublishGoodReq
 	if err := ctx.BindJSON(&body); err != nil {
@@ -48,6 +51,19 @@ func BotPublishGood(ctx *gin.Context) {
 	}
 	resp, err := service.BotPublishGood(ctx.Request.Context(), body)
 	if err != nil {
+		var dup *service.BotDuplicateGoodError
+		if errors.As(err, &dup) {
+			// 复刻"reply.ReplyErrWithCodeAndMessage" 但加 data 字段——bot 客户端拿 existing_id
+			ctx.JSON(409, gin.H{
+				"code":    4090,
+				"message": dup.Error(),
+				"data": gin.H{
+					"existing_id":    dup.ExistingID,
+					"existing_title": dup.ExistingTitle,
+				},
+			})
+			return
+		}
 		reply.ReplyErrWithMessage(ctx, err.Error())
 		return
 	}

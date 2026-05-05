@@ -30,6 +30,18 @@ var ErrBotGoodNotFound = errors.New("bot: 商品不存在或已禁用")
 // ErrBotGoodNotOwner 调用方不是商品所有者，无权操作。
 var ErrBotGoodNotOwner = errors.New("bot: 仅商品所有者或其主账号可操作")
 
+// BotDuplicateGoodError 触发去重保护——上层应返回 409，不算"失败"也不算"成功"。
+//
+// bot 那边收到 409 后应该静默/友好回执用户"你之前发过类似的"，不要尝试重试。
+type BotDuplicateGoodError struct {
+	ExistingID    uint   // 已存在的同款商品 id
+	ExistingTitle string // 已存在的标题（给 bot 拿来在群里 @ 用户提示）
+}
+
+func (e *BotDuplicateGoodError) Error() string {
+	return fmt.Sprintf("bot: 检测到 7 天内已有同款商品 (id=%d, title=%q)，跳过重复上架", e.ExistingID, e.ExistingTitle)
+}
+
 // =============================================================================
 // QQ 旗下账号 upsert
 // =============================================================================
@@ -191,6 +203,9 @@ type BotPublishGoodResp struct {
 //
 // 鉴权层假设 bot 只可能传**对应旗下账号**或**该旗下账号的主账号**的 user_id；
 // 严格的"主账号能不能替旗下账号上架"语义在 controller 那一层把控。
+//
+// 去重：上架前调 dao.Good().FindLikelyDuplicates 检查"同 user + 同 category + title
+// 互含 + 7 天内 + 在售"——命中返回 *BotDuplicateGoodError，上层应回 409。
 func BotPublishGood(ctx context.Context, req BotPublishGoodReq) (*BotPublishGoodResp, error) {
 	user, err := getActiveUser(ctx, req.UserID)
 	if err != nil {
@@ -205,6 +220,15 @@ func BotPublishGood(ctx context.Context, req BotPublishGoodReq) (*BotPublishGood
 
 	uid := int(user.ID)
 	sid := int(user.SchoolID)
+
+	// 去重检查：bot 反复识别到同款商品（用户顶帖）→ 不重复创建，回 409
+	dups, err := dao.Good().FindLikelyDuplicates(ctx, uid, req.Category, req.Title)
+	if err != nil {
+		return nil, fmt.Errorf("查重失败: %w", err)
+	}
+	if len(dups) > 0 {
+		return nil, &BotDuplicateGoodError{ExistingID: dups[0].ID, ExistingTitle: dups[0].Title}
+	}
 	g := &model.Good{
 		UserID:        &uid,
 		SchoolID:      &sid,

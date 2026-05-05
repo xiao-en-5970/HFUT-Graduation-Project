@@ -138,6 +138,34 @@ func (s *GoodStore) DecrementStockAfterSale(ctx context.Context, tx *gorm.DB, id
 	return nil
 }
 
+// FindLikelyDuplicates 找该用户最近 7 天内、同 category、title 互相包含的、还在售的商品。
+//
+// 用途：bot 调 BotPublishGood 上架前先查一次——同一 QQ 用户反复发"出鞋架 6元"
+// 这种顶帖行为不该一直重复创建商品记录。命中（即返回非空列表）时上层应该返回 409 +
+// 已存在的 good_id 让 bot 提示用户"你之前发过类似的"。
+//
+// 双向 ILIKE 包含：让"出鞋架 6元" / "三层鞋架" / "宿舍鞋架不锈钢" 都能互相命中——
+// 实际复刻"用户反复重发"的 case 比严格 fuzzy similarity 更重要。
+//
+// 不参与去重判定的字段：价格、地点、图片——重发可能改价改图，但用户语义还是同一个商品。
+func (s *GoodStore) FindLikelyDuplicates(ctx context.Context, userID int, category int16, title string) ([]*model.Good, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return nil, nil
+	}
+	var out []*model.Good
+	err := pgsql.DB.WithContext(ctx).
+		Where("user_id = ? AND goods_category = ?", userID, category).
+		Where("status = ? AND good_status = ?", constant.StatusValid, GoodStatusOnSale).
+		Where("created_at > NOW() - INTERVAL '7 days'").
+		// 双向 substring：title 是新的、t.title 是老的；任一方包含另一方都视为重复
+		Where("title ILIKE ? OR ? ILIKE '%' || title || '%'", "%"+title+"%", title).
+		Order("id DESC").
+		Limit(5).
+		Find(&out).Error
+	return out, err
+}
+
 func (s *GoodStore) IsOwnedByUser(ctx context.Context, id uint, userID uint) (bool, error) {
 	var count int64
 	err := pgsql.DB.WithContext(ctx).Model(&model.Good{}).
