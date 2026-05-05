@@ -265,5 +265,9 @@ func BotRouter(api *gin.RouterGroup) {
 		bot.POST("/articles", controller.BotPublishArticle)
 		bot.POST("/articles/:id/close", controller.BotCloseArticle)
 		bot.GET("/groups/:group_id/articles/open", controller.BotListOpenQuestions)
+
+		// 图片转存（NapCat 临时 URL → hfut OSS 永久 URL）
+		// 走 multipart/form-data；bot 那边把下载好的 NapCat 二进制直接 POST 过来
+		bot.POST("/images", controller.BotUploadImage)
 	}
 }

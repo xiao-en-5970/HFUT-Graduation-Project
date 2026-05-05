@@ -280,6 +280,23 @@ func GoodImagePathWithSnowflake(goodID uint, snowflakeID int64, ext string) stri
 	return "good/" + strconv.FormatUint(uint64(goodID), 10) + "/img_" + strconv.FormatInt(snowflakeID, 10) + "." + ext
 }
 
+// BotUserImagePath bot 转存的图片存储路径 user/{userId}/bot/img_{snowflake}.{ext}
+//
+// 跟 web 端"先建 good 再上传图"的链路区别：bot 那边一次性识别完商品就调 PublishGood，
+// good_id 还没生出来——所以用 user/ 前缀的"用户级临时图床"路径，跟具体 good/article 解耦。
+//
+// 这条路径下面的图：
+//   - 落库到 goods.images / articles.images 后会被前端正常引用
+//   - good 被下架/删除时不连带删图（路径下没有 good_id 关联，做不到自动级联）——
+//     长期会堆积，P3 阶段加 cleanup 任务（按"该用户在 7 天前的 bot/img_*"做清理）
+func BotUserImagePath(userID uint, snowflakeID int64, ext string) string {
+	ext = strings.TrimPrefix(ext, ".")
+	if ext == "" {
+		ext = "jpg"
+	}
+	return "user/" + strconv.FormatUint(uint64(userID), 10) + "/bot/img_" + strconv.FormatInt(snowflakeID, 10) + "." + ext
+}
+
 // PathForStorage 统一存 .small（缩略图），供数据库存储；若已是 .small 或非图片则原样返回
 func PathForStorage(path string) string {
 	return pathForDisplay(path)

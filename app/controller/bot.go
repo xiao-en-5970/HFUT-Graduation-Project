@@ -154,6 +154,50 @@ func BotCloseArticle(ctx *gin.Context) {
 	reply.ReplyOK(ctx)
 }
 
+// BotUploadImage: POST /api/v1/bot/images (multipart/form-data)
+//
+// 接受 bot 把 NapCat 临时图片转存到 hfut OSS，返回永久 URL。
+//
+// 表单字段：
+//
+//	file       图片二进制（必填，单张；多张请并发多次调用本接口）
+//	user_id    归属的 user_id（必填，决定图存到 user/{user_id}/bot/...）
+//
+// 错误：
+//
+//	400 = 文件缺失 / user_id 缺失 / 扩展名非图片
+//	413 = 单张图超过 BotUploadImageMaxBytes
+//	404 = user_id 找不到 / 已禁用
+//	500 = OSS 写盘失败
+func BotUploadImage(ctx *gin.Context) {
+	userIDStr := ctx.PostForm("user_id")
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil || userID == 0 {
+		reply.ReplyInvalidParams(ctx, errors.New("user_id 不能为空"))
+		return
+	}
+	file, err := ctx.FormFile("file")
+	if err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	url, err := service.BotUploadImage(ctx.Request.Context(), uint(userID), file)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrBotImageTooLarge):
+			reply.ReplyErrWithCodeAndMessage(ctx, 413, 413, err.Error())
+		case errors.Is(err, service.ErrBotImageBadExt):
+			reply.ReplyInvalidParams(ctx, err)
+		case errors.Is(err, service.ErrBotUserNotFound):
+			reply.ReplyErrWithCodeAndMessage(ctx, 404, 404, err.Error())
+		default:
+			reply.ReplyErrWithMessage(ctx, err.Error())
+		}
+		return
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"url": url})
+}
+
 // BotListOpenQuestions: GET /api/v1/bot/groups/:group_id/articles/open?limit=20
 //
 // 列出该群对应学校下的开放提问；bot 想给某条提问写回答时按 hint 文本在标题/内容里找 parent_id。

@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mime/multipart"
+	"strings"
 
 	"gorm.io/gorm"
 
@@ -15,6 +17,8 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/snowflake"
 )
 
 // ErrBotGroupNoSchool 群没有配学校时返回；bot 收到这个错应该完全静默忽略，
@@ -469,6 +473,67 @@ func getActiveUser(ctx context.Context, userID uint) (*model.User, error) {
 		return nil, err
 	}
 	return &u, nil
+}
+
+// =============================================================================
+// 图片转存（NapCat 临时 URL → hfut OSS 永久 URL）
+// =============================================================================
+
+// botImageAllowedExts 接受的图片扩展名白名单——拒绝非图片防止被滥用成通用文件床。
+//
+// 跟 oss.imageExts 保持一致就行：jpg/jpeg/png/gif/webp。
+var botImageAllowedExts = map[string]bool{
+	"jpg":  true,
+	"jpeg": true,
+	"png":  true,
+	"gif":  true,
+	"webp": true,
+}
+
+// BotUploadImageMaxBytes 单张图限大小，防 OOM/disk 滥用——10MB 对群里手机拍的图绰绰有余。
+const BotUploadImageMaxBytes = 10 * 1024 * 1024
+
+// ErrBotImageBadExt 文件名扩展名不在白名单里。
+var ErrBotImageBadExt = errors.New("bot: 仅支持 jpg/jpeg/png/gif/webp")
+
+// ErrBotImageTooLarge 文件超过 BotUploadImageMaxBytes。
+var ErrBotImageTooLarge = fmt.Errorf("bot: 单张图不能超过 %dMB", BotUploadImageMaxBytes/1024/1024)
+
+// BotUploadImage 把 bot 转过来的一张图保存到 OSS，返回永久 URL。
+//
+// 调用方：bot 在 dispatch 阶段拿到 NapCat 给的临时图片 URL，先 GET 下载图片二进制，
+// 再 multipart POST 给本接口，把 NapCat 临时 URL 替换成 hfut OSS 永久 URL，最后再
+// 调 BotPublishGood / PublishArticle 把永久 URL 入库——这样商品图不会因为 NapCat
+// 临时 URL 几天后过期而死链。
+//
+// 鉴权：caller 必须是 BotServiceAuth 中间件认过的服务（bot），且 user_id 必须存在 + valid。
+//
+// 路径：oss.BotUserImagePath(userID, sf, ext) = user/{user_id}/bot/img_{sf}.{ext}
+// 用 user/ 前缀的"用户级临时图床"路径，跟具体 good/article 解耦——bot 一次性识别完
+// 商品就调 PublishGood，那时 good_id 还没生出来。
+func BotUploadImage(ctx context.Context, userID uint, file *multipart.FileHeader) (string, error) {
+	if file == nil {
+		return "", errors.New("file 不能为空")
+	}
+	if file.Size > BotUploadImageMaxBytes {
+		return "", ErrBotImageTooLarge
+	}
+	user, err := getActiveUser(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+
+	ext := strings.ToLower(oss.ExtFromFilename(file.Filename))
+	if !botImageAllowedExts[ext] {
+		return "", ErrBotImageBadExt
+	}
+
+	relPath := oss.BotUserImagePath(user.ID, snowflake.NextID(), ext)
+	url, err := oss.Save(file, relPath)
+	if err != nil {
+		return "", fmt.Errorf("保存图片失败: %w", err)
+	}
+	return url, nil
 }
 
 // canOperateAsOwner 判断 callerUserID 是不是资源 owner_id 本人，或者 owner 的主账号。
