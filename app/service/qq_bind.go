@@ -24,10 +24,12 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/botinternal"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	commonredis "github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/redis"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
@@ -180,11 +182,14 @@ func QQBindRequestCode(ctx context.Context, callerUserID uint, qqNumber string) 
 
 	// 3) 调 bot 看 QQ 是不是好友
 	if botinternal.Default == nil {
+		logger.Warnf(ctx, "qq_bind: botinternal.Default == nil（BOT_INTERNAL_API_URL 没配 / URL 不合法）")
 		return 0, ErrBotUnavailable
 	}
 	qqInt, _ := strconv.ParseInt(qqNumber, 10, 64)
 	isFriend, err := botinternal.Default.CheckFriend(ctx, qqInt, true /* noCache */)
 	if err != nil {
+		// log 原始错——网络层 / DNS / 容器互通问题都会在这里冒头
+		logger.Error(ctx, "qq_bind: 调 bot CheckFriend 失败", zap.Int64("qq", qqInt), zap.Error(err))
 		return 0, ErrBotUnavailable
 	}
 	if !isFriend {
@@ -214,6 +219,7 @@ func QQBindRequestCode(ctx context.Context, callerUserID uint, qqNumber string) 
 	// 5) 调 bot 发私聊验证码
 	text := fmt.Sprintf("【HFUT 校园平台】您正在绑定 QQ %s 到 app 账号，验证码：%s（5 分钟内有效，请勿外泄）", qqNumber, code)
 	if err := botinternal.Default.SendPrivate(ctx, qqInt, text); err != nil {
+		logger.Error(ctx, "qq_bind: 调 bot SendPrivate 失败", zap.Int64("qq", qqInt), zap.Error(err))
 		// 删 redis code 避免"验证码已发但其实没发到"的脏状态——重置流程方便用户重试
 		_ = commonredis.Client.Del(ctx, qqBindCodeKey(qqNumber)).Err()
 		if errors.Is(err, botinternal.ErrBotNotFriend) {
