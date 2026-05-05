@@ -42,14 +42,7 @@ func UserQQBindRequestCode(ctx *gin.Context) {
 	}
 	ttl, err := service.QQBindRequestCode(ctx.Request.Context(), userID, body.QQNumber)
 	if err != nil {
-		// 限流先单独处理——要把剩余秒数 retry_after_seconds 放到 data，让前端做倒计时
-		var throttled *service.ThrottledError
-		if errors.As(err, &throttled) {
-			ctx.JSON(http.StatusTooManyRequests, gin.H{
-				"code":    429,
-				"message": throttled.Error(),
-				"data":    gin.H{"retry_after_seconds": throttled.RetryAfterSeconds},
-			})
+		if handleQQBindRetryAfter(ctx, err) {
 			return
 		}
 		switch {
@@ -68,6 +61,34 @@ func UserQQBindRequestCode(ctx *gin.Context) {
 		return
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"ttl_seconds": ttl})
+}
+
+// handleQQBindRetryAfter 把 ThrottledError / BindLockedError 统一翻成 HTTP 429
+// + retry_after_seconds 落到 data 字段。命中返回 true 表示已写过 response，调用
+// 方应当 return；不命中返回 false，调用方继续走自己的 switch。
+//
+// 区分两类是为了文案：限流是"等一下再点"，错码锁是"已锁定"——前端拿 code/message
+// 决定按钮文案。但 HTTP status 都是 429（不引入 423 Locked，避免前端拦截器多分支）。
+func handleQQBindRetryAfter(ctx *gin.Context, err error) bool {
+	var throttled *service.ThrottledError
+	if errors.As(err, &throttled) {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{
+			"code":    429,
+			"message": throttled.Error(),
+			"data":    gin.H{"retry_after_seconds": throttled.RetryAfterSeconds},
+		})
+		return true
+	}
+	var locked *service.BindLockedError
+	if errors.As(err, &locked) {
+		ctx.JSON(http.StatusTooManyRequests, gin.H{
+			"code":    4291, // 4291 = 错码锁；429 = 普通限流。前端按 code 区分文案
+			"message": locked.Error(),
+			"data":    gin.H{"retry_after_seconds": locked.RetryAfterSeconds},
+		})
+		return true
+	}
+	return false
 }
 
 // UserQQBindConfirm: POST /api/v1/user/qq-bind/confirm
@@ -93,6 +114,9 @@ func UserQQBindConfirm(ctx *gin.Context) {
 		return
 	}
 	if err := service.QQBindConfirm(ctx.Request.Context(), userID, body.QQNumber, body.Code); err != nil {
+		if handleQQBindRetryAfter(ctx, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, service.ErrCodeInvalid),
 			errors.Is(err, service.ErrCodeExpired),
@@ -131,14 +155,7 @@ func UserQQUnbindRequestCode(ctx *gin.Context) {
 	}
 	ttl, err := service.QQUnbindRequestCode(ctx.Request.Context(), userID)
 	if err != nil {
-		// 限流：跟绑定 RequestCode 一样把 retry_after_seconds 放进 data
-		var throttled *service.ThrottledError
-		if errors.As(err, &throttled) {
-			ctx.JSON(http.StatusTooManyRequests, gin.H{
-				"code":    429,
-				"message": throttled.Error(),
-				"data":    gin.H{"retry_after_seconds": throttled.RetryAfterSeconds},
-			})
+		if handleQQBindRetryAfter(ctx, err) {
 			return
 		}
 		switch {
@@ -180,6 +197,9 @@ func UserQQUnbindConfirm(ctx *gin.Context) {
 		return
 	}
 	if err := service.QQUnbindConfirm(ctx.Request.Context(), userID, body.Code); err != nil {
+		if handleQQBindRetryAfter(ctx, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, service.ErrCodeInvalid),
 			errors.Is(err, service.ErrCodeExpired),

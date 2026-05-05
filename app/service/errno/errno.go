@@ -24,6 +24,14 @@ var (
 	ErrOrderInvalidState             = errors.New("订单状态不允许此操作")
 	ErrOrderNotParticipant           = errors.New("不是该订单的买方或卖方")
 	ErrOrderReceiverLocationRequired = errors.New("请选择收货地址")
+
+	// P3.3 加急
+	ErrOrderMessageNotFound      = errors.New("消息不存在")
+	ErrOrderMessageNotInOrder    = errors.New("消息不属于该订单")
+	ErrOrderMessageNotMine       = errors.New("只能加急自己发的消息")
+	ErrOrderMessageAlreadyUrgent = errors.New("该消息已经加急过")
+	ErrOrderUrgeRecipientNoQQ    = errors.New("对方未绑 QQ，无法加急通知")
+	ErrOrderUrgeBotUnavailable   = errors.New("机器人服务暂时不可达，加急失败")
 )
 
 // 评论

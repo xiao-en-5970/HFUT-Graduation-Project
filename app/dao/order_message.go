@@ -2,6 +2,7 @@ package dao
 
 import (
 	"context"
+	"time"
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
@@ -45,4 +46,27 @@ func (s *OrderMessageStore) MaxMessageIDByOrder(ctx context.Context, orderID uin
 		orderID, constant.OrderMsgTypeOfficial,
 	).Scan(&maxID).Error
 	return maxID, err
+}
+
+// GetByID 取一条订单消息——加急流程要按 (order_id, msg_id) 校验消息归属。
+func (s *OrderMessageStore) GetByID(ctx context.Context, msgID uint) (*model.OrderMessage, error) {
+	var m model.OrderMessage
+	if err := pgsql.DB.WithContext(ctx).Where("id = ?", msgID).First(&m).Error; err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// MarkUrgent 把指定消息置为 urgent=true + urged_at=now()。
+//
+// 用 conditional UPDATE（WHERE urgent = false）保证幂等：第二次加急同一条消息
+// RowsAffected = 0，service 层据此返回"已加急过"错误。
+func (s *OrderMessageStore) MarkUrgent(ctx context.Context, msgID uint, now time.Time) (int64, error) {
+	res := pgsql.DB.WithContext(ctx).Model(&model.OrderMessage{}).
+		Where("id = ? AND urgent = ?", msgID, false).
+		Updates(map[string]interface{}{
+			"urgent":   true,
+			"urged_at": now,
+		})
+	return res.RowsAffected, res.Error
 }

@@ -15,3 +15,6 @@ func OrderMessageRead() *OrderMessageReadStore { return &OrderMessageReadStore{}
 func UserLocation() *UserLocationStore         { return &UserLocationStore{} }
 func UserBehavior() *UserBehaviorStore         { return &UserBehaviorStore{} }
 func Notification() *NotificationStore         { return &NotificationStore{} }
+func ServiceTokenAudit() *ServiceTokenAuditStore {
+	return &ServiceTokenAuditStore{}
+}

@@ -63,6 +63,10 @@ var (
 	ErrQQNumberInvalid = errors.New("QQ 号格式错误（应为 5-12 位数字）")
 	// ErrUserHasNoQQChild 解绑时找不到当前主账号的旗下账号
 	ErrUserHasNoQQChild = errors.New("当前账号未绑定 QQ，无需解绑")
+	// ErrBindLocked 同一 caller 错码次数超阈值，进入 30min 锁定。
+	//
+	// sentinel 用于 errors.Is 简化判别；实际抛出的错误是 *BindLockedError，带剩余秒数。
+	ErrBindLocked = errors.New("操作过多，已临时锁定")
 )
 
 // ThrottledError 限流命中时返回的结构化错误，带剩余可重试秒数。
@@ -88,6 +92,26 @@ func (e *ThrottledError) Is(target error) bool {
 	return target == ErrThrottled
 }
 
+// BindLockedError 错码次数超阈值时返回，带剩余可重试秒数。
+//
+// controller 应该按 423 Locked 或 429 + retry_after_seconds 返回；前端拿到这个
+// 数做"已锁定，剩余 X 分钟"的展示。
+type BindLockedError struct {
+	RetryAfterSeconds int
+}
+
+func (e *BindLockedError) Error() string {
+	if e.RetryAfterSeconds <= 0 {
+		return "操作过多，请稍后再试"
+	}
+	return fmt.Sprintf("错误次数过多，已暂时锁定，请 %d 秒后再试", e.RetryAfterSeconds)
+}
+
+// Is 让 errors.Is(err, ErrBindLocked) 命中。
+func (e *BindLockedError) Is(target error) bool {
+	return target == ErrBindLocked
+}
+
 // =============================================================================
 // redis key / TTL
 // =============================================================================
@@ -98,6 +122,19 @@ const (
 	// qqBindThrottleTTL 同一 user 请求验证码的最小间隔——跟前端"获取验证码"按钮的
 	// 倒计时对齐；60s 是常规体验。
 	qqBindThrottleTTL = 60 * time.Second
+
+	// qqBindMaxFailures 错码次数阈值——达到这个数后进入锁定。
+	//
+	// 5 次：足够给用户一次"看错了重输"的容错（典型场景：6 位数字易看错），又能
+	// 卡死暴力枚举（6 位数字共 100w 种，单个 caller 5 次远不够）。
+	qqBindMaxFailures = 5
+	// qqBindLockTTL 锁定时长——30 分钟。绑定/解绑都是低频操作，半小时锁定既不
+	// 影响正常用户，又能给暴力枚举攻击者拉长 cost。
+	qqBindLockTTL = 30 * time.Minute
+	// qqBindFailWindowTTL 失败计数器的有效窗口——超过这个时间没有新的失败，
+	// 计数器自然过期归零；10 分钟 ≈ 验证码 TTL（5min）的 2 倍，覆盖一次完整
+	// "请求 → 多次输错"的合理时长。
+	qqBindFailWindowTTL = 10 * time.Minute
 )
 
 // qqBindCodeKey 绑定流程的 redis key `qq_bind_code:{qq_number}`
@@ -131,11 +168,88 @@ func qqUnbindThrottleKey(userID uint) string {
 	return "qq_unbind_throttle:" + strconv.FormatUint(uint64(userID), 10)
 }
 
+// qqBindFailKey 错码计数器 key（counter；每次错码 +1，TTL 10min 滑动）。
+//
+// 维度：qq_number——按 QQ 号锁，防止"同一 caller 拿不同 QQ 号反复试验证码"。
+// caller 维度也行，但 attacker 拿到 token 后能切 QQ，按 QQ 号锁更窄。
+func qqBindFailKey(qq string) string {
+	return "qq_bind_fail:" + qq
+}
+
+// qqBindLockKey 错码锁定 key（存在即锁定，TTL = 30min）。
+func qqBindLockKey(qq string) string {
+	return "qq_bind_lock:" + qq
+}
+
+// qqUnbindFailKey 解绑流程的错码计数器 key。
+func qqUnbindFailKey(qq string) string {
+	return "qq_unbind_fail:" + qq
+}
+
+// qqUnbindLockKey 解绑流程的错码锁定 key。
+func qqUnbindLockKey(qq string) string {
+	return "qq_unbind_lock:" + qq
+}
+
 // qqBindCodePayload 存进 redis 的结构（json 序列化）。
 type qqBindCodePayload struct {
 	Code             string `json:"code"`               // 6 位数字
 	RequestingUserID uint   `json:"requesting_user_id"` // 当时发起请求的主账号 id
 	CreatedAt        int64  `json:"created_at"`         // unix 秒，给前端"剩余有效期"展示
+}
+
+// =============================================================================
+// 错码锁 helper
+// =============================================================================
+
+// checkBindLock 检查指定 qq 是否已被锁定；如果是，返回 *BindLockedError。
+//
+// 调用方：在所有需要"读 redis code 验证 + 比对"的入口处先调；命中锁则**不要**
+// 再走比对逻辑（避免 attacker 通过定时探测知道 redis code 是否存在）。
+func checkBindLock(ctx context.Context, lockKey string) error {
+	exists, err := commonredis.Client.Exists(ctx, lockKey).Result()
+	if err != nil {
+		// redis 错不应该让正常用户被锁——log warn + 放行
+		logger.Warnf(ctx, "qq_bind: 检查锁状态失败（已放行） key=%s err=%v", lockKey, err)
+		return nil
+	}
+	if exists == 0 {
+		return nil
+	}
+	retryAfter := 0
+	if d, terr := commonredis.Client.TTL(ctx, lockKey).Result(); terr == nil && d > 0 {
+		retryAfter = int(d.Seconds())
+		if retryAfter == 0 {
+			retryAfter = 1
+		}
+	}
+	return &BindLockedError{RetryAfterSeconds: retryAfter}
+}
+
+// recordBindFailure 记录一次错码事件——失败计数 +1，达到阈值就置锁。
+//
+// 注意：不需要额外的"清零计数器"调用——成功 confirm 后会一次性删 fail / lock 两个
+// key（见 confirm 路径）；失败但没达到阈值时计数器靠 TTL 自然滑动过期。
+func recordBindFailure(ctx context.Context, failKey, lockKey string) {
+	pipe := commonredis.Client.TxPipeline()
+	incr := pipe.Incr(ctx, failKey)
+	pipe.Expire(ctx, failKey, qqBindFailWindowTTL)
+	if _, err := pipe.Exec(ctx); err != nil {
+		logger.Warnf(ctx, "qq_bind: 错码计数器写失败 key=%s err=%v", failKey, err)
+		return
+	}
+	if incr.Val() >= int64(qqBindMaxFailures) {
+		// 置锁——SetNX 让"已经锁过的不刷新 TTL"，第一次置锁时间为准
+		_ = commonredis.Client.SetNX(ctx, lockKey, "1", qqBindLockTTL).Err()
+		// 锁成功后计数器立刻删，避免锁过期后立马又一次错码就再触发锁
+		_ = commonredis.Client.Del(ctx, failKey).Err()
+	}
+}
+
+// clearBindFailures 成功 confirm 后清掉计数器与锁。
+func clearBindFailures(ctx context.Context, failKey, lockKey string) {
+	_ = commonredis.Client.Del(ctx, failKey).Err()
+	_ = commonredis.Client.Del(ctx, lockKey).Err()
 }
 
 // =============================================================================
@@ -175,7 +289,12 @@ func QQBindRequestCode(ctx context.Context, callerUserID uint, qqNumber string) 
 		return 0, ErrUserAlreadyBoundQQ
 	}
 
-	// 2) 限流：同一 user 60s 内只能请求 1 次
+	// 2) 错码锁前置——这个 qq 号被错码 5 次锁了 30min 的话，连发验证码都拒
+	if lerr := checkBindLock(ctx, qqBindLockKey(qqNumber)); lerr != nil {
+		return 0, lerr
+	}
+
+	// 3) 限流：同一 user 60s 内只能请求 1 次
 	throttleKey := qqBindThrottleKey(user.ID)
 	ok, err := commonredis.Client.SetNX(ctx, throttleKey, "1", qqBindThrottleTTL).Result()
 	if err != nil {
@@ -280,7 +399,15 @@ func QQBindConfirm(ctx context.Context, callerUserID uint, qqNumber, code string
 		return ErrUserAlreadyBoundQQ
 	}
 
-	// 2) 校验验证码
+	// 2) 错码锁前置——锁住的是**这个 qq 号**而不是 caller。先于读 redis code 检查，
+	// 避免 attacker 通过定时探测试探 code 是否存在。
+	failKey := qqBindFailKey(qqNumber)
+	lockKey := qqBindLockKey(qqNumber)
+	if lerr := checkBindLock(ctx, lockKey); lerr != nil {
+		return lerr
+	}
+
+	// 3) 校验验证码
 	raw, err := commonredis.Client.Get(ctx, qqBindCodeKey(qqNumber)).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
@@ -294,9 +421,11 @@ func QQBindConfirm(ctx context.Context, callerUserID uint, qqNumber, code string
 	}
 	if payload.RequestingUserID != user.ID {
 		// 不同 user 用了同一个 qq 的 code？拒绝；不报"已被别人发起"——避免泄漏信息
+		recordBindFailure(ctx, failKey, lockKey)
 		return ErrCodeInvalid
 	}
 	if payload.Code != code {
+		recordBindFailure(ctx, failKey, lockKey)
 		return ErrCodeInvalid
 	}
 
@@ -347,10 +476,11 @@ func QQBindConfirm(ctx context.Context, callerUserID uint, qqNumber, code string
 		return err
 	}
 
-	// 4) 删验证码（tx 外面删，redis 失败不回滚 DB）
+	// 5) 删验证码 + 清错码计数器（tx 外面，redis 失败不回滚 DB）
 	_ = commonredis.Client.Del(ctx, qqBindCodeKey(qqNumber)).Err()
+	clearBindFailures(ctx, failKey, lockKey)
 
-	// 5) 给 QQ 发绑定成功通知——让用户感知账号变更，发现异常时能立刻去解绑/找回
+	// 6) 给 QQ 发绑定成功通知——让用户感知账号变更，发现异常时能立刻去解绑/找回
 	//
 	// 通知发不出去**不影响**绑定结果（事务已 commit）：仅 log warn，不重试也不报错。
 	// 用 noticeCtx 隔离父 ctx 的 cancel 影响——前端如果 confirm 已经超时取消，
@@ -417,7 +547,12 @@ func QQUnbindRequestCode(ctx context.Context, callerUserID uint) (ttlSeconds int
 	}
 	qqNumber := *child.QQNumber
 
-	// 3) 限流（同 user 60s 一次；跟绑定独立）
+	// 3) 错码锁前置（解绑路径与绑定路径锁 key 不同，互不影响）
+	if lerr := checkBindLock(ctx, qqUnbindLockKey(qqNumber)); lerr != nil {
+		return 0, lerr
+	}
+
+	// 4) 限流（同 user 60s 一次；跟绑定独立）
 	throttleKey := qqUnbindThrottleKey(user.ID)
 	ok, err := commonredis.Client.SetNX(ctx, throttleKey, "1", qqBindThrottleTTL).Result()
 	if err != nil {
@@ -505,7 +640,14 @@ func QQUnbindConfirm(ctx context.Context, callerUserID uint, code string) error 
 	}
 	qqNumber := *child.QQNumber
 
-	// 2) 校验验证码
+	// 2) 错码锁前置（同绑定 confirm 路径，先于 redis code 读取）
+	failKey := qqUnbindFailKey(qqNumber)
+	lockKey := qqUnbindLockKey(qqNumber)
+	if lerr := checkBindLock(ctx, lockKey); lerr != nil {
+		return lerr
+	}
+
+	// 3) 校验验证码
 	raw, err := commonredis.Client.Get(ctx, qqUnbindCodeKey(qqNumber)).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
@@ -518,13 +660,15 @@ func QQUnbindConfirm(ctx context.Context, callerUserID uint, code string) error 
 		return ErrCodeExpired
 	}
 	if payload.RequestingUserID != user.ID {
+		recordBindFailure(ctx, failKey, lockKey)
 		return ErrCodeInvalid
 	}
 	if payload.Code != code {
+		recordBindFailure(ctx, failKey, lockKey)
 		return ErrCodeInvalid
 	}
 
-	// 3) 真解绑：parent_user_id 设回 NULL
+	// 4) 真解绑：parent_user_id 设回 NULL
 	res := pgsql.DB.WithContext(ctx).Model(&model.User{}).
 		Where("id = ? AND parent_user_id = ? AND account_type = ?",
 			child.ID, parentID, model.AccountTypeQQChild).
@@ -537,10 +681,11 @@ func QQUnbindConfirm(ctx context.Context, callerUserID uint, code string) error 
 		return ErrUserHasNoQQChild
 	}
 
-	// 4) 删 code（事务外，redis 失败不回滚 DB）
+	// 5) 删 code + 清错码计数器（事务外，redis 失败不回滚 DB）
 	_ = commonredis.Client.Del(ctx, qqUnbindCodeKey(qqNumber)).Err()
+	clearBindFailures(ctx, failKey, lockKey)
 
-	// 5) 给 QQ 发解绑成功通知——让用户确认操作生效，万一是被盗号也能立刻发现
+	// 6) 给 QQ 发解绑成功通知——让用户确认操作生效，万一是被盗号也能立刻发现
 	noticeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if botinternal.Default != nil {

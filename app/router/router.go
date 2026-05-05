@@ -182,6 +182,8 @@ func PrivateRouter(api *gin.RouterGroup) {
 		orderGroup.POST("/:id/messages/read", controller.OrderMessagesMarkRead)
 		orderGroup.GET("/:id/messages", controller.OrderMessagesList)
 		orderGroup.POST("/:id/messages", controller.OrderMessageCreate)
+		// P3.3 加急：把指定订单消息推到对方 QQ；详见 QQ-bot/skill/bot/SKILL.md "P3.3 QQ 加急"
+		orderGroup.POST("/:id/messages/:msg_id/urge", controller.OrderMessageUrge)
 		orderGroup.POST("/:id/seller-confirm-payment", controller.OrderSellerConfirmPayment)
 		orderGroup.POST("/:id/confirm-delivery", controller.OrderConfirmDelivery)
 		orderGroup.POST("/:id/confirm-receipt", controller.OrderConfirmReceipt)

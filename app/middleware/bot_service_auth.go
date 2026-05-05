@@ -1,11 +1,17 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/util"
 )
 
@@ -30,6 +36,9 @@ const (
 //
 // 不再有"DB token 表 + revoke 机制"——bot 端每次签发短期 token（60s）已经是默认快速失效；
 // 真泄漏想立刻让所有现存 token 失效，rotate BotServiceJWTSecret 即可。
+//
+// 审计（P3.4）：通过验签的请求会在 ctx.Next() 后异步写一条 service_token_audit 记录；
+// 失败的请求**不写**——401 已经被 ZapLogger middleware 完整记录，再写一份没增量价值。
 func BotServiceAuth() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		plain := ctx.GetHeader(botServiceTokenHeader)
@@ -52,7 +61,42 @@ func BotServiceAuth() gin.HandlerFunc {
 		}
 		ctx.Set(botServiceCtxKeyService, claims.Service)
 		ctx.Set(botServiceCtxKeyJTI, claims.RegisteredClaims.ID)
+
+		startedAt := time.Now()
 		ctx.Next()
+
+		// 异步审计。用 context.Background() 不继承 request ctx——request 完成时会 cancel
+		// 子 ctx；DB 写在 background 里继续跑。
+		audit := &model.ServiceTokenAudit{
+			Service:    claims.Service,
+			JTI:        claims.RegisteredClaims.ID,
+			Method:     ctx.Request.Method,
+			Path:       ctx.FullPath(),
+			StatusCode: ctx.Writer.Status(),
+			RemoteIP:   ctx.ClientIP(),
+			DurationMS: int(time.Since(startedAt).Milliseconds()),
+		}
+		if audit.Path == "" {
+			audit.Path = ctx.Request.URL.Path
+		}
+		go func(a *model.ServiceTokenAudit) {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.Warnf(context.Background(), "bot_service_audit: panic during async insert: %v", r)
+				}
+			}()
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := dao.ServiceTokenAudit().Create(bgCtx, a); err != nil {
+				// audit 写失败只 log，不影响主流程也不重试
+				logger.Warnf(bgCtx, "bot_service_audit: insert failed",
+					zap.String("service", a.Service),
+					zap.String("jti", a.JTI),
+					zap.String("path", a.Path),
+					zap.Error(err),
+				)
+			}
+		}(audit)
 	}
 }
 

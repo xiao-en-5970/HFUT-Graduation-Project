@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -208,6 +209,69 @@ func OrderHelpPublisherPay(ctx *gin.Context) {
 			return
 		}
 		reply.ReplyErrWithMessage(ctx, err.Error())
+		return
+	}
+	reply.ReplyOK(ctx)
+}
+
+// OrderMessageUrge POST /orders/:id/messages/:msg_id/urge
+//
+// 把指定订单消息推到对方 QQ；详见 service/order_urge.go 包注释。
+//
+// 错误状态码：
+//
+//	400 = 消息归属 / 订单状态错（caller 友好提示原因）
+//	403 = 不是订单参与方
+//	404 = 订单 / 消息不存在
+//	409 = 已加急过 / 对方未绑 QQ
+//	429 = 限流（5min 内重复加急）；data.retry_after_seconds 给前端做按钮倒计时
+//	502 = bot 服务不可达
+func OrderMessageUrge(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	orderID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	msgID, err := strconv.ParseUint(ctx.Param("msg_id"), 10, 32)
+	if err != nil {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	if uerr := service.Order().OrderMessageUrge(ctx, uint(orderID), uint(msgID), userID); uerr != nil {
+		// 限流（含 retry_after_seconds）
+		var throttled *service.ThrottledError
+		if errors.As(uerr, &throttled) {
+			ctx.JSON(http.StatusTooManyRequests, gin.H{
+				"code":    429,
+				"message": throttled.Error(),
+				"data":    gin.H{"retry_after_seconds": throttled.RetryAfterSeconds},
+			})
+			return
+		}
+		switch {
+		case errors.Is(uerr, errno.ErrOrderNotFound),
+			errors.Is(uerr, errno.ErrOrderMessageNotFound):
+			reply.ReplyErrWithCodeAndMessage(ctx, 404, 404, uerr.Error())
+		case errors.Is(uerr, errno.ErrOrderNotParticipant),
+			errors.Is(uerr, errno.ErrOrderMessageNotMine),
+			errors.Is(uerr, errno.ErrOrderMessageNotInOrder):
+			reply.ReplyErrWithCodeAndMessage(ctx, 403, 403, uerr.Error())
+		case errors.Is(uerr, errno.ErrOrderMessageAlreadyUrgent),
+			errors.Is(uerr, errno.ErrOrderUrgeRecipientNoQQ):
+			ctx.JSON(http.StatusConflict, gin.H{
+				"code":    409,
+				"message": uerr.Error(),
+			})
+		case errors.Is(uerr, errno.ErrOrderUrgeBotUnavailable):
+			reply.ReplyErrWithCodeAndMessage(ctx, 502, 502, uerr.Error())
+		default:
+			reply.ReplyInternalError(ctx, uerr)
+		}
 		return
 	}
 	reply.ReplyOK(ctx)
