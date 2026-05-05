@@ -9,6 +9,7 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/router"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/scheduler"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/botinternal"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/redis"
@@ -49,6 +50,15 @@ func Boot() error {
 		return err
 	}
 	logger.Infof(ctx, "Redis initialized successfully")
+
+	// 初始化 bot internal API 客户端（QQ 绑定、孤儿账号转发等反向调用 bot 用）
+	// BOT_INTERNAL_API_URL/TOKEN 缺一个 → botinternal.Default 保持 nil，service 层调用拒绝
+	botinternal.Init()
+	if botinternal.Default == nil {
+		logger.Warnf(ctx, "BOT_INTERNAL_API_URL/TOKEN 未完整配置，QQ 绑定流程不可用（识别+上架等不受影响）")
+	} else {
+		logger.Infof(ctx, "bot internal API client initialized successfully")
+	}
 
 	// Initialize Gin service
 	if err := service.Init(); err != nil {

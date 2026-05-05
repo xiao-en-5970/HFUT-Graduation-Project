@@ -79,6 +79,10 @@ func PrivateRouter(api *gin.RouterGroup) {
 		userGroup.POST("/bind/school", controller.UserBindSchool)
 		userGroup.POST("/avatar", controller.UserUploadAvatar)
 		userGroup.POST("/background", controller.UserUploadBackground)
+		// QQ 绑定 / 解绑（详见 QQ-bot/skill/bot/SKILL.md "绑定 QQ 流程"）
+		userGroup.POST("/qq-bind/request-code", controller.UserQQBindRequestCode)
+		userGroup.POST("/qq-bind/confirm", controller.UserQQBindConfirm)
+		userGroup.POST("/qq-unbind", controller.UserQQUnbind)
 	}
 	// 帖子（type=1）、提问（type=2）、回答（type=3），三类接口数据隔离+学校隔离
 	api.Use(middleware.LoadUserSchool())

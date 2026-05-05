@@ -45,6 +45,15 @@ var (
 	// 跟上面 JWTSecret（user 登录用）独立，方便单独 rotate；空 = 拒绝所有 bot 调用。
 	BotServiceJWTSecret string
 
+	// BotInternalAPIURL 是 bot 暴露给 hfut 调用的"反向 HTTP API" base URL。
+	// 用途：QQ 绑定流程要让 bot 帮忙 check_friend / send_private_msg 等。
+	// docker compose 部署时通常是 http://qq-bot-server:8090（容器名 + 内部端口）。
+	// 空 = 不调用 bot，QQ 绑定流程会直接拒绝（提示"系统繁忙"）。
+	//
+	// 鉴权用 BotServiceJWTSecret 共享 secret 自签 60s JWT 放 X-Service-Token 头——
+	// 跟 bot → hfut 方向对称；详见 package/botinternal/client.go 注释。
+	BotInternalAPIURL string
+
 	OSSRoot           string // OSS 存储根路径，容器内 /oss，对应宿主机 /var/oss
 	OSSHost           string // 本地 OSS 对外访问域名，如 http://api.xiaoen.xyz，用于返回完整 URL 给前端
 	OSSSmallImageSize int    // 压缩图最大边长（像素），如 720 或 540，0 表示不生成压缩图
@@ -147,6 +156,7 @@ func LoadConfigFrom(path string) error {
 	// 默认空——表示禁用 bot 服务间 JWT 鉴权。任何 bot 调 /api/v1/bot/* 的请求都会 401。
 	// 部署时务必通过 env BOT_SERVICE_JWT_SECRET 设置，跟 QQ-bot 那边的 HFUT_API_JWT_SECRET 对齐
 	BotServiceJWTSecret = getEnv("BOT_SERVICE_JWT_SECRET", "")
+	BotInternalAPIURL = strings.TrimRight(strings.TrimSpace(getEnv("BOT_INTERNAL_API_URL", "")), "/")
 	OSSRoot = getEnv("OSS_ROOT", "/oss")
 	OSSHost = getEnv("OSS_HOST", "")
 	OSSSmallImageSize = getEnvInt("OSS_SMALL_IMAGE_SIZE", 720)
