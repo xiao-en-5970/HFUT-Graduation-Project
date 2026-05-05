@@ -28,6 +28,10 @@ type User struct {
 	AccountType  int16   `gorm:"column:account_type;type:smallint;not null;default:1" json:"account_type"`
 	ParentUserID *int    `gorm:"column:parent_user_id;index" json:"parent_user_id,omitempty"`
 	QQNumber     *string `gorm:"column:qq_number;type:varchar(32)" json:"qq_number,omitempty"`
+	// CreatedInGroupID QQ 旗下账号被 bot 创建时所在的 QQ 群号。
+	// 用于孤儿 inbound 通知转发回原群——详见 QQ-bot/skill/bot/SKILL.md
+	// "孤儿旗下账号的特殊行为"段。普通账号永远 NULL。
+	CreatedInGroupID *int64 `gorm:"column:created_in_group_id" json:"created_in_group_id,omitempty"`
 
 	BindQQ      string    `gorm:"column:bind_qq;type:varchar(128)" json:"bind_qq"`
 	BindWX      string    `gorm:"column:bind_wx;type:varchar(128)" json:"bind_wx"`

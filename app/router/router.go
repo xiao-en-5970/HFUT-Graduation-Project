@@ -169,6 +169,9 @@ func PrivateRouter(api *gin.RouterGroup) {
 		goodGroup.POST("/:id/publish", controller.GoodPublish)
 		goodGroup.POST("/:id/off-shelf", controller.GoodOffShelf)
 		goodGroup.POST("/:id/images", controller.GoodUploadImages)
+		// 孤儿商品的"请求下架"——app 用户提醒卖家在 QQ 群里确认是否已售
+		// 详见 QQ-bot/skill/bot/SKILL.md "孤儿旗下账号特殊行为"段
+		goodGroup.POST("/:id/request-off-shelf", controller.GoodRequestOffShelfFromOrphan)
 	}
 	// 订单模块（平台不经手资金：下单→卖方确认收款→派送/自提→确认收货扣库存）
 	orderGroup := api.Group("/orders")

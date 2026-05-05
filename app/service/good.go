@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"mime/multipart"
 	"strings"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/botinternal"
+	commonredis "github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/redis"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/snowflake"
@@ -353,6 +356,72 @@ func (s *goodService) uploadGoodImages(ctx *gin.Context, id uint, files []*multi
 		urls = append(urls, url)
 	}
 	return urls, nil
+}
+
+// RequestOffShelfFromOrphan app 用户在孤儿商品页点"请求下架"——bot 在原群里 @ 卖家
+// 询问"是不是已出？"，让卖家自己决定要不要下架。
+//
+// 设计动机（详见 QQ-bot/skill/bot/SKILL.md "孤儿旗下账号特殊行为"段）：
+//
+// 孤儿商品没主账号接管，app 用户只能看到"通过 QQ 联系" 告示——但万一这商品已经
+// 实际卖出，告示一直挂着会让别的 app 用户白联系。这接口让 app 用户能"提醒"卖家
+// 主动下架，但**不直接下架**——避免恶意 app 用户对竞品按"已出"。
+//
+// 限流：同一 (caller, good_id) 1 小时内只能请求 1 次（redis 锁）。
+//
+// 校验：
+//   - 商品必须存在、在售
+//   - 商品 owner 必须是孤儿（普通账号或绑定旗下号都不该走这接口；正常下架走自己的接口）
+//   - caller 不是 owner（防自己请求自己 / 触发 bot 在群里发奇怪消息）
+func (s *goodService) RequestOffShelfFromOrphan(ctx *gin.Context, goodID uint, callerUserID uint) error {
+	g, err := dao.Good().GetByID(ctx.Request.Context(), goodID)
+	if err != nil || g == nil {
+		return errno.ErrGoodNotFoundOrNoPermission
+	}
+	if g.GoodStatus != dao.GoodStatusOnSale {
+		return errno.ErrOrderGoodNotOnSale
+	}
+	if g.UserID == nil || *g.UserID <= 0 {
+		return errno.ErrGoodNotFoundOrNoPermission
+	}
+	owner, err := dao.User().GetByID(ctx.Request.Context(), uint(*g.UserID))
+	if err != nil || owner == nil || !owner.IsOrphanQQChild() {
+		// 不是孤儿——这接口不该被调用；直接拒绝
+		return errors.New("该商品不是孤儿账号挂的，请走正常下架流程")
+	}
+	if callerUserID != 0 && uint(*g.UserID) == callerUserID {
+		return errors.New("不能给自己挂的商品请求下架")
+	}
+	if owner.CreatedInGroupID == nil || *owner.CreatedInGroupID == 0 || owner.QQNumber == nil || *owner.QQNumber == "" {
+		return errors.New("商品创建群信息缺失，无法发起请求")
+	}
+
+	// 限流：同 caller + same good 1h 内不重复打扰卖家
+	throttleKey := fmt.Sprintf("orphan_off_shelf_req:%d:%d", callerUserID, goodID)
+	ok, _ := commonredis.Client.SetNX(ctx.Request.Context(), throttleKey, "1", time.Hour).Result()
+	if !ok {
+		return errors.New("已经请求过了，请等卖家在 QQ 里回复后再说")
+	}
+
+	// 调 bot 在原群 @ 卖家
+	if botinternal.Default == nil {
+		return errors.New("机器人服务暂时不可达，请稍后重试")
+	}
+	var qqInt int64
+	fmt.Sscanf(*owner.QQNumber, "%d", &qqInt)
+	if qqInt == 0 {
+		return errors.New("卖家 QQ 号无效")
+	}
+	text := fmt.Sprintf(
+		"[bot] 有 app 用户问你之前发的「%s」（goods_id=%d）是不是已经出了？回\"是\"或者\"已出\"我就帮你下架；不是就忽略这条消息。",
+		g.Title, g.ID,
+	)
+	if err := botinternal.Default.SendGroup(ctx.Request.Context(), *owner.CreatedInGroupID, qqInt, text); err != nil {
+		// bot 调用失败时把限流锁删掉允许用户重试
+		_ = commonredis.Client.Del(ctx.Request.Context(), throttleKey).Err()
+		return fmt.Errorf("通知卖家失败: %w", err)
+	}
+	return nil
 }
 
 func (s *goodService) UploadImages(ctx *gin.Context, id uint, userID uint, files []*multipart.FileHeader) ([]string, error) {

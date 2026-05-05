@@ -110,16 +110,22 @@ func BotUpsertQQChild(ctx context.Context, req BotUpsertQQChildReq) (*BotUpsertQ
 	}
 
 	// 3) 创建新旗下账号
+	//
+	// CreatedInGroupID 持久化"bot 第一次在哪个群里见到这个 QQ 用户"——孤儿状态时
+	// inbound 通知由 bot 转发回这个群（详见 service/notification.go 的孤儿转发分支
+	// + SKILL.md "孤儿旗下账号特殊行为"段）。
 	username := fmt.Sprintf("qq%s", req.QQNumber)
 	qqNum := req.QQNumber
+	createdInGroup := req.GroupID
 	newU := &model.User{
-		Username:    username,
-		Password:    "", // 不可登录
-		SchoolID:    schoolID,
-		AccountType: model.AccountTypeQQChild,
-		QQNumber:    &qqNum,
-		Status:      constant.StatusValid,
-		Role:        constant.RoleUser,
+		Username:         username,
+		Password:         "", // 不可登录
+		SchoolID:         schoolID,
+		AccountType:      model.AccountTypeQQChild,
+		QQNumber:         &qqNum,
+		CreatedInGroupID: &createdInGroup,
+		Status:           constant.StatusValid,
+		Role:             constant.RoleUser,
 	}
 	if _, err := dao.User().Create(ctx, newU); err != nil {
 		// 并发冲突：另一个请求已经抢先创建过同一 qq_number 的旗下账号——重新查一次返回它

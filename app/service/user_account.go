@@ -158,6 +158,77 @@ func isSelfTrade(ctx *gin.Context, callerUserID, ownerUserID uint) bool {
 	return ids.IsOwnedByOneOf(ownerUserID)
 }
 
+// InboundTargetKind 接收人种类——决定 inbound 通知的处理路径。
+type InboundTargetKind int
+
+const (
+	// InboundNormal 普通账号（含已 CAS 绑学校或未绑学校的 normal）：通知正常入库。
+	InboundNormal InboundTargetKind = iota + 1
+	// InboundBoundChild 已绑主账号的 QQ 旗下号：重定向到 parent 后正常入库（详见 P2b 设计）。
+	InboundBoundChild
+	// InboundOrphan 孤儿 QQ 旗下号（parent_user_id IS NULL）：不入库，bot 转发到原创建群。
+	InboundOrphan
+	// InboundInvalid target 不存在 / 已禁用 / user_id<=0：静默丢弃。
+	InboundInvalid
+)
+
+// InboundTarget 接收人状态详情，给 ResolveInboundTarget 返回。
+//
+// 字段含义按 Kind 不同有效性也不同——见各 Kind 注释。
+type InboundTarget struct {
+	Kind InboundTargetKind
+
+	// EffectiveUserID 入库时应该写的 user_id。
+	//   Normal / BoundChild / Orphan：分别是 自己 / parent / 旗下号自己
+	//   Invalid：0
+	EffectiveUserID uint
+
+	// OrphanGroupID 孤儿场景：bot 转发回的 QQ 群号；0 表示历史数据没记录创建群（fallback：跳过转发 + log）
+	OrphanGroupID int64
+
+	// OrphanQQNumber 孤儿场景：旗下号的 QQ 号——bot SendGroup 用它做 @ 字段
+	OrphanQQNumber string
+}
+
+// ResolveInboundTarget 给 inbound 通知 / 评论 / 私信等"被动接收"操作分类 target user。
+//
+// 用于：notificationService.emit / emitAggregatedLike 入库前分流。
+//
+// 设计语义详见 SKILL.md "孤儿旗下账号特殊行为" + "数据聚合 / 操作权限"段。
+func ResolveInboundTarget(ctx context.Context, targetUserID uint) InboundTarget {
+	if targetUserID == 0 {
+		return InboundTarget{Kind: InboundInvalid}
+	}
+	var u model.User
+	err := pgsql.DB.WithContext(ctx).
+		Select("id, account_type, parent_user_id, qq_number, created_in_group_id, status").
+		Where("id = ? AND status = ?", targetUserID, constant.StatusValid).
+		First(&u).Error
+	if err != nil {
+		return InboundTarget{Kind: InboundInvalid}
+	}
+	// 普通账号（即便绑了学校 / 没绑学校都算）
+	if !u.IsQQChild() {
+		return InboundTarget{Kind: InboundNormal, EffectiveUserID: u.ID}
+	}
+	// 已绑主账号的旗下号 → 重定向 parent
+	if u.ParentUserID != nil && *u.ParentUserID > 0 {
+		return InboundTarget{Kind: InboundBoundChild, EffectiveUserID: uint(*u.ParentUserID)}
+	}
+	// 孤儿
+	out := InboundTarget{
+		Kind:            InboundOrphan,
+		EffectiveUserID: u.ID,
+	}
+	if u.CreatedInGroupID != nil && *u.CreatedInGroupID != 0 {
+		out.OrphanGroupID = *u.CreatedInGroupID
+	}
+	if u.QQNumber != nil {
+		out.OrphanQQNumber = *u.QQNumber
+	}
+	return out
+}
+
 // ResolveTargetUserID "接收人重定向"——把指向某 user_id 的"被动接收"操作（被通知 / 被评论 /
 // 被聊天 / 被回复）的 target user_id 转成它的"实际持有者"。
 //

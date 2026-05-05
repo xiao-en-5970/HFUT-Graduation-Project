@@ -96,6 +96,17 @@ func enrichGoodWithAuthor(ctx *gin.Context, g *model.Good) map[string]interface{
 		if u, err := getUserBrief(ctx, uint(*g.UserID)); err == nil {
 			m["author"] = u
 		}
+		// 孤儿商品标识（owner 是 QQ 旗下号且未挂主账号）：前端用来切换"联系卖家"按钮表现：
+		//   不是孤儿 → 正常聊天入口
+		//   是孤儿   → 弹"通过 QQ 联系：QQ-XXX" 告示 + "请求下架"按钮
+		// 详见 QQ-bot/skill/bot/SKILL.md "孤儿旗下账号特殊行为"段。
+		if owner, err := dao.User().GetByID(ctx.Request.Context(), uint(*g.UserID)); err == nil && owner != nil &&
+			owner.IsOrphanQQChild() {
+			m["is_orphan_owner"] = true
+			if owner.QQNumber != nil {
+				m["seller_qq_number"] = *owner.QQNumber
+			}
+		}
 	}
 	uid := middleware.GetUserID(ctx)
 	if uid > 0 {
@@ -330,6 +341,29 @@ func GoodUploadImages(ctx *gin.Context) {
 		return
 	}
 	reply.ReplyOKWithData(ctx, gin.H{"urls": urls})
+}
+
+// GoodRequestOffShelfFromOrphan POST /goods/:id/request-off-shelf
+//
+// app 用户在孤儿商品页点"请求下架" → bot 在原群里 @ 卖家 QQ 询问"是不是已出"。
+// 详见 service.RequestOffShelfFromOrphan + SKILL.md "孤儿旗下账号特殊行为"段。
+func GoodRequestOffShelfFromOrphan(ctx *gin.Context) {
+	userID := middleware.GetUserID(ctx)
+	if userID == 0 {
+		reply.ReplyUnauthorized(ctx)
+		return
+	}
+	idStr := ctx.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil || id == 0 {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	if err := service.Good().RequestOffShelfFromOrphan(ctx, uint(id), userID); err != nil {
+		reply.ReplyErrWithMessage(ctx, err.Error())
+		return
+	}
+	reply.ReplyOK(ctx)
 }
 
 // GoodListByUser 用户发布的商品 GET /user/:id/goods
