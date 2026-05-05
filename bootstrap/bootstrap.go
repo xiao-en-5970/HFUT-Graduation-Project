@@ -52,10 +52,13 @@ func Boot() error {
 	logger.Infof(ctx, "Redis initialized successfully")
 
 	// 初始化 bot internal API 客户端（QQ 绑定、孤儿账号转发等反向调用 bot 用）
-	// BOT_INTERNAL_API_URL/TOKEN 缺一个 → botinternal.Default 保持 nil，service 层调用拒绝
-	botinternal.Init()
+	// BOT_INTERNAL_API_URL/SECRET 缺一个 → botinternal.Default 保持 nil，service 层调用拒绝
+	// URL 拼写错（缺 http:// 等）→ Init 返错，但不阻止 hfut 启动（QQ 绑定外其它功能不受影响）
+	if berr := botinternal.Init(); berr != nil {
+		logger.Error(ctx, "bot internal API client init 失败", zap.Error(berr))
+	}
 	if botinternal.Default == nil {
-		logger.Warnf(ctx, "BOT_INTERNAL_API_URL/TOKEN 未完整配置，QQ 绑定流程不可用（识别+上架等不受影响）")
+		logger.Warnf(ctx, "BOT_INTERNAL_API_URL/SECRET 未完整配置或 URL 不合法，QQ 绑定流程不可用（识别+上架等不受影响）")
 	} else {
 		logger.Infof(ctx, "bot internal API client initialized successfully")
 	}

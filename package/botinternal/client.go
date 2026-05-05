@@ -84,12 +84,21 @@ var Default *Client
 // Init 按 config.BotInternalAPIURL + config.BotServiceJWTSecret 构造 Default 单例。
 //
 // 二者任一缺失 → 不构造，Default 仍为 nil（安全降级，QQ 绑定流程拒绝）。
-func Init() {
-	url := strings.TrimRight(config.BotInternalAPIURL, "/")
+//
+// URL 防呆校验：
+//   - 必须以 http:// 或 https:// 开头——之前踩过坑：env 写成 "qq-bot-server:8090"
+//     （缺 scheme），http.NewRequest 按相对路径处理直接 502。这里启动期就拒绝。
+//   - 末尾的 / 自动剥掉，调用方拼 path 时不重复
+func Init() error {
+	url := strings.TrimRight(strings.TrimSpace(config.BotInternalAPIURL), "/")
 	secret := strings.TrimSpace(config.BotServiceJWTSecret)
 	if url == "" || secret == "" {
 		Default = nil
-		return
+		return nil // 不算错；让调用方按 Default == nil 兜底
+	}
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		Default = nil
+		return fmt.Errorf("botinternal: BOT_INTERNAL_API_URL 必须以 http:// 或 https:// 开头，当前值 %q", url)
 	}
 	Default = &Client{
 		baseURL:   url,
@@ -98,6 +107,7 @@ func Init() {
 			Timeout: 30 * time.Second, // bot 那边 get_friend_list 可能略慢
 		},
 	}
+	return nil
 }
 
 // signToken 临时签一个 60s 有效期的 service JWT；每次请求都重新签（HS256 几个微秒）。
