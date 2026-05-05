@@ -68,13 +68,29 @@ func pathForDisplay(path string) string {
 	return path
 }
 
-// ToFullURL 将存储的路径转为前端可用的完整 URL。图片默认返回带 .small 的压缩版。若已是完整 URL 则在其路径加 .small
+// ToFullURL 将存储的路径转为前端可用的完整 URL。
+//
+// 三类输入：
+//
+//  1. 七牛完整 URL（如 https://oss.xiaoen.xyz/good/123/img.jpg）
+//     → 加 ?imageView2/2/w/{OSSSmallImageSize}/q/75 query 让七牛 CDN 边缘即时缩略
+//     → URL 写入 DB 时不带 query；展示时拼出 query；前端拿到的就是缩略图 URL
+//
+//  2. 老版本本地完整 URL（如 https://api.xxx/api/v1/oss/path.jpg，含 OSSHost 前缀）
+//     → 走 urlAppendSmall 把 .small 后缀塞进 path，沿用旧逻辑
+//
+//  3. 相对路径（DB 里老条目，driver=local 时存的）
+//     → 老逻辑：pathForDisplay 加 .small + 拼 OSSHost + /api/v1/oss/ 前缀
 func ToFullURL(path string) string {
 	if path == "" {
 		return ""
 	}
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		// 完整 URL：在路径末尾（不含 query）加 .small
+		// 七牛域名 → 用 imageView2 query 替代 .small
+		if config.QiniuDomain != "" && strings.HasPrefix(path, config.QiniuDomain) {
+			return appendQiniuImageView2(path)
+		}
+		// 老的本地完整 URL（如带 OSSHost 前缀的）→ 沿用 .small 后缀
 		return urlAppendSmall(path)
 	}
 	p := pathForDisplay(path)
@@ -82,6 +98,43 @@ func ToFullURL(path string) string {
 		return strings.TrimSuffix(config.OSSHost, "/") + "/api/v1/oss/" + strings.TrimPrefix(p, "/")
 	}
 	return "/api/v1/oss/" + strings.TrimPrefix(p, "/")
+}
+
+// appendQiniuImageView2 给七牛 URL 加缩略图处理参数，等价于 .small 在七牛侧的实现。
+//
+// 参数含义：
+//
+//	imageView2/2/w/N/q/75   = mode 2（限定宽度等比缩放） + 宽度 N + JPEG 质量 75
+//
+// 边界：
+//   - 非图片扩展名：原样返回（七牛 imageView2 仅对图片生效，对 PDF 等加了也无害但我们手动跳过）
+//   - 已经带其它 query：用 & 拼接而不是 ?
+//   - OSSSmallImageSize <= 0：表示禁用缩略图，原样返回原图 URL
+func appendQiniuImageView2(rawURL string) string {
+	if config.OSSSmallImageSize <= 0 {
+		return rawURL
+	}
+	// 取 path 部分（去掉 query/fragment）判断扩展名
+	pathPart := rawURL
+	if i := strings.IndexAny(rawURL, "?#"); i >= 0 {
+		pathPart = rawURL[:i]
+	}
+	pathLow := strings.ToLower(pathPart)
+	isImage := false
+	for _, ext := range []string{".jpg", ".jpeg", ".png", ".gif", ".webp"} {
+		if strings.HasSuffix(pathLow, ext) {
+			isImage = true
+			break
+		}
+	}
+	if !isImage {
+		return rawURL
+	}
+	sep := "?"
+	if strings.Contains(rawURL, "?") {
+		sep = "&"
+	}
+	return rawURL + sep + fmt.Sprintf("imageView2/2/w/%d/q/75", config.OSSSmallImageSize)
 }
 
 func urlAppendSmall(rawURL string) string {
@@ -112,12 +165,33 @@ func TransformImageURLs(urls []string) []string {
 	return out
 }
 
-// Save 保存上传文件到指定相对路径，同路径无损覆盖（先写临时文件，成功后再原子替换）
+// Save 保存上传文件到指定相对路径。
+//
+// driver 分流（看 config.OSSDriver）：
+//
+//	"qiniu"           走七牛云，写入 bucket，返回完整 https URL（不带 query）；
+//	                   不生成 .small——七牛 imageView2 在 ToFullURL 阶段加 query 即时缩略
+//	"local"（默认）    写本地磁盘，同路径无损覆盖（先写临时文件 + 原子替换）；
+//	                   启用 OSSSmallImageSize 时同时生成 .small 缩略版
+//
+// 注意：driver=qiniu 但 QINIU_* 配置不全时（getQiniuClient 报错），**自动兜底走 local**——
+// 这是为了"忘配凭证 / 凭证打错"场景下功能不彻底瘫痪；启动时已经打 warning 了。
 func Save(file *multipart.FileHeader, relPath string) (url string, err error) {
 	relPath = strings.TrimPrefix(relPath, "/")
 	if relPath == "" {
 		return "", ErrInvalidPath
 	}
+
+	// driver=qiniu：走七牛上传；任何错误都打 log 但兜底回 local，避免功能瘫痪
+	if config.OSSDriver == "qiniu" {
+		if u, qerr := qiniuSave(file, relPath); qerr == nil {
+			return u, nil
+		} else {
+			fmt.Printf("[oss] qiniu Save 失败 key=%s: %v；兜底走 local\n", relPath, qerr)
+		}
+	}
+
+	// 走本地磁盘
 	fullPath, ok := SafePath(relPath)
 	if !ok {
 		return "", ErrInvalidPath
@@ -163,8 +237,37 @@ func saveUploadedFile(file *multipart.FileHeader, dst string) error {
 	return err
 }
 
-// Delete 删除指定相对路径的文件，若为图片则同时删除其 .small 版本
+// Delete 删除指定相对路径的文件，若为图片则同时删除其 .small 版本（仅 local driver）。
+//
+// 路径分流：
+//   - 完整 http(s) URL：判断是不是七牛域名前缀；是 → 走 qiniuDelete；否 → 不操作（外站 URL 不归我们管）
+//   - 相对路径："存量本地数据" 或 "驱动=local 时新写入"，走 os.Remove
+//
+// driver=qiniu 时新文件的 relPath 形式不会经过这里——业务方把"完整 URL"传过来，
+// 我们识别 qiniu 域名后截 key 调 qiniuDelete。
 func Delete(relPath string) error {
+	relPath = strings.TrimSpace(relPath)
+	if relPath == "" {
+		return ErrInvalidPath
+	}
+
+	// 完整 URL：判断是不是七牛域名（DB 里 driver=qiniu 时存的就是完整 URL）
+	if strings.HasPrefix(relPath, "http://") || strings.HasPrefix(relPath, "https://") {
+		if config.QiniuDomain != "" && strings.HasPrefix(relPath, config.QiniuDomain) {
+			// 截掉 domain + "/" 拿 key
+			key := strings.TrimPrefix(relPath, config.QiniuDomain)
+			key = strings.TrimPrefix(key, "/")
+			// 去掉 ?imageView2/... 这类 query
+			if i := strings.IndexAny(key, "?#"); i >= 0 {
+				key = key[:i]
+			}
+			return qiniuDelete(key)
+		}
+		// 外站 URL（如果有的话）—— 不删除
+		return nil
+	}
+
+	// 相对路径：本地磁盘
 	fullPath, ok := SafePath(relPath)
 	if !ok {
 		return ErrInvalidPath
@@ -311,29 +414,47 @@ func ExtFromFilename(filename string) string {
 	return filename[idx+1:]
 }
 
-// ExtractUserAssetPath 从 URL 或路径中提取 user/{id}/ 形式的存储路径；校验是否为指定用户的头像/背景
+// ExtractUserAssetPath 从 URL 或路径中提取 user/{id}/ 形式的存储路径；校验是否为指定用户的头像/背景。
+//
+// 支持的输入格式（按出现顺序匹配，先命中先用）：
+//   - 七牛完整 URL：https://oss.xiaoen.xyz/user/123/avatar.jpg[?imageView2/...]
+//   - 老本地完整 URL：https://api.xxx.com/api/v1/oss/user/123/avatar.jpg
+//   - 本地 API 路径：/api/v1/oss/user/123/avatar.jpg
+//   - 直接相对路径：user/123/avatar.jpg
+//
+// 切到七牛 driver 后，前端拿到的 URL 是七牛域名形式；用户在 PUT 个人信息时把这个
+// URL 回传给后端，必须能正常识别到 user/{id}/ 路径——否则会误判"路径无效或无权使用"。
 func ExtractUserAssetPath(input string, userID uint) (storagePath string, err error) {
 	if input == "" {
 		return "", ErrInvalidPath
 	}
 	p := strings.TrimSpace(input)
-	// 从完整 URL 或 API 路径中提取 OSS 存储路径 user/123/xxx
-	if idx := strings.Index(p, "/api/v1/oss/"); idx >= 0 {
-		p = strings.TrimPrefix(p[idx:], "/api/v1/oss/")
-	} else {
+
+	// 1) 七牛域名前缀 → 直接 trim 出 key
+	if config.QiniuDomain != "" && strings.HasPrefix(p, config.QiniuDomain) {
+		p = strings.TrimPrefix(p, config.QiniuDomain)
 		p = strings.TrimPrefix(p, "/")
-		p = strings.TrimPrefix(p, "api/v1/oss/")
-	}
-	if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") {
+	} else {
+		// 2) 兼容老格式：含 /api/v1/oss/ 前缀（无论前面是否有 host）
 		if idx := strings.Index(p, "/api/v1/oss/"); idx >= 0 {
 			p = strings.TrimPrefix(p[idx:], "/api/v1/oss/")
 		} else {
+			p = strings.TrimPrefix(p, "/")
+			p = strings.TrimPrefix(p, "api/v1/oss/")
+		}
+		// 还残留 http(s):// 说明既不是七牛、也不含本地 API 路径——拒收
+		if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") {
 			return "", ErrInvalidPath
 		}
 	}
+
+	// 去掉 query string（七牛 imageView2 / 老 .small 等）
 	if idx := strings.Index(p, "?"); idx >= 0 {
 		p = p[:idx]
 	}
+	// 兼容：老本地路径可能带 .small 后缀，这里统一剥掉
+	p = strings.TrimSuffix(p, image.SmallSuffix)
+
 	if !strings.HasPrefix(p, "user/") {
 		return "", ErrInvalidPath
 	}

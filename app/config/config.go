@@ -46,9 +46,33 @@ var (
 	BotServiceJWTSecret string
 
 	OSSRoot           string // OSS 存储根路径，容器内 /oss，对应宿主机 /var/oss
-	OSSHost           string // OSS 对外访问域名，如 http://api.xiaoen.xyz，用于返回完整 URL 给前端
+	OSSHost           string // 本地 OSS 对外访问域名，如 http://api.xiaoen.xyz，用于返回完整 URL 给前端
 	OSSSmallImageSize int    // 压缩图最大边长（像素），如 720 或 540，0 表示不生成压缩图
 	OSSSmallImageKB   int    // 压缩图体积上限（KB），如 200，0 表示 200
+
+	// OSSDriver 决定新上传文件去哪里：
+	//
+	//   "local"（默认）   写本地磁盘，URL 形如 <OSSHost>/api/v1/oss/<path>，下载流量过 hfut 服务器
+	//   "qiniu"           写七牛云 Kodo bucket，URL 形如 <QiniuDomain>/<key>，下载流量直走七牛
+	//
+	// 切到 qiniu 后**仅影响新上传**——已经存在本地的老文件不动，URL 通过 ToFullURL 仍能正常返回
+	// （混合存储期间 DB 里 images 字段会出现"老条目相对路径 + 新条目七牛完整 URL"两种形式，
+	//  ToFullURL 用 https?:// 前缀判断分流）。
+	// 想紧急回滚到本地：env 设回 local 即可，已上传到七牛的老 URL 永远工作（不依赖 driver）。
+	OSSDriver string
+
+	// 七牛云 Kodo 配置——仅在 OSSDriver="qiniu" 时使用。
+	//
+	// QiniuAccessKey / SecretKey  从七牛 → 个人中心 → 密钥管理 拿；建议为本 bucket 单建子账号 key
+	// QiniuBucket                 bucket 名，全局唯一，如 "hfut-oss"
+	// QiniuDomain                 绑定的访问域名，含 https://，**不带末尾 /**，如 "https://oss.xiaoen.xyz"
+	// QiniuRegion                 区域代号；新版 SDK 用 cn-east-1 / cn-north-1 / cn-south-1 / cn-east-2 /
+	//                             na0(北美) / as0(东南亚)；老版兼容值 z0/z1/z2/cnEast2 也接受
+	QiniuAccessKey string
+	QiniuSecretKey string
+	QiniuBucket    string
+	QiniuDomain    string
+	QiniuRegion    string
 
 	// 聚合搜索排序权重（热度 = (收藏*W_C+点赞*W_L+浏览*W_V)×互动衰减）
 	SearchWeightCollect        int     // 收藏权重，默认 10
@@ -129,6 +153,18 @@ func LoadConfigFrom(path string) error {
 	OSSSmallImageKB = getEnvInt("OSS_SMALL_IMAGE_KB", 200)
 	if OSSSmallImageKB <= 0 {
 		OSSSmallImageKB = 200
+	}
+
+	// OSS_DRIVER 默认 local 保兼容；改 qiniu 即切到云 OSS（不影响存量文件）
+	OSSDriver = strings.ToLower(strings.TrimSpace(getEnv("OSS_DRIVER", "local")))
+	QiniuAccessKey = getEnv("QINIU_ACCESS_KEY", "")
+	QiniuSecretKey = getEnv("QINIU_SECRET_KEY", "")
+	QiniuBucket = getEnv("QINIU_BUCKET", "")
+	QiniuDomain = strings.TrimRight(strings.TrimSpace(getEnv("QINIU_DOMAIN", "")), "/")
+	QiniuRegion = strings.TrimSpace(getEnv("QINIU_REGION", ""))
+	// driver=qiniu 但凭证不全 → 启动时打 warn，运行时 Save 会兜底走 local
+	if OSSDriver == "qiniu" && (QiniuAccessKey == "" || QiniuSecretKey == "" || QiniuBucket == "" || QiniuDomain == "" || QiniuRegion == "") {
+		log.Printf("[oss] OSS_DRIVER=qiniu 但 QINIU_* 配置不全（AK/SK/BUCKET/DOMAIN/REGION 任一空），新上传将兜底走 local 直到补齐配置")
 	}
 
 	SearchWeightCollect = getEnvInt("SEARCH_WEIGHT_COLLECT", 10)
