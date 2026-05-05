@@ -100,7 +100,7 @@ const (
 	qqBindThrottleTTL = 60 * time.Second
 )
 
-// qqBindCodeKey redis key 形式 `qq_bind_code:{qq_number}`
+// qqBindCodeKey 绑定流程的 redis key `qq_bind_code:{qq_number}`
 //
 // 故意按 qq_number 而不是 user_id 当 key——避免"同一 user 短时间请求多个 QQ 的验证码"
 // 时把别人的覆盖掉；按 qq_number 索引验证码也跟"用户在 app 输入验证码"那一步对得上。
@@ -108,11 +108,27 @@ func qqBindCodeKey(qq string) string {
 	return "qq_bind_code:" + qq
 }
 
-// qqBindThrottleKey redis key 形式 `qq_bind_throttle:{user_id}`
+// qqBindThrottleKey 绑定流程的 redis key `qq_bind_throttle:{user_id}`
 //
-// 限流维度是 caller user_id——同一用户 5min 内只能请求 1 次（不管要绑啥 QQ）。
+// 限流维度是 caller user_id——同一用户 60s 内只能请求 1 次（不管要绑啥 QQ）。
 func qqBindThrottleKey(userID uint) string {
 	return "qq_bind_throttle:" + strconv.FormatUint(uint64(userID), 10)
+}
+
+// qqUnbindCodeKey 解绑流程的 redis key `qq_unbind_code:{qq_number}`
+//
+// 跟绑定的 key 不同前缀——避免"用户先触发绑定流程拿到 code A，紧接着触发解绑覆盖成
+// code B"这类混淆；两个流程的 code 各自独立。
+func qqUnbindCodeKey(qq string) string {
+	return "qq_unbind_code:" + qq
+}
+
+// qqUnbindThrottleKey 解绑流程的 redis key `qq_unbind_throttle:{user_id}`。
+//
+// 跟绑定的 throttle key 也不同前缀——绑/解 两套限流互不影响：
+// 用户绑定遇到限流时，仍然可以发起解绑流程（虽然没绑过 QQ 的话会被业务层拒绝）。
+func qqUnbindThrottleKey(userID uint) string {
+	return "qq_unbind_throttle:" + strconv.FormatUint(uint64(userID), 10)
 }
 
 // qqBindCodePayload 存进 redis 的结构（json 序列化）。
@@ -337,13 +353,112 @@ func QQBindConfirm(ctx context.Context, callerUserID uint, qqNumber, code string
 	return nil
 }
 
-// QQUnbind 解绑：把当前主账号下的旗下账号 parent_user_id 设回 NULL（变孤儿）。
+// QQUnbindRequestCode 解绑流程第一步：给当前绑定的 QQ 发解绑验证码。
 //
-// 不删除任何数据；旗下账号的所有商品 / 提问继续存在，前端会按"孤儿账号"逻辑展示
-// （详见 SKILL.md "孤儿旗下账号的特殊行为"段；P2c 阶段实现孤儿专属表现）。
+// 安全动机：跟绑定流程对称——主账号 token 被盗时，攻击者可以解绑别人 QQ + 自己重新
+// 绑（盗取旗下账号的全部数据）。要求"QQ 端收到验证码"才能完成解绑相当于二次身份证明，
+// 攻击者拿不到 QQ 私聊也就走不到 confirm。
 //
-// 边界：找不到旗下账号 → 返 ErrUserHasNoQQChild（当作"没绑就别解"，前端按提示处理）。
-func QQUnbind(ctx context.Context, callerUserID uint) error {
+// 流程：
+//  1. 校验主账号已绑 QQ（取出来 qq_number，没绑就直接 ErrUserHasNoQQChild）
+//  2. 限流（同 user 60s 一次）
+//  3. 调 bot 发"解绑确认验证码"私聊
+//  4. 存 redis qq_unbind_code:{qq}={code, requesting_user_id}
+//
+// 注意：这里**不需要再调 CheckFriend**——目标 QQ 既然之前能绑成功就说明是 bot 好友；
+// 即便对方后来把 bot 删了好友，发私聊会失败 → 上层报"系统繁忙"，让用户先重新加好友。
+func QQUnbindRequestCode(ctx context.Context, callerUserID uint) (ttlSeconds int, err error) {
+	// 1) 主账号校验
+	user, err := getActiveUser(ctx, callerUserID)
+	if err != nil {
+		if errors.Is(err, ErrBotUserNotFound) {
+			return 0, ErrUserNotFound
+		}
+		return 0, err
+	}
+	if user.AccountType != model.AccountTypeNormal {
+		return 0, ErrUserNotFound
+	}
+
+	// 2) 取当前绑定的旗下账号 QQ；没绑直接拒
+	var child model.User
+	parentID := int(user.ID)
+	findErr := pgsql.DB.WithContext(ctx).
+		Where("parent_user_id = ? AND account_type = ? AND status = ?",
+			parentID, model.AccountTypeQQChild, constant.StatusValid).
+		First(&child).Error
+	if errors.Is(findErr, gorm.ErrRecordNotFound) {
+		return 0, ErrUserHasNoQQChild
+	}
+	if findErr != nil {
+		return 0, fmt.Errorf("查找旗下账号失败: %w", findErr)
+	}
+	if child.QQNumber == nil || *child.QQNumber == "" {
+		// 数据异常：旗下账号没记 qq_number——理论上 P1 之后所有 QQ 旗下号必有
+		return 0, ErrUserHasNoQQChild
+	}
+	qqNumber := *child.QQNumber
+
+	// 3) 限流（同 user 60s 一次；跟绑定独立）
+	throttleKey := qqUnbindThrottleKey(user.ID)
+	ok, err := commonredis.Client.SetNX(ctx, throttleKey, "1", qqBindThrottleTTL).Result()
+	if err != nil {
+		return 0, fmt.Errorf("限流锁失败: %w", err)
+	}
+	if !ok {
+		retryAfter := 0
+		if d, terr := commonredis.Client.TTL(ctx, throttleKey).Result(); terr == nil && d > 0 {
+			retryAfter = int(d.Seconds())
+			if retryAfter == 0 {
+				retryAfter = 1
+			}
+		}
+		return 0, &ThrottledError{RetryAfterSeconds: retryAfter}
+	}
+
+	// 4) 生成 code 存 redis（覆盖旧的）
+	if botinternal.Default == nil {
+		logger.Warnf(ctx, "qq_unbind: botinternal.Default == nil（BOT_INTERNAL_API_URL 没配 / URL 不合法）")
+		return 0, ErrBotUnavailable
+	}
+	_ = commonredis.Client.Del(ctx, qqUnbindCodeKey(qqNumber)).Err()
+	code, err := generateBindCode()
+	if err != nil {
+		return 0, fmt.Errorf("生成验证码失败: %w", err)
+	}
+	payload := qqBindCodePayload{
+		Code:             code,
+		RequestingUserID: user.ID,
+		CreatedAt:        time.Now().Unix(),
+	}
+	raw, _ := json.Marshal(payload)
+	if err := commonredis.Client.Set(ctx, qqUnbindCodeKey(qqNumber), raw, qqBindCodeTTL).Err(); err != nil {
+		return 0, fmt.Errorf("缓存验证码失败: %w", err)
+	}
+
+	// 5) 调 bot 发解绑验证码私聊（文案区别于绑定，让用户清楚是什么操作）
+	qqInt, _ := strconv.ParseInt(qqNumber, 10, 64)
+	text := fmt.Sprintf("【HFUT 校园平台】您正在**解除**当前 QQ 与 app 账号的绑定，验证码：%s（5 分钟内有效）。如非本人操作请忽略此消息——可能是你的 app 账号被盗。", code)
+	if err := botinternal.Default.SendPrivate(ctx, qqInt, text); err != nil {
+		logger.Error(ctx, "qq_unbind: 调 bot SendPrivate 失败", zap.Int64("qq", qqInt), zap.Error(err))
+		_ = commonredis.Client.Del(ctx, qqUnbindCodeKey(qqNumber)).Err()
+		return 0, ErrBotUnavailable
+	}
+
+	return int(qqBindCodeTTL.Seconds()), nil
+}
+
+// QQUnbindConfirm 解绑流程第二步：校验 code + 真解绑。
+//
+// 跟绑定 confirm 对称：主账号 + code 都对得上才把 parent_user_id 设回 NULL。
+// 旗下账号的所有数据（商品 / 提问 / 订单等）保留，变成"孤儿"等以后再被绑回来。
+func QQUnbindConfirm(ctx context.Context, callerUserID uint, code string) error {
+	code = strings.TrimSpace(code)
+	if len(code) != 6 {
+		return ErrCodeInvalid
+	}
+
+	// 1) 主账号校验 + 取当前 QQ
 	user, err := getActiveUser(ctx, callerUserID)
 	if err != nil {
 		if errors.Is(err, ErrBotUserNotFound) {
@@ -355,17 +470,57 @@ func QQUnbind(ctx context.Context, callerUserID uint) error {
 		return ErrUserNotFound
 	}
 
+	var child model.User
 	parentID := int(user.ID)
-	res := pgsql.DB.WithContext(ctx).Model(&model.User{}).
+	findErr := pgsql.DB.WithContext(ctx).
 		Where("parent_user_id = ? AND account_type = ? AND status = ?",
 			parentID, model.AccountTypeQQChild, constant.StatusValid).
+		First(&child).Error
+	if errors.Is(findErr, gorm.ErrRecordNotFound) {
+		return ErrUserHasNoQQChild
+	}
+	if findErr != nil {
+		return fmt.Errorf("查找旗下账号失败: %w", findErr)
+	}
+	if child.QQNumber == nil || *child.QQNumber == "" {
+		return ErrUserHasNoQQChild
+	}
+	qqNumber := *child.QQNumber
+
+	// 2) 校验验证码
+	raw, err := commonredis.Client.Get(ctx, qqUnbindCodeKey(qqNumber)).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return ErrCodeExpired
+		}
+		return fmt.Errorf("读验证码失败: %w", err)
+	}
+	var payload qqBindCodePayload
+	if jerr := json.Unmarshal([]byte(raw), &payload); jerr != nil {
+		return ErrCodeExpired
+	}
+	if payload.RequestingUserID != user.ID {
+		return ErrCodeInvalid
+	}
+	if payload.Code != code {
+		return ErrCodeInvalid
+	}
+
+	// 3) 真解绑：parent_user_id 设回 NULL
+	res := pgsql.DB.WithContext(ctx).Model(&model.User{}).
+		Where("id = ? AND parent_user_id = ? AND account_type = ?",
+			child.ID, parentID, model.AccountTypeQQChild).
 		Update("parent_user_id", nil)
 	if res.Error != nil {
 		return fmt.Errorf("解绑失败: %w", res.Error)
 	}
 	if res.RowsAffected == 0 {
+		// 校验后到 update 之间被并发解绑掉了？当作已经解过
 		return ErrUserHasNoQQChild
 	}
+
+	// 4) 删 code（事务外，redis 失败不回滚 DB）
+	_ = commonredis.Client.Del(ctx, qqUnbindCodeKey(qqNumber)).Err()
 	return nil
 }
 

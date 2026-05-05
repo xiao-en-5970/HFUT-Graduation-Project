@@ -80,9 +80,12 @@ func PrivateRouter(api *gin.RouterGroup) {
 		userGroup.POST("/avatar", controller.UserUploadAvatar)
 		userGroup.POST("/background", controller.UserUploadBackground)
 		// QQ 绑定 / 解绑（详见 QQ-bot/skill/bot/SKILL.md "绑定 QQ 流程"）
+		// 绑定 / 解绑都走 "request-code → confirm" 两步，对称设计；解绑也要 QQ 端能收到
+		// 验证码才能成功——防主账号 token 被盗 + 攻击者解绑 + 自己重新绑 的攻击向量。
 		userGroup.POST("/qq-bind/request-code", controller.UserQQBindRequestCode)
 		userGroup.POST("/qq-bind/confirm", controller.UserQQBindConfirm)
-		userGroup.POST("/qq-unbind", controller.UserQQUnbind)
+		userGroup.POST("/qq-unbind/request-code", controller.UserQQUnbindRequestCode)
+		userGroup.POST("/qq-unbind/confirm", controller.UserQQUnbindConfirm)
 	}
 	// 帖子（type=1）、提问（type=2）、回答（type=3），三类接口数据隔离+学校隔离
 	api.Use(middleware.LoadUserSchool())
