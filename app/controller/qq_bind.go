@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 
@@ -41,6 +42,16 @@ func UserQQBindRequestCode(ctx *gin.Context) {
 	}
 	ttl, err := service.QQBindRequestCode(ctx.Request.Context(), userID, body.QQNumber)
 	if err != nil {
+		// 限流先单独处理——要把剩余秒数 retry_after_seconds 放到 data，让前端做倒计时
+		var throttled *service.ThrottledError
+		if errors.As(err, &throttled) {
+			ctx.JSON(http.StatusTooManyRequests, gin.H{
+				"code":    429,
+				"message": throttled.Error(),
+				"data":    gin.H{"retry_after_seconds": throttled.RetryAfterSeconds},
+			})
+			return
+		}
 		switch {
 		case errors.Is(err, service.ErrQQNumberInvalid),
 			errors.Is(err, service.ErrUserNotBoundSchool),
@@ -49,8 +60,6 @@ func UserQQBindRequestCode(ctx *gin.Context) {
 			reply.ReplyErrWithMessage(ctx, err.Error())
 		case errors.Is(err, service.ErrBotNotFriend):
 			reply.ReplyErrWithCodeAndMessage(ctx, 404, 404, err.Error())
-		case errors.Is(err, service.ErrThrottled):
-			reply.ReplyErrWithCodeAndMessage(ctx, 429, 429, err.Error())
 		case errors.Is(err, service.ErrBotUnavailable):
 			reply.ReplyErrWithCodeAndMessage(ctx, 502, 502, err.Error())
 		default:

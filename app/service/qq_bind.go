@@ -52,13 +52,39 @@ var (
 	ErrCodeInvalid = errors.New("验证码错误")
 	// ErrCodeExpired 验证码过期 / 不存在
 	ErrCodeExpired = errors.New("验证码已过期，请重新获取")
-	// ErrThrottled 短期内重复请求验证码（限流）
-	ErrThrottled = errors.New("请求过于频繁，请 5 分钟后再试")
+	// ErrThrottled 短期内重复请求验证码（限流）——sentinel 用于 errors.Is 简化判别。
+	//
+	// 实际抛出的错误是 *ThrottledError（实现了 Is 接口指向 ErrThrottled），带剩余
+	// 秒数。controller 拿这个剩余秒数放到 response data 里，给前端做按钮倒计时。
+	ErrThrottled = errors.New("请求过于频繁")
 	// ErrQQNumberInvalid QQ 号格式错
 	ErrQQNumberInvalid = errors.New("QQ 号格式错误（应为 5-12 位数字）")
 	// ErrUserHasNoQQChild 解绑时找不到当前主账号的旗下账号
 	ErrUserHasNoQQChild = errors.New("当前账号未绑定 QQ，无需解绑")
 )
+
+// ThrottledError 限流命中时返回的结构化错误，带剩余可重试秒数。
+//
+// controller 用 errors.As 拿到这个错，把 RetryAfterSeconds 放到 429 response 的
+// data 字段里——前端拿这个数做"获取验证码"按钮的倒计时。
+//
+// 实现 Is(target) 让 errors.Is(err, ErrThrottled) 仍然命中——上层只想粗略分流时
+// 不用 errors.As 也能识别。
+type ThrottledError struct {
+	RetryAfterSeconds int
+}
+
+func (e *ThrottledError) Error() string {
+	if e.RetryAfterSeconds <= 0 {
+		return "请求过于频繁，请稍后再试"
+	}
+	return fmt.Sprintf("请求过于频繁，请 %d 秒后再试", e.RetryAfterSeconds)
+}
+
+// Is 让 errors.Is(err, ErrThrottled) 命中——保持 sentinel 友好。
+func (e *ThrottledError) Is(target error) bool {
+	return target == ErrThrottled
+}
 
 // =============================================================================
 // redis key / TTL
@@ -67,8 +93,9 @@ var (
 const (
 	// qqBindCodeTTL 验证码有效期；用户输入验证码超过这个时间就失效
 	qqBindCodeTTL = 5 * time.Minute
-	// qqBindThrottleTTL 同一 user 请求验证码的最小间隔
-	qqBindThrottleTTL = 5 * time.Minute
+	// qqBindThrottleTTL 同一 user 请求验证码的最小间隔——跟前端"获取验证码"按钮的
+	// 倒计时对齐；60s 是常规体验。
+	qqBindThrottleTTL = 60 * time.Second
 )
 
 // qqBindCodeKey redis key 形式 `qq_bind_code:{qq_number}`
@@ -130,14 +157,23 @@ func QQBindRequestCode(ctx context.Context, callerUserID uint, qqNumber string) 
 		return 0, ErrUserAlreadyBoundQQ
 	}
 
-	// 2) 限流：同一 user 5min 内只能请求 1 次
+	// 2) 限流：同一 user 60s 内只能请求 1 次
 	throttleKey := qqBindThrottleKey(user.ID)
 	ok, err := commonredis.Client.SetNX(ctx, throttleKey, "1", qqBindThrottleTTL).Result()
 	if err != nil {
 		return 0, fmt.Errorf("限流锁失败: %w", err)
 	}
 	if !ok {
-		return 0, ErrThrottled
+		// 拿剩余 TTL 让用户知道还要等多久；TTL 失败时 fallback 到 0（错误信息会变成 "稍后再试"）
+		retryAfter := 0
+		if d, terr := commonredis.Client.TTL(ctx, throttleKey).Result(); terr == nil && d > 0 {
+			retryAfter = int(d.Seconds())
+			// redis TTL 向下取整后可能丢精度，给前端的倒计时至少 1s 起步
+			if retryAfter == 0 {
+				retryAfter = 1
+			}
+		}
+		return 0, &ThrottledError{RetryAfterSeconds: retryAfter}
 	}
 	// 注意：拿到锁之后即便后面失败也保留锁——避免用户疯狂重试拖死 bot；
 	// 锁会按 TTL 自然过期。
@@ -156,6 +192,11 @@ func QQBindRequestCode(ctx context.Context, callerUserID uint, qqNumber string) 
 	}
 
 	// 4) 生成 6 位验证码 + 存 redis
+	//
+	// 显式删旧 code 再 Set 新的——虽然 redis Set 本身就是覆盖语义，但显式 Del 一下让
+	// "用户重新发起请求时旧验证码必然失效" 这个意图在代码里更明确，防御后续逻辑改动
+	// 无意中改成 SetNX/SetXX 等条件性写入语义。
+	_ = commonredis.Client.Del(ctx, qqBindCodeKey(qqNumber)).Err()
 	code, err := generateBindCode()
 	if err != nil {
 		return 0, fmt.Errorf("生成验证码失败: %w", err)
