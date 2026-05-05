@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
@@ -130,6 +131,31 @@ func GetAccountIDsForOps(ctx context.Context, callerUserID uint) (AccountIDSet, 
 		ChildID: child.ID,
 		AllIDs:  []uint{caller.ID, child.ID},
 	}, nil
+}
+
+// isSelfTrade 判断"caller 在跟 ownerUserID 交易时，是不是变相跟自己交易"——
+// 也就是 caller 跟 ownerUserID **在同一个账号集**里。用于：
+//
+//   - 下单时拒绝 buyer 购买自己挂的商品（直接关系）
+//   - 拒绝 buyer 购买**自己旗下号**挂的商品（账号集关系）——主账号在 app 给自己旗下号商品下单
+//     等同自己跟自己交易，可被滥用刷单 / 凑订单数 / 测评分等
+//   - 接单求助时同理：拒绝 taker 接自己的有偿求助 / 自己旗下号的有偿求助
+//
+// 实现走 GetAccountIDsForOps + IsOwnedByOneOf；账号集查不到时回退到直接相等。
+//
+// 取签名 (gin.Context) 是为了跟 service 层调用方风格对齐——内部用 ctx.Request.Context()。
+func isSelfTrade(ctx *gin.Context, callerUserID, ownerUserID uint) bool {
+	if callerUserID == 0 || ownerUserID == 0 {
+		return false
+	}
+	if callerUserID == ownerUserID {
+		return true
+	}
+	ids, err := GetAccountIDsForOps(ctx.Request.Context(), callerUserID)
+	if err != nil {
+		return callerUserID == ownerUserID // fallback：账号集查不到时只比直接相等
+	}
+	return ids.IsOwnedByOneOf(ownerUserID)
 }
 
 // ResolveTargetUserID "接收人重定向"——把指向某 user_id 的"被动接收"操作（被通知 / 被评论 /

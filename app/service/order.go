@@ -73,7 +73,7 @@ func (s *orderService) Create(ctx *gin.Context, buyerID uint, schoolID uint, req
 	if good.Stock < 1 {
 		return 0, errno.ErrOrderInsufficientStock
 	}
-	if good.UserID != nil && uint(*good.UserID) == buyerID {
+	if good.UserID != nil && isSelfTrade(ctx, buyerID, uint(*good.UserID)) {
 		return 0, errors.New("不能购买自己发布的商品")
 	}
 	uid := int(buyerID)
@@ -126,7 +126,7 @@ func (s *orderService) createHelpOrder(ctx *gin.Context, takerID uint, good *mod
 	if good.Stock < 1 {
 		return 0, errno.ErrOrderInsufficientStock
 	}
-	if good.UserID != nil && uint(*good.UserID) == takerID {
+	if good.UserID != nil && isSelfTrade(ctx, takerID, uint(*good.UserID)) {
 		return 0, errors.New("不能接自己发布的求助")
 	}
 	if existing, err := dao.Order().FindActiveBuyerOrderForGoods(ctx.Request.Context(), takerID, uint(good.ID)); err == nil && existing != nil {
@@ -158,7 +158,7 @@ func (s *orderService) createDraft(ctx *gin.Context, buyerID uint, schoolID uint
 	if good.Stock < 1 {
 		return 0, errno.ErrOrderInsufficientStock
 	}
-	if good.UserID != nil && uint(*good.UserID) == buyerID {
+	if good.UserID != nil && isSelfTrade(ctx, buyerID, uint(*good.UserID)) {
 		return 0, errors.New("不能购买自己发布的商品")
 	}
 	// 已存在与卖家的未完成订单则复用，避免重复会话
