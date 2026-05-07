@@ -83,6 +83,20 @@ var (
 	QiniuDomain    string
 	QiniuRegion    string
 
+	// AppReleaseInfoURL  app 内更新功能的元信息 JSON 地址。
+	//
+	// 前端启动时调 GET /api/v1/app/release-info-url 拿到本字段，再 fetch 这个 URL
+	// 解析 latest.json（详见 app/controller/app_release_config.go +
+	// hfut-front/HFUTUnion/src/api/appUpdate.ts）。
+	//
+	// 本字段独立于 QiniuDomain / OSSHost——允许把 latest.json 放到任何公开匿名可访问
+	// 的位置（七牛、Github Release、CDN、自建静态站等都行），换地方时改环境变量重启即可，
+	// 不需要重新发版前端。
+	//
+	// 默认 https://oss.xiaoen.xyz/app-release/android/latest.json；OSS 域名跟图片同源。
+	// 完整发布流程见 hfut-front/APP-UPDATE.md。
+	AppReleaseInfoURL string
+
 	// 聚合搜索排序权重（热度 = (收藏*W_C+点赞*W_L+浏览*W_V)×互动衰减）
 	SearchWeightCollect        int     // 收藏权重，默认 10
 	SearchWeightLike           int     // 点赞权重，默认 5
@@ -176,6 +190,10 @@ func LoadConfigFrom(path string) error {
 	if OSSDriver == "qiniu" && (QiniuAccessKey == "" || QiniuSecretKey == "" || QiniuBucket == "" || QiniuDomain == "" || QiniuRegion == "") {
 		log.Printf("[oss] OSS_DRIVER=qiniu 但 QINIU_* 配置不全（AK/SK/BUCKET/DOMAIN/REGION 任一空），新上传将兜底走 local 直到补齐配置")
 	}
+
+	// app 内更新元信息 JSON 地址；空 = 该功能关闭（前端拿到空字符串后跳过更新检查）
+	AppReleaseInfoURL = strings.TrimSpace(getEnv("APP_RELEASE_INFO_URL",
+		"https://oss.xiaoen.xyz/app-release/android/latest.json"))
 
 	SearchWeightCollect = getEnvInt("SEARCH_WEIGHT_COLLECT", 10)
 	SearchWeightLike = getEnvInt("SEARCH_WEIGHT_LIKE", 5)

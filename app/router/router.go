@@ -51,6 +51,10 @@ func PublicRouter(api *gin.RouterGroup) {
 	}
 	// OSS 文件访问（公开，前端可直接用 URL 展示图片等）
 	api.GET("/oss/*path", controller.OSSGet)
+
+	// app 内更新——返回 latest.json 的 OSS 地址（环境变量 APP_RELEASE_INFO_URL 控制）
+	// 详见 controller/app_release_config.go + hfut-front/APP-UPDATE.md
+	api.GET("/app/release-info-url", controller.AppReleaseInfoURL)
 }
 
 func PrivateRouter(api *gin.RouterGroup) {
