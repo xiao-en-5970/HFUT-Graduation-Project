@@ -18,4 +18,3 @@ func Notification() *NotificationStore         { return &NotificationStore{} }
 func ServiceTokenAudit() *ServiceTokenAuditStore {
 	return &ServiceTokenAuditStore{}
 }
-func AppRelease() *AppReleaseStore { return &AppReleaseStore{} }
