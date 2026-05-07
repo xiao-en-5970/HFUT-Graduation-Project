@@ -26,6 +26,7 @@ type Good struct {
 	// 历史数据：Negotiable=false（默认）时按原 Price 字段展示。
 	Price        int  `gorm:"type:integer;not null;default:0" json:"price"`
 	Negotiable   bool `gorm:"column:negotiable;type:boolean;not null;default:false" json:"negotiable"`   // true=面议，价格字段被忽略
+	Bargain      bool `gorm:"column:bargain;type:boolean;not null;default:false" json:"bargain"`         // 可刀：接受砍价（与面议正交）
 	MarkedPrice  int  `gorm:"column:marked_price;type:integer;not null;default:0" json:"marked_price"`   // 标价，单位分
 	Stock        int  `gorm:"type:integer;not null;default:0" json:"stock"`                              // 库存数量
 	ImageCount   int  `gorm:"column:image_count;type:integer;not null;default:0" json:"image_count"`     // 图片数量

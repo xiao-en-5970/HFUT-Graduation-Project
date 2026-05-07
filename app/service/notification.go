@@ -65,6 +65,10 @@ func (s *notificationService) dispatchInbound(ctx context.Context, n *model.Noti
 //   - 没 qq_number → 同上
 //   - bot 调用失败 → log warn，不重试（用户在 QQ 没收到也只是错过一次回复，不会数据错乱）
 func (s *notificationService) forwardOrphanNotice(ctx context.Context, n *model.Notification, t InboundTarget) {
+	// 点赞类只保留站内信，不转发 QQ 群，避免刷屏
+	if n.Type == model.NotifyTypeLikeArticle || n.Type == model.NotifyTypeLikeComment {
+		return
+	}
 	if botinternal.Default == nil {
 		logger.Infof(ctx, "orphan notification dropped (bot 未配置): user_id=%d type=%d", n.UserID, n.Type)
 		return

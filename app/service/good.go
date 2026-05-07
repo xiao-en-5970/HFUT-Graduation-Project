@@ -42,6 +42,7 @@ type CreateGoodReq struct {
 	GoodsLat      *float64 `json:"goods_lat"`      // 商品位置纬度 WGS84，与发货地一致
 	GoodsLng      *float64 `json:"goods_lng"`      // 商品位置经度 WGS84
 	Negotiable    bool     `json:"negotiable"`     // true=面议，服务端将 price 存为 0
+	Bargain       bool     `json:"bargain"`        // 可刀
 }
 
 type UpdateGoodReq struct {
@@ -61,6 +62,7 @@ type UpdateGoodReq struct {
 	GoodsLat      *float64  `json:"goods_lat"`
 	GoodsLng      *float64  `json:"goods_lng"`
 	Negotiable    *bool     `json:"negotiable"` // nil=不改；true 时顺带将 price 置 0
+	Bargain       *bool     `json:"bargain"`
 }
 
 // parseDeadline 解析前端传来的 deadline 字符串；接受 RFC3339 或 "2006-01-02 15:04:05"。
@@ -140,6 +142,7 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 		PickupAddr:    addr,
 		Price:         req.Price,
 		Negotiable:    req.Negotiable,
+		Bargain:       req.Bargain,
 		MarkedPrice:   req.MarkedPrice,
 		Stock:         req.Stock,
 		PaymentQRURL:  oss.PathForStorage(qr),
@@ -302,6 +305,9 @@ func (s *goodService) Update(ctx *gin.Context, id uint, userID uint, schoolID ui
 		if *req.Negotiable {
 			updates["price"] = 0
 		}
+	}
+	if req.Bargain != nil {
+		updates["bargain"] = *req.Bargain
 	}
 	if len(updates) == 0 {
 		return nil

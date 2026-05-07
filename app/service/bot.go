@@ -204,6 +204,7 @@ type BotPublishGoodReq struct {
 	Content    string   `json:"content"`    // 商品描述
 	Category   int16    `json:"category"`   // 1=二手 2=有偿求助
 	Negotiable bool     `json:"negotiable"` // true 时 price 字段被忽略
+	Bargain    bool     `json:"bargain"`    // 可刀
 	Price      int      `json:"price"`      // 单位：分
 	Location   string   `json:"location"`   // 地点（goods_addr）
 	Images     []string `json:"images"`     // OSS URL 列表
@@ -256,6 +257,7 @@ func BotPublishGood(ctx context.Context, req BotPublishGoodReq) (*BotPublishGood
 		PickupAddr:    req.Location,
 		GoodsCategory: req.Category,
 		Negotiable:    req.Negotiable,
+		Bargain:       req.Bargain,
 		Price:         req.Price,
 		MarkedPrice:   req.Price,
 		Stock:         1, // 默认 1 件
