@@ -110,8 +110,10 @@ func (s *articleService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID 
 		// 私密文章不计入浏览量
 		return art, nil
 	}
-	// 公开文章 + 已发布 → 浏览量 +1（DB 端原子自增；本地内存里也 +1，让响应里数字立刻刷新）
-	if art.Status == constant.StatusValid && art.PublishStatus == 2 {
+	// 公开文章 + 已发布 → 浏览量 +1（DB 端原子自增；本地内存里也 +1，让响应里数字立刻刷新）。
+	// 同一 viewer 在 ViewDebounceWindow 内多次 GET 同一文章只计 1 次（点赞 / 收藏 / 编辑后前端会立刻刷详情）。
+	if art.Status == constant.StatusValid && art.PublishStatus == 2 &&
+		ShouldCountView(ctx.Request.Context(), viewerID, articleType, id) {
 		if err := dao.Article().IncrViewCount(ctx.Request.Context(), id); err != nil {
 			// 浏览量不影响业务正确性——失败仅记日志，不让 GET 详情挂掉
 			logger.Warn(ctx.Request.Context(), "incr article view_count failed",

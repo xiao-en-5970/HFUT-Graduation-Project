@@ -190,7 +190,10 @@ func (s *goodService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID uin
 		}
 		return nil, err
 	}
-	if g.Status == constant.StatusValid && g.GoodStatus == dao.GoodStatusOnSale {
+	// 同一 viewer 在 ViewDebounceWindow 内多次 GET 同一商品只计 1 次——点赞 / 收藏后前端
+	// 会立刻 getGood 刷数，那次 GET 不该再 +1。详见 service.ShouldCountView。
+	if g.Status == constant.StatusValid && g.GoodStatus == dao.GoodStatusOnSale &&
+		ShouldCountView(ctx.Request.Context(), viewerID, constant.ExtTypeGoods, id) {
 		if err := dao.Good().IncrViewCount(ctx.Request.Context(), id); err != nil {
 			logger.Warn(ctx.Request.Context(), "incr good view_count failed",
 				zap.Uint("good_id", id), zap.Error(err))
