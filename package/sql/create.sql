@@ -167,8 +167,11 @@ ALTER TABLE goods
     ADD COLUMN IF NOT EXISTS like_count integer NOT NULL DEFAULT 0;
 ALTER TABLE goods
     ADD COLUMN IF NOT EXISTS collect_count integer NOT NULL DEFAULT 0;
+ALTER TABLE goods
+    ADD COLUMN IF NOT EXISTS view_count integer NOT NULL DEFAULT 0;
 comment on column goods.like_count is '点赞次数';
 comment on column goods.collect_count is '收藏次数';
+comment on column goods.view_count is '浏览次数：商品详情页 +1（仅 status=valid + good_status=1 在售商品计入）';
 
 create table tags (
             id SERIAL PRIMARY KEY,

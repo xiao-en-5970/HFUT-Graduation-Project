@@ -177,6 +177,11 @@ func safeDeref(p *string) string {
 	return *p
 }
 
+// Get 商品详情，学校可见性。
+//
+// 副作用：成功通过校验、且商品 status=valid + good_status=在售(1) 时顺带 view_count + 1。
+// 跟 articleService.Get 对称：DB 端原子自增 + 内存里 g.ViewCount++ 让响应里数字立刻刷新。
+// 下架 / 售出 / 禁用商品不计入；浏览量自增失败仅 log warn，不让 GET 失败。
 func (s *goodService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID uint) (*model.Good, error) {
 	g, err := dao.Good().GetByIDWithSchool(ctx.Request.Context(), id, schoolID)
 	if err != nil {
@@ -184,6 +189,14 @@ func (s *goodService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID uin
 			return nil, errno.ErrGoodNotFoundOrNoPermission
 		}
 		return nil, err
+	}
+	if g.Status == constant.StatusValid && g.GoodStatus == dao.GoodStatusOnSale {
+		if err := dao.Good().IncrViewCount(ctx.Request.Context(), id); err != nil {
+			logger.Warn(ctx.Request.Context(), "incr good view_count failed",
+				zap.Uint("good_id", id), zap.Error(err))
+		} else {
+			g.ViewCount++
+		}
 	}
 	return g, nil
 }

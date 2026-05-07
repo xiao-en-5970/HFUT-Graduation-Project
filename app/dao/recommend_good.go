@@ -21,7 +21,7 @@ type GoodRecommendParams struct {
 	FreshnessDecay    float64
 	PopularityCollect int
 	PopularityLike    int
-	PopularityView    int   // goods 表没有 view_count，保留参数占位兼容 config
+	PopularityView    int   // 浏览权重——和 articles 一样接入打分
 	Category          int16 // 0=不过滤；1=二手买卖；2=有偿求助
 	RequireInterest   bool
 }
@@ -70,13 +70,17 @@ func (s *GoodStore) GoodRecommendCandidates(ctx context.Context, p GoodRecommend
 
 	scoreParts := []string{}
 	args := []interface{}{}
-	popExpr := "(goods.collect_count*? + goods.like_count*?)"
+	// view 权重默认 1（兼容 config 未配场景）
+	if p.PopularityView <= 0 {
+		p.PopularityView = 1
+	}
+	popExpr := "(goods.collect_count*? + goods.like_count*? + goods.view_count*?)"
 	if p.FreshnessDecay > 0 {
 		scoreParts = append(scoreParts, "("+popExpr+" * (1.0 / (1 + EXTRACT(EPOCH FROM (now() - goods.created_at))/86400/?)) * 0.3)")
-		args = append(args, p.PopularityCollect, p.PopularityLike, p.FreshnessDecay)
+		args = append(args, p.PopularityCollect, p.PopularityLike, p.PopularityView, p.FreshnessDecay)
 	} else {
 		scoreParts = append(scoreParts, "("+popExpr+" * 0.3)")
-		args = append(args, p.PopularityCollect, p.PopularityLike)
+		args = append(args, p.PopularityCollect, p.PopularityLike, p.PopularityView)
 	}
 	if hasTags {
 		scoreParts = append(scoreParts, "((SELECT COUNT(*) FROM tags WHERE tags.ext_id = goods.id AND tags.ext_type = 2 AND tags.status = 1 AND tags.name = ANY(?)) * 3.0)")

@@ -32,6 +32,7 @@ type Good struct {
 	ImageCount   int  `gorm:"column:image_count;type:integer;not null;default:0" json:"image_count"`     // 图片数量
 	LikeCount    int  `gorm:"column:like_count;type:integer;not null;default:0" json:"like_count"`       // 点赞次数
 	CollectCount int  `gorm:"column:collect_count;type:integer;not null;default:0" json:"collect_count"` // 收藏次数
+	ViewCount    int  `gorm:"column:view_count;type:integer;not null;default:0" json:"view_count"`       // 浏览次数（详情页 +1，公开在售商品才计入）
 	StartTime    int  `gorm:"column:start_time;type:integer;not null;default:0" json:"start_time"`       // 开始时间
 	EndTime      int  `gorm:"column:end_time;type:integer;not null;default:0" json:"end_time"`           // 结束时间
 	// 类别与收款码：二手买卖 (1) 才有意义传收款码图，有偿求助 (2) 时 PaymentQRURL 固定为空

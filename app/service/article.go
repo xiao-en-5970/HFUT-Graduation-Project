@@ -9,9 +9,11 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/snowflake"
+	"go.uber.org/zap"
 )
 
 type articleService struct{}
@@ -84,7 +86,11 @@ func (s *articleService) Create(ctx *gin.Context, userID uint, schoolID uint, ar
 	return dao.Article().Create(ctx.Request.Context(), a)
 }
 
-// Get 获取详情，学校+类型可见性。草稿仅作者可见。viewerSchoolID=0 时仅可看公开内容
+// Get 获取详情，学校+类型可见性。草稿仅作者可见。viewerSchoolID=0 时仅可看公开内容。
+//
+// 副作用：成功通过所有可见性校验、且文章是 status=valid + publish_status=公开(2) 时
+// 顺带把 view_count + 1 落库——前端"进入回答之后浏览量没有增加"是因为之前所有路径都没自增。
+// 私密草稿 / 仅作者可见的私密发布不计入浏览量。
 func (s *articleService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID uint, articleType int) (*model.Article, error) {
 	art, err := dao.Article().GetByIDWithSchoolAndTypeAllowDraft(ctx.Request.Context(), id, schoolID, articleType)
 	if err != nil {
@@ -100,6 +106,20 @@ func (s *articleService) Get(ctx *gin.Context, id uint, viewerID uint, schoolID 
 		ok, _ := dao.Article().ExistsAndOwnedByWithSchoolAndType(ctx.Request.Context(), id, viewerID, schoolID, articleType)
 		if !ok {
 			return nil, errno.ErrArticleNotFoundOrNoPermission
+		}
+		// 私密文章不计入浏览量
+		return art, nil
+	}
+	// 公开文章 + 已发布 → 浏览量 +1（DB 端原子自增；本地内存里也 +1，让响应里数字立刻刷新）
+	if art.Status == constant.StatusValid && art.PublishStatus == 2 {
+		if err := dao.Article().IncrViewCount(ctx.Request.Context(), id); err != nil {
+			// 浏览量不影响业务正确性——失败仅记日志，不让 GET 详情挂掉
+			logger.Warn(ctx.Request.Context(), "incr article view_count failed",
+				zap.Uint("article_id", id),
+				zap.Int("type", articleType),
+				zap.Error(err))
+		} else {
+			art.ViewCount++
 		}
 	}
 	return art, nil

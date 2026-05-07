@@ -216,6 +216,16 @@ func (s *GoodStore) UpdateLikeCountDB(tx *gorm.DB, goodID uint, delta int) error
 		UpdateColumn("like_count", gorm.Expr("like_count + ?", delta)).Error
 }
 
+// IncrViewCount 详情页浏览 +1（仅对 status=valid + good_status=1 在售商品生效）。
+//
+// 与 ArticleStore.IncrViewCount 对称：原子 SQL 自增防并发，下架 / 售出 / 禁用商品不计入。
+// 失败仅 log warn，不让 GET 详情挂掉——浏览量不影响业务正确性。
+func (s *GoodStore) IncrViewCount(ctx context.Context, id uint) error {
+	return pgsql.DB.WithContext(ctx).Model(&model.Good{}).
+		Where("id = ? AND status = ? AND good_status = ?", id, constant.StatusValid, GoodStatusOnSale).
+		UpdateColumn("view_count", gorm.Expr("view_count + 1")).Error
+}
+
 func (s *GoodStore) UpdateCollectCountDB(tx *gorm.DB, goodID uint, delta int) error {
 	return tx.Model(&model.Good{}).Where("id = ?", goodID).
 		UpdateColumn("collect_count", gorm.Expr("collect_count + ?", delta)).Error

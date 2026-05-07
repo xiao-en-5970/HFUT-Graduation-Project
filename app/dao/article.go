@@ -184,6 +184,20 @@ func (s *ArticleStore) UpdateLikeCount(ctx context.Context, id uint, delta int) 
 		UpdateColumn("like_count", gorm.Expr("GREATEST(0, like_count + ?)", delta)).Error
 }
 
+// IncrViewCount 详情页浏览 +1（仅对 status=valid + publish_status=2 的文章生效）。
+//
+// 用原子 SQL 自增避免读改写竞态；调用方拿到 *model.Article 后可以在内存里 art.ViewCount++
+// 让响应里的数字也跟着更新（DB 已经 +1，再读一次回来也行但浪费一次 query）。
+//
+// 不在乎"自己看自己 +1"——大多数社区平台都计入，做"作者豁免"反而和直觉相反。
+// 同一 viewer 短时间多次刷新也照计；想做精细去重得在网关 / Redis 层加 (user, art, day) 缓存，
+// 那是后续优化，不属于本 bug fix 范围。
+func (s *ArticleStore) IncrViewCount(ctx context.Context, id uint) error {
+	return pgsql.DB.WithContext(ctx).Model(&model.Article{}).
+		Where("id = ? AND status = ? AND publish_status = 2", id, constant.StatusValid).
+		UpdateColumn("view_count", gorm.Expr("view_count + 1")).Error
+}
+
 // UpdateCollectCountDB 事务内增减 collect_count
 func (s *ArticleStore) UpdateCollectCountDB(db *gorm.DB, id uint, delta int) error {
 	return db.Model(&model.Article{}).Where("id = ?", id).

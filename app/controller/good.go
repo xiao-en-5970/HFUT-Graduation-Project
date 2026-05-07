@@ -70,7 +70,7 @@ func enrichGoodWithAuthor(ctx *gin.Context, g *model.Good) map[string]interface{
 		"price":                g.Price, "negotiable": g.Negotiable, "bargain": g.Bargain,
 		"marked_price": g.MarkedPrice, "stock": g.Stock,
 		"good_status": g.GoodStatus, "status": g.Status,
-		"like_count": g.LikeCount, "collect_count": g.CollectCount,
+		"like_count": g.LikeCount, "collect_count": g.CollectCount, "view_count": g.ViewCount,
 		"payment_qr_url": oss.ToFullURL(g.PaymentQRURL),
 		"has_deadline":   g.HasDeadline,
 		"created_at":     g.CreatedAt, "updated_at": g.UpdatedAt,
