@@ -51,6 +51,10 @@ func PublicRouter(api *gin.RouterGroup) {
 	}
 	// OSS 文件访问（公开，前端可直接用 URL 展示图片等）
 	api.GET("/oss/*path", controller.OSSGet)
+
+	// app 内更新——前端启动时拉最新版本元信息（公开；用户未登录也得能看到）
+	// 详见 package/sql/migrate_app_releases.sql + service/app_release.go
+	api.GET("/app/latest-version", controller.AppLatestVersion)
 }
 
 func PrivateRouter(api *gin.RouterGroup) {
@@ -254,6 +258,12 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.GET("/user-locations", controller.AdminUserLocationList)
 		adminGroup.POST("/user-locations", controller.AdminUserLocationCreate)
 		adminGroup.DELETE("/user-locations/:id", controller.AdminUserLocationDelete)
+
+		// app 版本发布管理（admin 上传新 apk、列表、删除）
+		// 详见 service/app_release.go + controller/app_release.go
+		adminGroup.GET("/app-release", controller.AdminAppReleaseList)
+		adminGroup.POST("/app-release", controller.AdminAppReleaseUpload)
+		adminGroup.DELETE("/app-release/:id", controller.AdminAppReleaseDelete)
 	}
 }
 
