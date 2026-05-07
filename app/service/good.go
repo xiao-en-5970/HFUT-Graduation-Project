@@ -41,6 +41,7 @@ type CreateGoodReq struct {
 	Deadline      *string  `json:"deadline"`       // RFC3339/"2006-01-02 15:04:05" 时间字符串；HasDeadline=true 时必填
 	GoodsLat      *float64 `json:"goods_lat"`      // 商品位置纬度 WGS84，与发货地一致
 	GoodsLng      *float64 `json:"goods_lng"`      // 商品位置经度 WGS84
+	Negotiable    bool     `json:"negotiable"`     // true=面议，服务端将 price 存为 0
 }
 
 type UpdateGoodReq struct {
@@ -59,6 +60,7 @@ type UpdateGoodReq struct {
 	Deadline      *string   `json:"deadline"` // 字符串；空串或 "null" 表示清空 deadline
 	GoodsLat      *float64  `json:"goods_lat"`
 	GoodsLng      *float64  `json:"goods_lng"`
+	Negotiable    *bool     `json:"negotiable"` // nil=不改；true 时顺带将 price 置 0
 }
 
 // parseDeadline 解析前端传来的 deadline 字符串；接受 RFC3339 或 "2006-01-02 15:04:05"。
@@ -137,6 +139,7 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 		GoodsAddr:     addr,
 		PickupAddr:    addr,
 		Price:         req.Price,
+		Negotiable:    req.Negotiable,
 		MarkedPrice:   req.MarkedPrice,
 		Stock:         req.Stock,
 		PaymentQRURL:  oss.PathForStorage(qr),
@@ -144,6 +147,9 @@ func (s *goodService) Create(ctx *gin.Context, userID uint, schoolID uint, req C
 		Deadline:      deadlineAt,
 		GoodStatus:    dao.GoodStatusOffShelf, // 新建为下架，需上架后才可见
 		Status:        constant.StatusValid,
+	}
+	if req.Negotiable {
+		g.Price = 0
 	}
 	if req.GoodsLat != nil && req.GoodsLng != nil {
 		g.GoodsLat = req.GoodsLat
@@ -290,6 +296,12 @@ func (s *goodService) Update(ctx *gin.Context, id uint, userID uint, schoolID ui
 	if req.GoodsLat != nil && req.GoodsLng != nil {
 		updates["goods_lat"] = *req.GoodsLat
 		updates["goods_lng"] = *req.GoodsLng
+	}
+	if req.Negotiable != nil {
+		updates["negotiable"] = *req.Negotiable
+		if *req.Negotiable {
+			updates["price"] = 0
+		}
 	}
 	if len(updates) == 0 {
 		return nil
