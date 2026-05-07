@@ -193,8 +193,13 @@ func findSchoolIDByQQGroup(ctx context.Context, groupID int64) (uint, error) {
 // =============================================================================
 
 // BotPublishGoodReq bot 上架商品入参。
+//
+// GroupID：bot 触发本次上架时来源 QQ 群号；持久化到 goods.created_in_group_id，
+// 后续 RequestOffShelfFromOrphan 优先用它定位"在哪个群 @ 卖家"。<=0 时不填（兼容
+// 老 bot 客户端 / 非 bot 路径调用，落库为 NULL）。
 type BotPublishGoodReq struct {
 	UserID     uint     `json:"user_id"`    // 必填，旗下账号或主账号
+	GroupID    int64    `json:"group_id"`   // bot 上架时来源 QQ 群号；<=0 = 不填
 	Title      string   `json:"title"`      // 必填
 	Content    string   `json:"content"`    // 商品描述
 	Category   int16    `json:"category"`   // 1=二手 2=有偿求助
@@ -256,6 +261,10 @@ func BotPublishGood(ctx context.Context, req BotPublishGoodReq) (*BotPublishGood
 		Stock:         1, // 默认 1 件
 		Images:        req.Images,
 		ImageCount:    len(req.Images),
+	}
+	if req.GroupID > 0 {
+		gid := req.GroupID
+		g.CreatedInGroupID = &gid
 	}
 	if _, err := dao.Good().Create(ctx, g); err != nil {
 		return nil, fmt.Errorf("创建商品失败: %w", err)

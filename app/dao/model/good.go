@@ -39,8 +39,13 @@ type Good struct {
 	// 定时下架：仅 HasDeadline=true 时 Deadline 有意义；过期后 cron 会把 good_status 置为 2
 	HasDeadline bool       `gorm:"column:has_deadline;type:boolean;not null;default:false" json:"has_deadline"`
 	Deadline    *time.Time `gorm:"column:deadline" json:"deadline,omitempty"`
-	CreatedAt   time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	// CreatedInGroupID bot 通过 QQ 群上架本商品时所在的群号；非 bot 路径（管理员 / app 用户）
+	// 上架的商品 NULL。用于 RequestOffShelfFromOrphan 定位 "在哪个群 @ 卖家"——比
+	// users.created_in_group_id 更精准（用户跨群活动时不同群发不同商品）。
+	// 详见 QQ-bot/skill/bot/orphan.md "请求下架" 段 + migrate_goods_created_in_group.sql。
+	CreatedInGroupID *int64    `gorm:"column:created_in_group_id" json:"created_in_group_id,omitempty"`
+	CreatedAt        time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt        time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (Good) TableName() string {

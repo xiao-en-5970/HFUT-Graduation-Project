@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"mime/multipart"
@@ -13,10 +14,12 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service/errno"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/botinternal"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	commonredis "github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/redis"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/oss"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/snowflake"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -358,10 +361,10 @@ func (s *goodService) uploadGoodImages(ctx *gin.Context, id uint, files []*multi
 	return urls, nil
 }
 
-// RequestOffShelfFromOrphan app 用户在孤儿商品页点"请求下架"——bot 在原群里 @ 卖家
-// 询问"是不是已出？"，让卖家自己决定要不要下架。
+// RequestOffShelfFromOrphan app 用户在孤儿商品页点"请求下架"——bot 在原群 @ 卖家询问，
+// 让卖家自己决定要不要下架。
 //
-// 设计动机（详见 QQ-bot/skill/bot/SKILL.md "孤儿旗下账号特殊行为"段）：
+// 设计动机（详见 QQ-bot/skill/bot/orphan.md "请求下架" 段）：
 //
 // 孤儿商品没主账号接管，app 用户只能看到"通过 QQ 联系" 告示——但万一这商品已经
 // 实际卖出，告示一直挂着会让别的 app 用户白联系。这接口让 app 用户能"提醒"卖家
@@ -373,6 +376,11 @@ func (s *goodService) uploadGoodImages(ctx *gin.Context, id uint, files []*multi
 //   - 商品必须存在、在售
 //   - 商品 owner 必须是孤儿（普通账号或绑定旗下号都不该走这接口；正常下架走自己的接口）
 //   - caller 不是 owner（防自己请求自己 / 触发 bot 在群里发奇怪消息）
+//
+// 通知通路三级 fallback（让旧数据 / 跨群发布 / bot-非好友 各种边界都能尽量送达）：
+//  1. goods.created_in_group_id 不空 → 在该群 @ 卖家（最精准——商品就是在那群发的）
+//  2. 否则 owner.created_in_group_id 不空 → 在 owner 首见群 @ 卖家
+//  3. 都缺失 → bot CheckFriend；是好友 → SendPrivate；否则才返"无法通知"错
 func (s *goodService) RequestOffShelfFromOrphan(ctx *gin.Context, goodID uint, callerUserID uint) error {
 	g, err := dao.Good().GetByID(ctx.Request.Context(), goodID)
 	if err != nil || g == nil {
@@ -392,8 +400,14 @@ func (s *goodService) RequestOffShelfFromOrphan(ctx *gin.Context, goodID uint, c
 	if callerUserID != 0 && uint(*g.UserID) == callerUserID {
 		return errors.New("不能给自己挂的商品请求下架")
 	}
-	if owner.CreatedInGroupID == nil || *owner.CreatedInGroupID == 0 || owner.QQNumber == nil || *owner.QQNumber == "" {
-		return errors.New("商品创建群信息缺失，无法发起请求")
+	if owner.QQNumber == nil || *owner.QQNumber == "" {
+		// 卖家连 QQ 号都没——说明数据异常（孤儿账号必有 qq_number）；这是真过不去的状况
+		return errors.New("卖家 QQ 信息缺失，无法发起请求")
+	}
+	var qqInt int64
+	fmt.Sscanf(*owner.QQNumber, "%d", &qqInt)
+	if qqInt == 0 {
+		return errors.New("卖家 QQ 号无效")
 	}
 
 	// 限流：同 caller + same good 1h 内不重复打扰卖家
@@ -403,23 +417,76 @@ func (s *goodService) RequestOffShelfFromOrphan(ctx *gin.Context, goodID uint, c
 		return errors.New("已经请求过了，请等卖家在 QQ 里回复后再说")
 	}
 
-	// 调 bot 在原群 @ 卖家
 	if botinternal.Default == nil {
+		_ = commonredis.Client.Del(ctx.Request.Context(), throttleKey).Err()
 		return errors.New("机器人服务暂时不可达，请稍后重试")
 	}
-	var qqInt int64
-	fmt.Sscanf(*owner.QQNumber, "%d", &qqInt)
-	if qqInt == 0 {
-		return errors.New("卖家 QQ 号无效")
-	}
+
 	text := fmt.Sprintf(
 		"[bot] 有 app 用户问你之前发的「%s」（goods_id=%d）是不是已经出了？回\"是\"或者\"已出\"我就帮你下架；不是就忽略这条消息。",
 		g.Title, g.ID,
 	)
-	if err := botinternal.Default.SendGroup(ctx.Request.Context(), *owner.CreatedInGroupID, qqInt, text); err != nil {
-		// bot 调用失败时把限流锁删掉允许用户重试
-		_ = commonredis.Client.Del(ctx.Request.Context(), throttleKey).Err()
-		return fmt.Errorf("通知卖家失败: %w", err)
+
+	// 三级 fallback 通路——任一成功即视为已通知
+	rctx := ctx.Request.Context()
+	if err := notifyOrphanSellerWithFallback(rctx, g, owner, qqInt, text); err != nil {
+		// bot 调用全部路径都失败 → 清限流锁让用户能重试
+		_ = commonredis.Client.Del(rctx, throttleKey).Err()
+		return err
+	}
+	return nil
+}
+
+// notifyOrphanSellerWithFallback 按三级 fallback 通知孤儿卖家。
+//
+// 优先级：商品所在群 @ > owner 首见群 @ > 私聊（仅当 bot 是好友）。
+//
+// 任一通路成功即返回 nil；全失败返回包装好的 error 让 controller 透传到前端。
+// 失败 log warn（不 errf）——这是预期内的 fallback 流转，不算 bug。
+func notifyOrphanSellerWithFallback(
+	ctx context.Context,
+	g *model.Good,
+	owner *model.User,
+	qqInt int64,
+	text string,
+) error {
+	// 1) 商品自己的群——最精准
+	if g.CreatedInGroupID != nil && *g.CreatedInGroupID > 0 {
+		if err := botinternal.Default.SendGroup(ctx, *g.CreatedInGroupID, qqInt, text); err == nil {
+			return nil
+		} else {
+			logger.Warn(ctx, "RequestOffShelfFromOrphan SendGroup(good) 失败，尝试 fallback",
+				zap.Uint("good_id", g.ID),
+				zap.Int64("group_id", *g.CreatedInGroupID),
+				zap.Error(err))
+		}
+	}
+	// 2) owner 首见群——存量孤儿没商品群字段时退化用这个
+	if owner.CreatedInGroupID != nil && *owner.CreatedInGroupID > 0 {
+		if err := botinternal.Default.SendGroup(ctx, *owner.CreatedInGroupID, qqInt, text); err == nil {
+			return nil
+		} else {
+			logger.Warn(ctx, "RequestOffShelfFromOrphan SendGroup(owner) 失败，尝试 fallback",
+				zap.Uint("owner_id", owner.ID),
+				zap.Int64("group_id", *owner.CreatedInGroupID),
+				zap.Error(err))
+		}
+	}
+	// 3) 都缺失 / 都失败 → 试试 bot 私聊（前提是 bot 已加好友）
+	isFriend, err := botinternal.Default.CheckFriend(ctx, qqInt, false)
+	if err != nil {
+		logger.Warn(ctx, "RequestOffShelfFromOrphan CheckFriend 失败",
+			zap.Int64("qq", qqInt), zap.Error(err))
+		return errors.New("通知卖家失败：请稍后重试，或直接通过 QQ 联系")
+	}
+	if !isFriend {
+		// 这是用户最终能看到的"友好失败"——文案明确告诉他怎么办
+		return errors.New("无法自动通知卖家：请直接通过商品页上的 QQ 号联系")
+	}
+	if err := botinternal.Default.SendPrivate(ctx, qqInt, text); err != nil {
+		logger.Warn(ctx, "RequestOffShelfFromOrphan SendPrivate 失败",
+			zap.Int64("qq", qqInt), zap.Error(err))
+		return errors.New("通知卖家失败：请稍后重试，或直接通过 QQ 联系")
 	}
 	return nil
 }
