@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -98,6 +99,29 @@ func BotOffShelfGood(ctx *gin.Context) {
 		return
 	}
 	reply.ReplyOK(ctx)
+}
+
+// BotSearchGoodsSeek: GET /api/v1/bot/groups/:group_id/goods/seek?q=&limit=5
+//
+// 群内「收××」：按群映射学校检索在售二手标题，返回联系人（孤儿卖家给 QQ，否则走 app）。
+func BotSearchGoodsSeek(ctx *gin.Context) {
+	gid, err := strconv.ParseInt(ctx.Param("group_id"), 10, 64)
+	if err != nil || gid == 0 {
+		reply.ReplyInvalidParams(ctx, err)
+		return
+	}
+	q := strings.TrimSpace(ctx.Query("q"))
+	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "5"))
+	list, err := service.BotSearchGoodsForSeek(ctx.Request.Context(), gid, q, limit)
+	if err != nil {
+		if errors.Is(err, service.ErrBotGroupNoSchool) {
+			reply.ReplyErrWithCodeAndMessage(ctx, 404, 404, err.Error())
+			return
+		}
+		reply.ReplyErrWithMessage(ctx, err.Error())
+		return
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": len(list)})
 }
 
 // BotListActiveGoods: GET /api/v1/bot/users/:user_id/goods/active?limit=20

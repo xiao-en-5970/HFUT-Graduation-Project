@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"mime/multipart"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -171,6 +172,62 @@ func findActiveQQChild(ctx context.Context, qqNumber string) (*model.User, error
 // 但 schema 不强制；遇到时 log 一下 warning 等管理员清理）。
 //
 // 找不到返回 (0, nil)，调用方按 ErrBotGroupNoSchool 处理。
+// BotSeekGoodMatch 群内「收××」检索结果一条（仅 bot / QQ 展示用）。
+type BotSeekGoodMatch struct {
+	Title        string    `json:"title"`
+	CreatedAt    time.Time `json:"created_at"`
+	Price        int       `json:"price"`
+	Negotiable   bool      `json:"negotiable"`
+	SellerQQ     string    `json:"seller_qq,omitempty"`
+	OrphanSeller bool      `json:"orphan_seller"`
+}
+
+// BotSearchGoodsForSeek 按群归属学校 + 标题关键字查在售二手（goods_category=1），供 QQ 群内求购提示。
+func BotSearchGoodsForSeek(ctx context.Context, groupID int64, keyword string, limit int) ([]BotSeekGoodMatch, error) {
+	if groupID == 0 {
+		return nil, errors.New("group_id 不能为空")
+	}
+	kw := strings.TrimSpace(keyword)
+	if kw == "" {
+		return nil, errors.New("关键字不能为空")
+	}
+	schoolID, err := findSchoolIDByQQGroup(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	if schoolID == 0 {
+		return nil, ErrBotGroupNoSchool
+	}
+	if limit < 1 {
+		limit = 5
+	}
+	if limit > 10 {
+		limit = 10
+	}
+	list, _, err := dao.Good().List(ctx, schoolID, 1, limit, kw, "", constant.GoodsCategoryNormal)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]BotSeekGoodMatch, 0, len(list))
+	for _, g := range list {
+		row := BotSeekGoodMatch{
+			Title:      g.Title,
+			CreatedAt:  g.CreatedAt,
+			Price:      g.Price,
+			Negotiable: g.Negotiable,
+		}
+		if g.UserID != nil && *g.UserID > 0 {
+			u, err := dao.User().GetByID(ctx, uint(*g.UserID))
+			if err == nil && u != nil && u.IsOrphanQQChild() && u.QQNumber != nil && strings.TrimSpace(*u.QQNumber) != "" {
+				row.SellerQQ = strings.TrimSpace(*u.QQNumber)
+				row.OrphanSeller = true
+			}
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
 func findSchoolIDByQQGroup(ctx context.Context, groupID int64) (uint, error) {
 	var schools []model.School
 	// pgsql 的 ARRAY 包含查询用 ANY()

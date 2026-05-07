@@ -432,18 +432,19 @@ func (s *goodService) RequestOffShelfFromOrphan(ctx *gin.Context, goodID uint, c
 	throttleKey := fmt.Sprintf("orphan_off_shelf_req:%d:%d", callerUserID, goodID)
 	ok, _ := commonredis.Client.SetNX(ctx.Request.Context(), throttleKey, "1", time.Hour).Result()
 	if !ok {
-		return errors.New("已经请求过了，请等卖家在 QQ 里回复后再说")
+		return errors.New("短时间内已发过，请稍后再试")
 	}
 
 	if botinternal.Default == nil {
 		_ = commonredis.Client.Del(ctx.Request.Context(), throttleKey).Err()
-		return errors.New("机器人服务暂时不可达，请稍后重试")
+		return errors.New("机器人不可用，请稍后重试")
 	}
 
-	text := fmt.Sprintf(
-		"[bot] 有 app 用户问你之前发的「%s」（goods_id=%d）是不是已经出了？回\"是\"或者\"已出\"我就帮你下架；不是就忽略这条消息。",
-		g.Title, g.ID,
-	)
+	title := strings.TrimSpace(g.Title)
+	if title == "" {
+		title = "这件商品"
+	}
+	text := fmt.Sprintf("[bot] 「%s」已经出了吗？请回答是或不是。", title)
 
 	// 三级 fallback 通路——任一成功即视为已通知
 	rctx := ctx.Request.Context()
@@ -495,16 +496,16 @@ func notifyOrphanSellerWithFallback(
 	if err != nil {
 		logger.Warn(ctx, "RequestOffShelfFromOrphan CheckFriend 失败",
 			zap.Int64("qq", qqInt), zap.Error(err))
-		return errors.New("通知卖家失败：请稍后重试，或直接通过 QQ 联系")
+		return errors.New("通知失败，请稍后重试或直加 QQ")
 	}
 	if !isFriend {
 		// 这是用户最终能看到的"友好失败"——文案明确告诉他怎么办
-		return errors.New("无法自动通知卖家：请直接通过商品页上的 QQ 号联系")
+		return errors.New("无法通知卖家，请用商品页 QQ 联系")
 	}
 	if err := botinternal.Default.SendPrivate(ctx, qqInt, text); err != nil {
 		logger.Warn(ctx, "RequestOffShelfFromOrphan SendPrivate 失败",
 			zap.Int64("qq", qqInt), zap.Error(err))
-		return errors.New("通知卖家失败：请稍后重试，或直接通过 QQ 联系")
+		return errors.New("通知失败，请稍后重试或直加 QQ")
 	}
 	return nil
 }

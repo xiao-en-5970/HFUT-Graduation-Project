@@ -275,6 +275,7 @@ func BotRouter(api *gin.RouterGroup) {
 		// 商品上下架 + 在售列表
 		bot.POST("/goods", controller.BotPublishGood)
 		bot.POST("/goods/:id/off-shelf", controller.BotOffShelfGood)
+		bot.GET("/groups/:group_id/goods/seek", controller.BotSearchGoodsSeek)
 		bot.GET("/users/:user_id/goods/active", controller.BotListActiveGoods)
 
 		// 提问 / 回答 / 关闭提问 / 群内开放提问列表
