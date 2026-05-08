@@ -264,8 +264,13 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.POST("/user-locations", controller.AdminUserLocationCreate)
 		adminGroup.DELETE("/user-locations/:id", controller.AdminUserLocationDelete)
 
-		// 运维指标面板：HTTP 路由计数 + QQ-bot 内部指标合并
+		// 运维指标面板：
+		//   GET /metrics              当前实时快照（HTTP 路由 + bot 指标合并）
+		//   GET /metrics/timeseries   按时间窗 + step 拉折线数据
+		//   GET /metrics/events       bot 自动派发事件流（含 AI 判断 reason）
 		adminGroup.GET("/metrics", controller.AdminMetrics)
+		adminGroup.GET("/metrics/timeseries", controller.AdminMetricsTimeSeries)
+		adminGroup.GET("/metrics/events", controller.AdminMetricsEvents)
 	}
 }
 

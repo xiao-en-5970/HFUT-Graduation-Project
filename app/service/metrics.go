@@ -251,6 +251,51 @@ func (m *MetricsService) PushBotMetrics(payload map[string]any) {
 	m.botUpdated = time.Now()
 }
 
+// MinuteSeriesSnapshot 把内存里的分钟桶导出为 (minute_ts → metric → value) 形式。
+//
+// 给 metrics_persister 用：每分钟 flush 一次到 DB（UPSERT 幂等）。
+// 数值是**累计值**——同一个 (minute, metric) 反复写入 DB，用最新值覆盖即可。
+//
+// metric 字段命名：requests / errors_4xx / errors_5xx / biz_errors / latency_sum / latency_count
+//   - latency_count = requests（每个请求都记一次延迟样本）
+//   - 平均延迟 = latency_sum / latency_count（前端计算）
+//
+// 返回的 minute_ts 都已经对齐到分钟（epoch 秒）。
+func (m *MetricsService) MinuteSeriesSnapshot() map[int64]map[string]int64 {
+	m.seriesMu.Lock()
+	defer m.seriesMu.Unlock()
+	out := make(map[int64]map[string]int64, len(m.series))
+	for ts, b := range m.series {
+		out[ts] = map[string]int64{
+			"requests":      b.Requests,
+			"errors_4xx":    b.Errors4xx,
+			"errors_5xx":    b.Errors5xx,
+			"biz_errors":    b.BizErrors,
+			"latency_sum":   b.LatencySum,
+			"latency_count": b.Requests, // 每个请求都计一次延迟样本
+		}
+	}
+	return out
+}
+
+// BotSnapshot 上次 pull 到的 QQ-bot 指标快照（拷贝），允许 nil。
+//
+// 给 metrics_persister 拿来抽 series + recent_events 写库——独立于"实时面板"的
+// 那一份 snapshot（实时面板每次 admin/metrics 请求都会重新 pull，一致性高；
+// persister 用的是上次 pull 的副本即可，不强求绝对最新）。
+func (m *MetricsService) BotSnapshot() map[string]any {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.botSnapshot == nil {
+		return nil
+	}
+	out := make(map[string]any, len(m.botSnapshot))
+	for k, v := range m.botSnapshot {
+		out[k] = v
+	}
+	return out
+}
+
 func splitMethodRoute(key string) (method, route string) {
 	for i := 0; i < len(key); i++ {
 		if key[i] == ' ' {

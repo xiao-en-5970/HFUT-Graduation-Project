@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/config"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/vo/response"
@@ -28,7 +29,9 @@ func (s *userService) Register(ctx *gin.Context, username, password string) (uin
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		passwordHash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		return dao.User().Create(ctx, &model.User{
-			SchoolID: 0,
+			// config.DefaultSchoolID 由环境变量 DEFAULT_SCHOOL_ID 控制；
+			// 0 = 不预填，老的"先注册再走绑校流程"路径保持不变
+			SchoolID: config.DefaultSchoolID,
 			Role:     constant.RoleUser,
 			Username: username,
 			Password: string(passwordHash),

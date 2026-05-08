@@ -422,17 +422,24 @@
         return (d ? d + 'd ' : '') + (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     }
 
-    /** 把 Unix epoch 秒转成 HH:MM 标签 */
-    function fmtMinuteLabel(epochSec) {
+    /** Unix epoch 秒 → 标签字符串。stepSec 用来决定显示精度。 */
+    function fmtMinuteLabel(epochSec, stepSec) {
         const d = new Date(Number(epochSec) * 1000);
-        const h = d.getHours(), m = d.getMinutes();
-        return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+        const pad = (n) => (n < 10 ? '0' + n : '' + n);
+        const M = pad(d.getMonth() + 1), D = pad(d.getDate());
+        const h = pad(d.getHours()), m = pad(d.getMinutes());
+        if (!stepSec || stepSec < 3600) return h + ':' + m;        // 分钟级窗口
+        if (stepSec < 86400) return M + '-' + D + ' ' + h + ':00'; // 小时级窗口
+        return M + '-' + D;                                          // 天级窗口
     }
 
     /**
      * 内联 SVG 折线图——多条 series。
      * series: [{ name, color, points: [{x:epochSec, y}] }]
-     * 把所有 series 共用 y 轴；x 轴按时间分钟分布。
+     * opts.stepSec: 用于 x 轴标签格式（fmtMinuteLabel 决策粒度）
+     * opts.height / opts.width: 默认 200 / 720
+     * opts.yLabel: y 轴单位提示（如 "ms"），写在右上角
+     * 多条 series 共用 y 轴；x 轴按时间分布。
      */
     function lineChart(title, series, opts) {
         const W = (opts && opts.width) || 720;
@@ -479,8 +486,9 @@
             body += `<line x1="${PAD_L}" y1="${t.y}" x2="${W - PAD_R}" y2="${t.y}" stroke="#E5E7EB" stroke-width="1" />`;
             body += `<text x="${PAD_L - 6}" y="${t.y + 3}" font-size="10" fill="#6b7280" text-anchor="end">${t.v}</text>`;
         });
+        const stepSec = (opts && opts.stepSec) || 60;
         xTicks.forEach(t => {
-            body += `<text x="${t.x}" y="${H - 8}" font-size="10" fill="#6b7280" text-anchor="middle">${fmtMinuteLabel(t.v)}</text>`;
+            body += `<text x="${t.x}" y="${H - 8}" font-size="10" fill="#6b7280" text-anchor="middle">${fmtMinuteLabel(t.v, stepSec)}</text>`;
         });
         // axes
         body += `<line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${H - PAD_B}" stroke="#9ca3af" stroke-width="1" />`;
@@ -513,61 +521,142 @@
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    // 时间范围 chip（与后端 autoStep 对齐）。"自定义"目前不开放，保持简洁；
+    // 想看更长窗口（>7d）改 chip 配置即可，后端最多支持 90d。
+    const METRICS_RANGES = [
+        {id: '1h', label: '近 1 小时', windowSec: 3600, autoRefreshMs: 5000},
+        {id: '6h', label: '近 6 小时', windowSec: 6 * 3600, autoRefreshMs: 30000},
+        {id: '24h', label: '近 24 小时', windowSec: 24 * 3600, autoRefreshMs: 60000},
+        {id: '7d', label: '近 7 天', windowSec: 7 * 86400, autoRefreshMs: 0},
+    ];
+
+    // 持久化用户上次选择的时间范围；切换路由不丢
+    function getMetricsRangeId() {
+        return localStorage.getItem('admin_metrics_range') || '1h';
+    }
+
+    function setMetricsRangeId(id) {
+        localStorage.setItem('admin_metrics_range', id);
+    }
+
+    // 持久化"自动刷新"开关，默认开
+    function getMetricsAutoRefresh() {
+        return localStorage.getItem('admin_metrics_auto') !== '0';
+    }
+
+    function setMetricsAutoRefresh(on) {
+        localStorage.setItem('admin_metrics_auto', on ? '1' : '0');
+    }
+
+    /** 把后端 timeseries 响应转成"按 metric 名快速查"的 map：metric -> {points, source}[] */
+    function indexSeriesByMetric(rawSeries) {
+        const idx = {};
+        rawSeries.forEach(s => {
+            const key = s.source + ':' + s.metric;
+            idx[key] = s.points || [];
+        });
+        return idx;
+    }
+
+    /** 把两条 counter 序列做"逐桶相除"得平均：用于 latency_sum / latency_count → 平均延迟。 */
+    function divideSeries(numer, denom) {
+        if (!numer || !denom) return [];
+        const dmap = {};
+        denom.forEach(p => {
+            dmap[p.t] = p.v;
+        });
+        return numer.map(p => {
+            const c = dmap[p.t] || 0;
+            return {x: p.t, y: c > 0 ? Math.round(p.v / c) : 0};
+        });
+    }
+
+    /** counter 序列直接转 lineChart points 形式 */
+    function pointsOf(series) {
+        return (series || []).map(p => ({x: p.t, y: p.v}));
+    }
+
     async function renderMetrics() {
         destroyMetricsTimer();
+        let currentRangeId = getMetricsRangeId();
+        let autoRefreshEnabled = getMetricsAutoRefresh();
+
         const tick = async () => {
+            const range = METRICS_RANGES.find(r => r.id === currentRangeId) || METRICS_RANGES[0];
+            const end = Math.floor(Date.now() / 1000);
+            const start = end - range.windowSec;
             try {
-                const data = (await api('/admin/metrics')).data || {};
+                // 三个请求并发：实时快照（累计指标 + 路由表 + bot 概览）+ 时序 + 事件
+                const [snap, ts, ev] = await Promise.all([
+                    api('/admin/metrics'),
+                    api(`/admin/metrics/timeseries?start=${start}&end=${end}&source=all`),
+                    api(`/admin/metrics/events?start=${start}&end=${end}&limit=200`),
+                ]);
+                const data = snap.data || {};
+                const tsData = ts.data || {};
+                const evData = ev.data || {};
+                const step = tsData.step || 60;
+                const sIdx = indexSeriesByMetric(tsData.series || []);
+                const eventList = evData.list || [];
+
                 const routesRows = data.routes || [];
-                const series = data.series || [];
                 const bot = (data.bot || {}).data || {};
                 const botErr = (data.bot || {}).error || '';
                 const botUpdated = (data.bot || {}).updated_at || '';
                 const dispatch = bot.dispatch || {};
-                const botSeries = bot.series || [];
-                const recent = bot.recent_events || [];
                 const dispatchRows = Object.keys(dispatch).sort().map(k => {
                     const v = dispatch[k];
                     const [type, outcome] = k.split(':');
                     return `<tr><td>${escapeHtml(type || k)}</td><td>${escapeHtml(outcome || '-')}</td><td>${v}</td></tr>`;
                 }).join('');
 
-                // 折线图数据
-                const reqLine = lineChart('每分钟接口请求量（最近 60 分钟）',
-                    [{name: '请求', color: '#2563eb', points: series.map(p => ({x: p.minute, y: p.requests}))},
-                        {name: '4xx', color: '#d97706', points: series.map(p => ({x: p.minute, y: p.errors_4xx}))},
-                        {name: '5xx', color: '#dc2626', points: series.map(p => ({x: p.minute, y: p.errors_5xx}))}]);
-                const latLine = lineChart('每分钟平均响应耗时 (ms)',
-                    [{
-                        name: '平均耗时',
-                        color: '#0f766e',
-                        points: series.map(p => ({x: p.minute, y: Math.round(p.avg_latency_ms || 0)}))
-                    }]);
-                const botLine = !botErr ? lineChart('Bot 每分钟事件量（最近 60 分钟）',
-                    [{name: '群+私聊消息', color: '#2563eb', points: botSeries.map(p => ({x: p.minute, y: p.ws_msgs}))},
-                        {
-                            name: '识别调用',
-                            color: '#16a34a',
-                            points: botSeries.map(p => ({x: p.minute, y: p.recognize_called}))
-                        },
-                        {
-                            name: '上架成功',
-                            color: '#a16207',
-                            points: botSeries.map(p => ({x: p.minute, y: p.dispatch_success}))
-                        }]) : '';
+                // 折线图：数据点 = 后端按 step 桶起来的 counter SUM
+                const chartOpts = {stepSec: step};
+                const reqLine = lineChart(`接口请求量（${range.label}，分桶 ${humanStep(step)}）`,
+                    [{name: '请求', color: '#2563eb', points: pointsOf(sIdx['http:requests'])},
+                        {name: '4xx', color: '#d97706', points: pointsOf(sIdx['http:errors_4xx'])},
+                        {name: '5xx', color: '#dc2626', points: pointsOf(sIdx['http:errors_5xx'])}],
+                    chartOpts);
+                // 平均延迟需要按桶 latency_sum / latency_count
+                const latPoints = divideSeries(sIdx['http:latency_sum'], sIdx['http:latency_count']);
+                const latLine = lineChart(`平均响应耗时 (ms，${range.label}）`,
+                    [{name: '平均耗时', color: '#0f766e', points: latPoints}],
+                    chartOpts);
+                const botLine = lineChart(`Bot 事件量（${range.label}）`,
+                    [{name: '群+私聊消息', color: '#2563eb', points: pointsOf(sIdx['bot:ws_msgs'])},
+                        {name: '识别调用', color: '#16a34a', points: pointsOf(sIdx['bot:recognize_called'])},
+                        {name: '识别成功', color: '#a16207', points: pointsOf(sIdx['bot:recognize_success'])},
+                        {name: '派发成功', color: '#7c3aed', points: pointsOf(sIdx['bot:dispatch_success'])}],
+                    chartOpts);
+
+                // 工具栏：时间范围 chip + 自动刷新 + 手动刷新
+                const rangeChips = METRICS_RANGES.map(r => {
+                    const on = r.id === currentRangeId;
+                    return `<button data-range="${r.id}" class="btn btn-sm${on ? ' btn-primary' : ''}" style="${on ? '' : 'background:transparent;border:1px solid var(--border)'}">${r.label}</button>`;
+                }).join('');
+                const autoLabel = autoRefreshEnabled
+                    ? (range.autoRefreshMs > 0 ? `自动刷新 ${Math.round(range.autoRefreshMs / 1000)}s` : '本范围禁用自动刷新')
+                    : '已关闭自动刷新';
+                const toolbar = `
+          <div class="module-header" style="display:flex;align-items:center;flex-wrap:wrap;gap:12px">
+            <h3 style="margin:0">运维面板</h3>
+            <div style="display:flex;gap:6px">${rangeChips}</div>
+            <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--text-muted)">
+              <input type="checkbox" id="metrics-auto" ${autoRefreshEnabled ? 'checked' : ''} />
+              <span>${escapeHtml(autoLabel)}</span>
+            </label>
+            <button class="btn btn-sm" id="metrics-refresh" style="background:transparent;border:1px solid var(--border)">立即刷新</button>
+          </div>`;
 
                 const overview = `
-          <div class="module-header"><h3>运维面板</h3>
-            <span class="text-muted" style="margin-left:12px">每 5 秒自动刷新</span>
-          </div>
           <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
             <div class="card"><div class="text-muted">后端启动</div><div style="font-size:18px">${(data.started_at || '').slice(0, 19)}</div></div>
             <div class="card"><div class="text-muted">后端运行时长</div><div style="font-size:20px;font-weight:600">${fmtUptime(data.uptime_seconds)}</div></div>
-            <div class="card"><div class="text-muted">总请求数</div><div style="font-size:22px;font-weight:700">${data.total_requests || 0}</div></div>
-            <div class="card"><div class="text-muted">4xx 错误</div><div style="font-size:22px;font-weight:700;color:#d97706">${data.total_errors_4xx || 0}</div></div>
-            <div class="card"><div class="text-muted">5xx 错误</div><div style="font-size:22px;font-weight:700;color:#dc2626">${data.total_errors_5xx || 0}</div></div>
-            <div class="card"><div class="text-muted">业务异常码</div><div style="font-size:22px;font-weight:700;color:#dc2626">${data.total_biz_errors || 0}</div></div>
-            <div class="card"><div class="text-muted">平均响应耗时</div><div style="font-size:20px;font-weight:600">${(Number(data.avg_latency_ms) || 0).toFixed(1)} ms</div></div>
+            <div class="card"><div class="text-muted">累计请求数</div><div style="font-size:22px;font-weight:700">${data.total_requests || 0}</div></div>
+            <div class="card"><div class="text-muted">累计 4xx</div><div style="font-size:22px;font-weight:700;color:#d97706">${data.total_errors_4xx || 0}</div></div>
+            <div class="card"><div class="text-muted">累计 5xx</div><div style="font-size:22px;font-weight:700;color:#dc2626">${data.total_errors_5xx || 0}</div></div>
+            <div class="card"><div class="text-muted">累计业务异常</div><div style="font-size:22px;font-weight:700;color:#dc2626">${data.total_biz_errors || 0}</div></div>
+            <div class="card"><div class="text-muted">累计平均耗时</div><div style="font-size:20px;font-weight:600">${(Number(data.avg_latency_ms) || 0).toFixed(1)} ms</div></div>
           </div>`;
                 const chartsHtml = `
           <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;margin-bottom:16px">
@@ -576,34 +665,38 @@
             ${botLine}
           </div>`;
                 const routesHtml = `
-          <h4>HTTP 路由计数（按访问量排序）</h4>
+          <h4>HTTP 路由累计计数（按访问量排序）<span class="text-muted" style="font-weight:normal;margin-left:8px">来自实时进程内存，不随时间窗口变化</span></h4>
           <div class="table-wrap"><table>
             <thead><tr><th>方法</th><th>路由</th><th>请求数</th><th>4xx</th><th>5xx</th><th>业务异常</th><th>平均耗时(ms)</th></tr></thead>
             <tbody>${routesRows.map(r => `<tr><td>${escapeHtml(r.method)}</td><td>${escapeHtml(r.route)}</td><td>${r.count}</td><td>${r.errors_4xx}</td><td>${r.errors_5xx}</td><td>${r.biz_errors}</td><td>${(r.avg_latency_ms || 0).toFixed(1)}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>'}</tbody>
           </table></div>`;
-                const eventRows = recent.map(ev => {
-                    const priceStr = ev.negotiable ? '面议' : (ev.price ? Number(ev.price).toFixed(2) : (ev.action_type === 'seek_goods' ? '—' : '0'));
+
+                // bot 事件来自 DB（持久化）；按时间窗筛选；最多 200 条
+                const eventRows = eventList.map(ev2 => {
+                    const ts2 = (ev2.occurred_at || '').replace('T', ' ').slice(0, 19);
+                    const priceStr = (ev2.price_cents == null) ? '—'
+                        : (ev2.price_cents > 0 ? '¥' + (ev2.price_cents / 100).toFixed(2) : '0');
                     return `<tr>
-            <td>${escapeHtml((ev.ts || '').replace('T', ' ').slice(0, 19))}</td>
-            <td>${ev.group_id || ''}</td>
-            <td>${escapeHtml(ev.user_card || ev.user_id)}</td>
-            <td>${escapeHtml(ev.action_type)}</td>
-            <td>${escapeHtml(ev.outcome)}</td>
-            <td>${escapeHtml(ev.title)}</td>
-            <td>${escapeHtml(priceStr)}</td>
-            <td>${ev.confidence ? Number(ev.confidence).toFixed(2) : '-'}</td>
-            <td title="${escapeHtml(ev.reason)}">${escapeHtml((ev.reason || '').slice(0, 40))}</td>
-            <td title="${escapeHtml(ev.ack_text)}">${escapeHtml((ev.ack_text || '').slice(0, 40))}</td>
+            <td>${escapeHtml(ts2)}</td>
+            <td>${ev2.group_id || ''}</td>
+            <td>${escapeHtml(ev2.user_id || '')}</td>
+            <td>${escapeHtml(ev2.action)}</td>
+            <td>${escapeHtml(ev2.outcome)}</td>
+            <td>${escapeHtml(ev2.title || '')}</td>
+            <td>${priceStr}</td>
+            <td>${ev2.confidence ? Number(ev2.confidence).toFixed(2) : '-'}</td>
+            <td title="${escapeHtml(ev2.reason || '')}">${escapeHtml((ev2.reason || '').slice(0, 60))}</td>
+            <td title="${escapeHtml(ev2.err_message || '')}">${escapeHtml((ev2.err_message || '').slice(0, 40))}</td>
           </tr>`;
                 }).join('');
-                const eventsHtml = !botErr ? `
-          <h4>QQ-bot 最近识别事件 <span class="text-muted" style="font-weight:normal">（保留最近 50 条，最新在前）</span></h4>
+                const eventsHtml = `
+          <h4>QQ-bot 派发事件流 <span class="text-muted" style="font-weight:normal">（${range.label}，共 ${evData.total || 0} 条，仅展示最新 ${eventList.length} 条）</span></h4>
           <div class="table-wrap"><table>
-            <thead><tr><th>时间</th><th>群</th><th>用户</th><th>动作</th><th>结果</th><th>标题</th><th>价格</th><th>置信度</th><th>模型 reason</th><th>群内回执</th></tr></thead>
-            <tbody>${eventRows || '<tr><td colspan="10" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>'}</tbody>
-          </table></div>` : '';
+            <thead><tr><th>时间</th><th>群</th><th>用户</th><th>动作</th><th>结果</th><th>标题</th><th>价格</th><th>置信度</th><th>模型 reason</th><th>错误</th></tr></thead>
+            <tbody>${eventRows || '<tr><td colspan="10" style="text-align:center;color:var(--text-muted)">该时间窗口内暂无事件</td></tr>'}</tbody>
+          </table></div>`;
                 const botHtml = botErr ? `<h4>QQ-bot 指标</h4><div class="card" style="color:#dc2626">${escapeHtml(botErr)}</div>` : `
-          <h4>QQ-bot 指标 <span class="text-muted" style="font-weight:normal">（${(botUpdated || '').slice(0, 19)}）</span></h4>
+          <h4>QQ-bot 累计指标 <span class="text-muted" style="font-weight:normal">（${(botUpdated || '').slice(0, 19)}）</span></h4>
           <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
             <div class="card"><div class="text-muted">Bot 运行时长</div><div style="font-size:18px;font-weight:600">${fmtUptime(bot.uptime_seconds)}</div></div>
             <div class="card"><div class="text-muted">群消息</div><div style="font-size:22px;font-weight:700">${bot.ws_group_msgs || 0}</div></div>
@@ -616,18 +709,54 @@
             <div class="card"><div class="text-muted">群接入申请</div><div style="font-size:22px;font-weight:700">${bot.private_access_requests || 0}</div></div>
             <div class="card"><div class="text-muted">运维通知</div><div style="font-size:22px;font-weight:700">${bot.ops_notifications || 0}</div></div>
           </div>
-          <h5>分发结果（按 action × outcome）</h5>
+          <h5>分发结果（按 action × outcome，累计）</h5>
           <div class="table-wrap"><table>
             <thead><tr><th>动作</th><th>结果</th><th>计数</th></tr></thead>
             <tbody>${dispatchRows || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>'}</tbody>
           </table></div>`;
-                moduleContent.innerHTML = overview + chartsHtml + routesHtml + '<div style="height:16px"></div>' + botHtml + '<div style="height:16px"></div>' + eventsHtml;
+                moduleContent.innerHTML = toolbar + overview + chartsHtml + routesHtml + '<div style="height:16px"></div>' + botHtml + '<div style="height:16px"></div>' + eventsHtml;
+
+                // 工具栏事件绑定
+                moduleContent.querySelectorAll('button[data-range]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        currentRangeId = btn.dataset.range;
+                        setMetricsRangeId(currentRangeId);
+                        schedule();
+                    });
+                });
+                const autoChk = moduleContent.querySelector('#metrics-auto');
+                if (autoChk) autoChk.addEventListener('change', () => {
+                    autoRefreshEnabled = autoChk.checked;
+                    setMetricsAutoRefresh(autoRefreshEnabled);
+                    schedule();
+                });
+                const refBtn = moduleContent.querySelector('#metrics-refresh');
+                if (refBtn) refBtn.addEventListener('click', () => tick());
             } catch (e) {
                 moduleContent.innerHTML = '<div class="module-header"><h3>运维面板</h3></div><p style="color:#dc2626">加载失败：' + escapeHtml(e.message || e) + '</p>';
             }
         };
-        await tick();
-        metricsTimer = setInterval(tick, 5000);
+
+        // schedule：先 tick 一次，再根据 range.autoRefreshMs 决定是否重置 ticker。
+        // 范围切换 / 自动刷新开关变化都重新 schedule。
+        const schedule = async () => {
+            destroyMetricsTimer();
+            await tick();
+            const range = METRICS_RANGES.find(r => r.id === currentRangeId) || METRICS_RANGES[0];
+            if (autoRefreshEnabled && range.autoRefreshMs > 0) {
+                metricsTimer = setInterval(tick, range.autoRefreshMs);
+            }
+        };
+
+        await schedule();
+    }
+
+    /** step 秒数 → 人话 */
+    function humanStep(sec) {
+        if (sec < 60) return sec + 's';
+        if (sec < 3600) return Math.round(sec / 60) + 'min';
+        if (sec < 86400) return Math.round(sec / 3600) + 'h';
+        return Math.round(sec / 86400) + 'd';
     }
 
     // 切到其它路由时清掉定时器

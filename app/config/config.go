@@ -125,6 +125,16 @@ var (
 
 	// Martin 瓦片上游（仅服务端访问，可写 http://127.0.0.1:50001/tiles 或带 {z}/{x}/{y} 的完整模板）
 	MapTilesURL string
+
+	// DefaultSchoolID 普通用户注册时默认归属的学校 ID。
+	//
+	// 0（默认）= 关闭：用户注册后 school_id=0，需要走"绑学校"流程才能写入。
+	// 非 0      = 直接预填该学校 ID，新用户立即可见该校内容；之后用户仍可走绑校流程
+	//             校验真实身份，BindSchool 接口要求 school_id=0 才能写，所以预填后
+	//             用户实际不能再绑别的学校（除非管理员手动改）。
+	//
+	// 注意：本字段**不**作用于 QQ 旗下账号 / admin 手动建用户——那些路径有自己的 school 来源。
+	DefaultSchoolID uint
 )
 
 const defaultEnvPath = "/.env"
@@ -237,6 +247,13 @@ func LoadConfigFrom(path string) error {
 	RecoBehaviorTimeDecayDays = getEnvFloat("RECO_BEHAVIOR_TIME_DECAY_DAYS", 30)
 
 	MapTilesURL = strings.TrimSpace(getEnv("MAP_TILES_URL", ""))
+
+	// 默认 0 = 关闭；要启用就把环境变量 DEFAULT_SCHOOL_ID 设成对应的 schools.id（如 1）
+	if v := getEnvInt("DEFAULT_SCHOOL_ID", 0); v > 0 {
+		DefaultSchoolID = uint(v)
+	} else {
+		DefaultSchoolID = 0
+	}
 
 	return nil
 }

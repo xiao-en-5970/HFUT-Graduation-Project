@@ -88,6 +88,10 @@ func Boot() error {
 	// 进程退出时由 ctx 被 GC（main 阻塞在 service.Run），协程随主进程一起结束。
 	scheduler.StartGoodsAutoOffShelf(ctx)
 
+	// 启动指标持久化：每分钟把 hfut + bot 的分钟桶 + bot 事件流 UPSERT 到 PG，
+	// 给运维面板的"过去 1h / 24h / 7d 折线图"提供历史数据。详见 metrics_persist.go。
+	scheduler.StartMetricsPersister(ctx)
+
 	// gin.Engine.Run → http.ListenAndServe：成功后会一直阻塞，直到进程退出。
 	// Gin 在 release 模式下不会在控制台打印监听地址，容易造成「启动后没日志」的误判，故在此显式打出。
 	logger.Info(ctx, "Starting HTTP server (blocking)",
