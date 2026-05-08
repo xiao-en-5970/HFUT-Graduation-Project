@@ -299,5 +299,9 @@ func BotRouter(api *gin.RouterGroup) {
 		// 图片转存（NapCat 临时 URL → hfut OSS 永久 URL）
 		// 走 multipart/form-data；bot 那边把下载好的 NapCat 二进制直接 POST 过来
 		bot.POST("/images", controller.BotUploadImage)
+
+		// 运维群只读 SQL 查询入口——只接受 select/with/explain/show/values 开头的语句，
+		// PG 事务级 READ ONLY 双保险，行数 LIMIT 200（最大 1000）。详见 controller/bot_admin_sql.go。
+		bot.POST("/admin/sql", controller.BotAdminExecSQL)
 	}
 }
