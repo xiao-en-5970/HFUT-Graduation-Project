@@ -1,22 +1,86 @@
 (function () {
   const API = '/api/v1';
-  const TOKEN_KEY = 'admin_token';
+    const ACCESS_KEY = 'admin_token';     // 历史 key——双 token 模型里继续作为 access
+    const CODE_ACCESS_EXPIRED = 4011;      // 后端 middleware/jwt.go 业务码
 
-  function getToken() { return localStorage.getItem(TOKEN_KEY); }
-  function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+    // refresh token 安全模型（重要）
+    // ────────────────────────────────────────────────────────────────────
+    // refresh token 由后端通过 HttpOnly + Secure + SameSite=Strict cookie
+    // 下发到浏览器：Path=/api/v1/user/refresh，Max-Age=30d。
+    //
+    //   - HttpOnly  → 任何 JS（含被注入的 XSS 脚本）都读不到，offline-storage
+    //                 同源攻击拿不走
+    //   - Secure    → 仅 HTTPS 通道传输
+    //   - SameSite=Strict → 跨站请求不携带，CSRF 缓解
+    //   - Path 限定到 /user/refresh → 业务接口都不会带这条 cookie，曝光面最小
+    //
+    // 因此本文件**绝不**用 localStorage / sessionStorage / IndexedDB / cookie
+    // 的非 HttpOnly 形式存 refresh，也不再有 getRefreshToken() 之类函数——
+    // refresh 全由浏览器在调 /user/refresh 时自动带回，前端 JS 不感知。
+    function getToken() {
+        return localStorage.getItem(ACCESS_KEY);
+    }
+
+    function setAccessToken(access) {
+        if (access) localStorage.setItem(ACCESS_KEY, access);
+    }
+
+    function clearTokens() {
+        localStorage.removeItem(ACCESS_KEY);
+    }
 
   function redirectToLogin() {
-    clearToken();
+      clearTokens();
+      // 通知后端立即丢弃 HttpOnly refresh cookie（不阻塞跳转）
+      fetch(API + '/user/logout', {method: 'POST', credentials: 'same-origin'}).catch(() => {
+      });
     window.location.href = '/admin/login.html';
   }
 
-  async function api(url, options = {}) {
+    // 全局并发去重——多个请求同时 4011 时只发一次 /user/refresh。
+    // 不传 body：refresh 由浏览器从 HttpOnly cookie 自动带回，必须 credentials: 'same-origin'。
+    let refreshing = null;
+
+    async function refreshAccessTokenOnce() {
+        if (refreshing) return refreshing;
+        refreshing = (async () => {
+            try {
+                const res = await fetch(API + '/user/refresh', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                });
+                const data = await res.json().catch(() => ({}));
+                if ((data.code !== 0 && data.code !== 200) || !data.data) return null;
+                const access = data.data.access_token;
+                if (!access) return null;
+                setAccessToken(access);
+                return access;
+            } catch (_) {
+                return null;
+            } finally {
+                setTimeout(() => {
+                    refreshing = null;
+                }, 0);
+            }
+        })();
+        return refreshing;
+    }
+
+    async function api(url, options = {}, _retried) {
     const token = getToken();
     const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
     if (token) headers['Authorization'] = 'Bearer ' + token;
     const res = await fetch(API + url, { ...options, headers });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 401 || res.status === 403) {
+
+        // access 过期 → 自动刷新 + 重试一次
+        if (data.code === CODE_ACCESS_EXPIRED && !_retried) {
+            const fresh = await refreshAccessTokenOnce();
+            if (fresh) return api(url, options, true);
+            redirectToLogin();
+            throw new Error('登录态已过期，请重新登录');
+        }
+        if (res.status === 401 || res.status === 403 || data.code === 401) {
       redirectToLogin();
       throw new Error(data.message || '未授权');
     }
@@ -358,21 +422,140 @@
         return (d ? d + 'd ' : '') + (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     }
 
+    /** 把 Unix epoch 秒转成 HH:MM 标签 */
+    function fmtMinuteLabel(epochSec) {
+        const d = new Date(Number(epochSec) * 1000);
+        const h = d.getHours(), m = d.getMinutes();
+        return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+    }
+
+    /**
+     * 内联 SVG 折线图——多条 series。
+     * series: [{ name, color, points: [{x:epochSec, y}] }]
+     * 把所有 series 共用 y 轴；x 轴按时间分钟分布。
+     */
+    function lineChart(title, series, opts) {
+        const W = (opts && opts.width) || 720;
+        const H = (opts && opts.height) || 200;
+        const PAD_L = 44, PAD_R = 12, PAD_T = 24, PAD_B = 28;
+        const innerW = W - PAD_L - PAD_R;
+        const innerH = H - PAD_T - PAD_B;
+
+        let xMin = Infinity, xMax = -Infinity, yMax = 0;
+        series.forEach(s => s.points.forEach(p => {
+            if (p.x < xMin) xMin = p.x;
+            if (p.x > xMax) xMax = p.x;
+            if (p.y > yMax) yMax = p.y;
+        }));
+        if (!isFinite(xMin) || !isFinite(xMax) || xMin === xMax) {
+            xMin = Math.floor(Date.now() / 1000 / 60) * 60 - 60;
+            xMax = xMin + 60;
+        }
+        if (yMax <= 0) yMax = 1;
+        // 把 yMax 放大到稍微高一点的整数刻度
+        const niceMax = Math.ceil(yMax * 1.1);
+
+        const x = (xv) => PAD_L + ((xv - xMin) / Math.max(1, xMax - xMin)) * innerW;
+        const y = (yv) => PAD_T + innerH - (yv / niceMax) * innerH;
+
+        // y 轴 5 等分
+        const yTicks = [];
+        for (let i = 0; i <= 4; i++) {
+            const v = (niceMax * i) / 4;
+            yTicks.push({v: Math.round(v), y: y(v)});
+        }
+        // x 轴 4-6 个刻度
+        const xTickCount = Math.min(6, series[0]?.points?.length || 1);
+        const xTicks = [];
+        for (let i = 0; i < xTickCount; i++) {
+            const ratio = xTickCount === 1 ? 0 : i / (xTickCount - 1);
+            const xv = xMin + (xMax - xMin) * ratio;
+            xTicks.push({v: xv, x: x(xv)});
+        }
+
+        let body = '';
+        // grid + y labels
+        yTicks.forEach(t => {
+            body += `<line x1="${PAD_L}" y1="${t.y}" x2="${W - PAD_R}" y2="${t.y}" stroke="#E5E7EB" stroke-width="1" />`;
+            body += `<text x="${PAD_L - 6}" y="${t.y + 3}" font-size="10" fill="#6b7280" text-anchor="end">${t.v}</text>`;
+        });
+        xTicks.forEach(t => {
+            body += `<text x="${t.x}" y="${H - 8}" font-size="10" fill="#6b7280" text-anchor="middle">${fmtMinuteLabel(t.v)}</text>`;
+        });
+        // axes
+        body += `<line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${H - PAD_B}" stroke="#9ca3af" stroke-width="1" />`;
+        body += `<line x1="${PAD_L}" y1="${H - PAD_B}" x2="${W - PAD_R}" y2="${H - PAD_B}" stroke="#9ca3af" stroke-width="1" />`;
+        // lines
+        series.forEach(s => {
+            if (!s.points || !s.points.length) return;
+            const path = s.points.map((p, i) => (i === 0 ? 'M' : 'L') + x(p.x) + ' ' + y(p.y)).join(' ');
+            body += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" />`;
+            s.points.forEach(p => {
+                body += `<circle cx="${x(p.x)}" cy="${y(p.y)}" r="2.5" fill="${s.color}" />`;
+            });
+        });
+        // legend
+        let legend = `<g transform="translate(${PAD_L},6)">`;
+        let lx = 0;
+        series.forEach(s => {
+            legend += `<circle cx="${lx + 5}" cy="6" r="4" fill="${s.color}" />`;
+            legend += `<text x="${lx + 14}" y="9" font-size="11" fill="#374151">${s.name}</text>`;
+            lx += 14 + s.name.length * 7 + 16;
+        });
+        legend += `</g>`;
+        return `<div class="card"><div class="text-muted" style="margin-bottom:6px">${title}</div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:${H}px">${legend}${body}</svg></div>`;
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     async function renderMetrics() {
         destroyMetricsTimer();
         const tick = async () => {
             try {
                 const data = (await api('/admin/metrics')).data || {};
                 const routesRows = data.routes || [];
+                const series = data.series || [];
                 const bot = (data.bot || {}).data || {};
                 const botErr = (data.bot || {}).error || '';
                 const botUpdated = (data.bot || {}).updated_at || '';
                 const dispatch = bot.dispatch || {};
+                const botSeries = bot.series || [];
+                const recent = bot.recent_events || [];
                 const dispatchRows = Object.keys(dispatch).sort().map(k => {
                     const v = dispatch[k];
                     const [type, outcome] = k.split(':');
-                    return `<tr><td>${type || k}</td><td>${outcome || '-'}</td><td>${v}</td></tr>`;
+                    return `<tr><td>${escapeHtml(type || k)}</td><td>${escapeHtml(outcome || '-')}</td><td>${v}</td></tr>`;
                 }).join('');
+
+                // 折线图数据
+                const reqLine = lineChart('每分钟接口请求量（最近 60 分钟）',
+                    [{name: '请求', color: '#2563eb', points: series.map(p => ({x: p.minute, y: p.requests}))},
+                        {name: '4xx', color: '#d97706', points: series.map(p => ({x: p.minute, y: p.errors_4xx}))},
+                        {name: '5xx', color: '#dc2626', points: series.map(p => ({x: p.minute, y: p.errors_5xx}))}]);
+                const latLine = lineChart('每分钟平均响应耗时 (ms)',
+                    [{
+                        name: '平均耗时',
+                        color: '#0f766e',
+                        points: series.map(p => ({x: p.minute, y: Math.round(p.avg_latency_ms || 0)}))
+                    }]);
+                const botLine = !botErr ? lineChart('Bot 每分钟事件量（最近 60 分钟）',
+                    [{name: '群+私聊消息', color: '#2563eb', points: botSeries.map(p => ({x: p.minute, y: p.ws_msgs}))},
+                        {
+                            name: '识别调用',
+                            color: '#16a34a',
+                            points: botSeries.map(p => ({x: p.minute, y: p.recognize_called}))
+                        },
+                        {
+                            name: '上架成功',
+                            color: '#a16207',
+                            points: botSeries.map(p => ({x: p.minute, y: p.dispatch_success}))
+                        }]) : '';
+
                 const overview = `
           <div class="module-header"><h3>运维面板</h3>
             <span class="text-muted" style="margin-left:12px">每 5 秒自动刷新</span>
@@ -386,13 +569,40 @@
             <div class="card"><div class="text-muted">业务异常码</div><div style="font-size:22px;font-weight:700;color:#dc2626">${data.total_biz_errors || 0}</div></div>
             <div class="card"><div class="text-muted">平均响应耗时</div><div style="font-size:20px;font-weight:600">${(Number(data.avg_latency_ms) || 0).toFixed(1)} ms</div></div>
           </div>`;
+                const chartsHtml = `
+          <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;margin-bottom:16px">
+            ${reqLine}
+            ${latLine}
+            ${botLine}
+          </div>`;
                 const routesHtml = `
           <h4>HTTP 路由计数（按访问量排序）</h4>
           <div class="table-wrap"><table>
             <thead><tr><th>方法</th><th>路由</th><th>请求数</th><th>4xx</th><th>5xx</th><th>业务异常</th><th>平均耗时(ms)</th></tr></thead>
-            <tbody>${routesRows.map(r => `<tr><td>${r.method}</td><td>${r.route}</td><td>${r.count}</td><td>${r.errors_4xx}</td><td>${r.errors_5xx}</td><td>${r.biz_errors}</td><td>${(r.avg_latency_ms || 0).toFixed(1)}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>'}</tbody>
+            <tbody>${routesRows.map(r => `<tr><td>${escapeHtml(r.method)}</td><td>${escapeHtml(r.route)}</td><td>${r.count}</td><td>${r.errors_4xx}</td><td>${r.errors_5xx}</td><td>${r.biz_errors}</td><td>${(r.avg_latency_ms || 0).toFixed(1)}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>'}</tbody>
           </table></div>`;
-                const botHtml = botErr ? `<h4>QQ-bot 指标</h4><div class="card" style="color:#dc2626">${botErr}</div>` : `
+                const eventRows = recent.map(ev => {
+                    const priceStr = ev.negotiable ? '面议' : (ev.price ? Number(ev.price).toFixed(2) : (ev.action_type === 'seek_goods' ? '—' : '0'));
+                    return `<tr>
+            <td>${escapeHtml((ev.ts || '').replace('T', ' ').slice(0, 19))}</td>
+            <td>${ev.group_id || ''}</td>
+            <td>${escapeHtml(ev.user_card || ev.user_id)}</td>
+            <td>${escapeHtml(ev.action_type)}</td>
+            <td>${escapeHtml(ev.outcome)}</td>
+            <td>${escapeHtml(ev.title)}</td>
+            <td>${escapeHtml(priceStr)}</td>
+            <td>${ev.confidence ? Number(ev.confidence).toFixed(2) : '-'}</td>
+            <td title="${escapeHtml(ev.reason)}">${escapeHtml((ev.reason || '').slice(0, 40))}</td>
+            <td title="${escapeHtml(ev.ack_text)}">${escapeHtml((ev.ack_text || '').slice(0, 40))}</td>
+          </tr>`;
+                }).join('');
+                const eventsHtml = !botErr ? `
+          <h4>QQ-bot 最近识别事件 <span class="text-muted" style="font-weight:normal">（保留最近 50 条，最新在前）</span></h4>
+          <div class="table-wrap"><table>
+            <thead><tr><th>时间</th><th>群</th><th>用户</th><th>动作</th><th>结果</th><th>标题</th><th>价格</th><th>置信度</th><th>模型 reason</th><th>群内回执</th></tr></thead>
+            <tbody>${eventRows || '<tr><td colspan="10" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>'}</tbody>
+          </table></div>` : '';
+                const botHtml = botErr ? `<h4>QQ-bot 指标</h4><div class="card" style="color:#dc2626">${escapeHtml(botErr)}</div>` : `
           <h4>QQ-bot 指标 <span class="text-muted" style="font-weight:normal">（${(botUpdated || '').slice(0, 19)}）</span></h4>
           <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
             <div class="card"><div class="text-muted">Bot 运行时长</div><div style="font-size:18px;font-weight:600">${fmtUptime(bot.uptime_seconds)}</div></div>
@@ -411,9 +621,9 @@
             <thead><tr><th>动作</th><th>结果</th><th>计数</th></tr></thead>
             <tbody>${dispatchRows || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>'}</tbody>
           </table></div>`;
-                moduleContent.innerHTML = overview + routesHtml + '<div style="height:16px"></div>' + botHtml;
+                moduleContent.innerHTML = overview + chartsHtml + routesHtml + '<div style="height:16px"></div>' + botHtml + '<div style="height:16px"></div>' + eventsHtml;
             } catch (e) {
-                moduleContent.innerHTML = '<div class="module-header"><h3>运维面板</h3></div><p style="color:#dc2626">加载失败：' + (e.message || e) + '</p>';
+                moduleContent.innerHTML = '<div class="module-header"><h3>运维面板</h3></div><p style="color:#dc2626">加载失败：' + escapeHtml(e.message || e) + '</p>';
             }
         };
         await tick();

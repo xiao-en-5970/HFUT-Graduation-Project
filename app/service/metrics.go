@@ -23,6 +23,18 @@ import (
 	"time"
 )
 
+// seriesWindowMinutes 每分钟时序保留的窗口（分钟）
+const seriesWindowMinutes = 60
+
+// minuteBucket 一分钟内的累计；切到下一分钟会新建。
+type minuteBucket struct {
+	Requests   int64 `json:"requests"`
+	Errors4xx  int64 `json:"errors_4xx"`
+	Errors5xx  int64 `json:"errors_5xx"`
+	BizErrors  int64 `json:"biz_errors"`
+	LatencySum int64 `json:"-"`
+}
+
 // MetricsService 进程级单例。
 type MetricsService struct {
 	mu        sync.RWMutex
@@ -36,6 +48,10 @@ type MetricsService struct {
 
 	// per-route 计数：method+" "+route -> *routeMetric
 	routes map[string]*routeMetric
+
+	// 时序：epoch minute -> bucket（保留 seriesWindowMinutes 分钟）
+	seriesMu sync.Mutex
+	series   map[int64]*minuteBucket
 
 	// QQ-bot 推送过来的最新一份指标快照
 	botSnapshot map[string]any
@@ -61,6 +77,7 @@ func Metrics() *MetricsService {
 		metricsInstance = &MetricsService{
 			startedAt: time.Now(),
 			routes:    make(map[string]*routeMetric),
+			series:    make(map[int64]*minuteBucket),
 		}
 	})
 	return metricsInstance
@@ -113,6 +130,33 @@ func (m *MetricsService) IncRequest(method, route string, status int, bizCode in
 	if bizCode != 0 && bizCode != 200 {
 		rm.bizErr.Add(1)
 	}
+
+	// 写入当前分钟的时序桶（懒清理 60 分钟前的旧桶）
+	now := time.Now().Truncate(time.Minute).Unix()
+	m.seriesMu.Lock()
+	b, ok := m.series[now]
+	if !ok {
+		b = &minuteBucket{}
+		m.series[now] = b
+		cutoff := now - int64(seriesWindowMinutes*60)
+		for k := range m.series {
+			if k < cutoff {
+				delete(m.series, k)
+			}
+		}
+	}
+	b.Requests++
+	b.LatencySum += latencyMs
+	switch {
+	case status >= 500:
+		b.Errors5xx++
+	case status >= 400:
+		b.Errors4xx++
+	}
+	if bizCode != 0 && bizCode != 200 {
+		b.BizErrors++
+	}
+	m.seriesMu.Unlock()
 }
 
 // Snapshot 拿一份当前指标快照，给运维面板展示。
@@ -151,6 +195,35 @@ func (m *MetricsService) Snapshot() map[string]any {
 		avgAll = float64(m.totalLatencyMs.Load()) / float64(total)
 	}
 
+	// 时序快照——按分钟升序导出最近 60 分钟
+	m.seriesMu.Lock()
+	keys := make([]int64, 0, len(m.series))
+	for k := range m.series {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	type seriesPoint struct {
+		Minute     int64   `json:"minute"`
+		Requests   int64   `json:"requests"`
+		Errors4xx  int64   `json:"errors_4xx"`
+		Errors5xx  int64   `json:"errors_5xx"`
+		BizErrors  int64   `json:"biz_errors"`
+		AvgLatency float64 `json:"avg_latency_ms"`
+	}
+	points := make([]seriesPoint, 0, len(keys))
+	for _, k := range keys {
+		b := m.series[k]
+		avg := 0.0
+		if b.Requests > 0 {
+			avg = float64(b.LatencySum) / float64(b.Requests)
+		}
+		points = append(points, seriesPoint{
+			Minute: k, Requests: b.Requests, Errors4xx: b.Errors4xx,
+			Errors5xx: b.Errors5xx, BizErrors: b.BizErrors, AvgLatency: avg,
+		})
+	}
+	m.seriesMu.Unlock()
+
 	out := map[string]any{
 		"started_at":       m.startedAt.Format(time.RFC3339),
 		"uptime_seconds":   int64(time.Since(m.startedAt).Seconds()),
@@ -160,6 +233,7 @@ func (m *MetricsService) Snapshot() map[string]any {
 		"total_biz_errors": m.totalBizErrors.Load(),
 		"avg_latency_ms":   avgAll,
 		"routes":           rows,
+		"series":           points,
 		"bot": map[string]any{
 			"updated_at": m.botUpdated.Format(time.RFC3339),
 			"data":       m.botSnapshot,

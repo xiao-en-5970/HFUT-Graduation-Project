@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"mime/multipart"
 	"strings"
@@ -39,65 +40,102 @@ func (s *userService) Register(ctx *gin.Context, username, password string) (uin
 
 }
 
-func (s *userService) Login(ctx *gin.Context, username, password string) (token string, err error) {
+// TokenPair 登录 / 刷新接口的统一返回结构。
+//
+// AccessToken 5 分钟有效；RefreshToken 30 天有效；ExpiresIn 是 access 剩余秒数（约 300）。
+type TokenPair struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+	TokenType    string `json:"token_type"`
+}
+
+func newTokenPair(userID uint, username string) (TokenPair, error) {
+	access, refresh, expiresIn, err := util.GenerateTokenPair(userID, username)
+	if err != nil {
+		return TokenPair{}, errors.New("生成 token 失败: " + err.Error())
+	}
+	return TokenPair{
+		AccessToken:  access,
+		RefreshToken: refresh,
+		ExpiresIn:    expiresIn,
+		TokenType:    "Bearer",
+	}, nil
+}
+
+func (s *userService) Login(ctx *gin.Context, username, password string) (TokenPair, error) {
 	if strings.EqualFold(username, constant.OrderOfficialUsername) {
-		return "", errors.New("用户不存在")
+		return TokenPair{}, errors.New("用户不存在")
 	}
 	user, err := dao.User().GetByUsername(ctx, username)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		logger.Error(ctx, "用户不存在", zap.Error(err))
-		return token, errors.New("用户不存在")
+		return TokenPair{}, errors.New("用户不存在")
 	}
 	if err != nil {
 		logger.Error(ctx, "用户登录失败", zap.Error(err))
-		return token, err
+		return TokenPair{}, err
 	}
-	// 验证密码
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
-	if err != nil {
-		return "", errors.New("密码错误")
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return TokenPair{}, errors.New("密码错误")
 	}
-
-	// 检查状态
 	if user.Status != constant.StatusValid {
-		return "", errors.New("账户已被禁用")
+		return TokenPair{}, errors.New("账户已被禁用")
 	}
-
-	// 生成 JWT token
-	token, err = util.GenerateToken(user.ID, user.Username)
-	if err != nil {
-		return "", errors.New("生成 token 失败: " + err.Error())
-	}
-
-	return token, nil
+	return newTokenPair(user.ID, user.Username)
 }
 
 // AdminLogin 管理员登录：验证账号密码且 role>=2 才返回 token
-func (s *userService) AdminLogin(ctx *gin.Context, username, password string) (token string, err error) {
+func (s *userService) AdminLogin(ctx *gin.Context, username, password string) (TokenPair, error) {
 	if strings.EqualFold(username, constant.OrderOfficialUsername) {
-		return "", errors.New("用户不存在")
+		return TokenPair{}, errors.New("用户不存在")
 	}
 	user, err := dao.User().GetByUsername(ctx, username)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", errors.New("用户不存在")
+		return TokenPair{}, errors.New("用户不存在")
 	}
 	if err != nil {
-		return "", err
+		return TokenPair{}, err
 	}
 	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return "", errors.New("密码错误")
+		return TokenPair{}, errors.New("密码错误")
 	}
 	if user.Status != constant.StatusValid {
-		return "", errors.New("账户已被禁用")
+		return TokenPair{}, errors.New("账户已被禁用")
 	}
 	if user.Role < constant.RoleAdmin {
-		return "", errors.New("无管理员权限")
+		return TokenPair{}, errors.New("无管理员权限")
 	}
-	token, err = util.GenerateToken(user.ID, user.Username)
+	return newTokenPair(user.ID, user.Username)
+}
+
+// RefreshToken 用 refresh token 换一对新的 access+refresh（rolling refresh）。
+//
+// 之所以连 refresh 也一并换：
+//
+//   - 让客户端在长时间内一直只持有最新一对，而不是 30 天内一直用同一个 refresh；
+//   - 想做强制下线时只要让某个用户在 30 天内不再被 refresh 调用即可（搭配未来可能加的
+//     refresh 黑名单 / 用户禁用码），渐进式过期不需要 token 立即作废表。
+//
+// 错误：
+//
+//   - util.ErrTokenExpired —— refresh 也过期了，前端要弹回登录页
+//   - util.ErrTokenWrongType —— 拿 access 当 refresh 用，按 invalid 处理
+//   - 其它解析错 —— 普通 invalid token
+func (s *userService) RefreshToken(refresh string) (TokenPair, error) {
+	claims, err := util.ParseRefreshToken(refresh)
 	if err != nil {
-		return "", errors.New("生成 token 失败: " + err.Error())
+		return TokenPair{}, err
 	}
-	return token, nil
+	// 兜底用户存在性 / 状态：refresh 期间用户被禁用要立即拒绝
+	user, err := dao.User().GetByID(context.Background(), claims.UserID)
+	if err != nil {
+		return TokenPair{}, errors.New("用户不存在")
+	}
+	if user.Status != constant.StatusValid {
+		return TokenPair{}, errors.New("账户已被禁用")
+	}
+	return newTokenPair(claims.UserID, claims.Username)
 }
 
 // GetProfile 获取指定用户的公开身份信息，仅限 status=1 的正常用户

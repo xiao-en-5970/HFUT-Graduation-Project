@@ -27,12 +27,21 @@ func AdminLogin(ctx *gin.Context) {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	token, err := service.User().AdminLogin(ctx, body.Username, body.Password)
+	pair, err := service.User().AdminLogin(ctx, body.Username, body.Password)
 	if err != nil {
 		reply.ReplyErrWithMessage(ctx, err.Error())
 		return
 	}
-	reply.ReplyOKWithMessageAndData(ctx, "登录成功", gin.H{"token": token})
+	// admin 前端是浏览器场景，refresh token 通过 HttpOnly + Secure cookie 下发，
+	// 不再放进 JSON 让 localStorage 拿到，最大化抵御 XSS。
+	setRefreshCookie(ctx, pair.RefreshToken)
+	// 兼容旧 admin 前端：data 同时带 token（旧字段，等价于 access_token）和新 access_token
+	reply.ReplyOKWithMessageAndData(ctx, "登录成功", gin.H{
+		"token":        pair.AccessToken,
+		"access_token": pair.AccessToken,
+		"expires_in":   pair.ExpiresIn,
+		"token_type":   pair.TokenType,
+	})
 }
 
 // AdminUserCreate 管理员：创建用户
@@ -507,11 +516,11 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 		return
 	}
 	var body struct {
-		Name       *string              `json:"name"`
-		LoginURL   *string              `json:"login_url"`
-		Code       *string              `json:"code"`
+		Name       *string               `json:"name"`
+		LoginURL   *string               `json:"login_url"`
+		Code       *string               `json:"code"`
 		FormFields []model.FormFieldItem `json:"form_fields"`
-		CaptchaURL *string              `json:"captcha_url"`
+		CaptchaURL *string               `json:"captcha_url"`
 		// eam_service_url、info_url 仅后端 info 流程用，不通过 API 暴露或接收，需在 DB 中配置
 	}
 	if err := ctx.BindJSON(&body); err != nil {

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -10,10 +11,22 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/util"
 )
 
-// JWTAuth JWT 认证中间件
+// AccessTokenExpiredCode 业务码：access token 过期，前端应以 refresh token 换发后重试。
+//
+// 中间件用 HTTP 401 + 这个 code 区分"token 过期"与"无 token / token 格式错"，让客户端
+// 拦截器只对 4011 触发自动刷新，避免把"未登录"也错刷一遍。
+const AccessTokenExpiredCode = 4011
+
+// JWTAuth JWT 认证中间件——只接受 access token。
+//
+// 错误分流（统一 HTTP 401）：
+//
+//   - code=401  缺 token / 格式错 / 签名不对 / 用 refresh token 来打业务接口
+//   - code=4011 access token 已过期 —— 前端应自动调 /user/refresh 拿新 token 后 retry
+//
+// refresh token 永远不能拿来打业务接口（util.ParseAccessToken 会因 typ=refresh 拒绝）。
 func JWTAuth() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		// 从请求头获取 token
 		authHeader := ctx.GetHeader("Authorization")
 		if authHeader == "" {
 			ctx.JSON(http.StatusUnauthorized, response.Response{
@@ -23,8 +36,6 @@ func JWTAuth() gin.HandlerFunc {
 			ctx.Abort()
 			return
 		}
-
-		// 检查 Bearer 前缀
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			ctx.JSON(http.StatusUnauthorized, response.Response{
@@ -34,12 +45,18 @@ func JWTAuth() gin.HandlerFunc {
 			ctx.Abort()
 			return
 		}
-
 		token := parts[1]
 
-		// 解析 token
-		claims, err := util.ParseToken(token)
+		claims, err := util.ParseAccessToken(token)
 		if err != nil {
+			if errors.Is(err, util.ErrTokenExpired) {
+				ctx.JSON(http.StatusUnauthorized, response.Response{
+					Code:    AccessTokenExpiredCode,
+					Message: "access token 已过期",
+				})
+				ctx.Abort()
+				return
+			}
 			ctx.JSON(http.StatusUnauthorized, response.Response{
 				Code:    401,
 				Message: "无效的 token: " + err.Error(),
@@ -48,10 +65,8 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
-		// 将用户信息存储到上下文中
 		ctx.Set("user_id", claims.UserID)
 		ctx.Set("username", claims.Username)
-
 		ctx.Next()
 	}
 }

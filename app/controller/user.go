@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -84,6 +85,25 @@ func UserSchoolLogin(ctx *gin.Context) {
 }
 
 // Login 用户登录
+//
+// 双 token 模型：
+//
+//	{
+//	  "access_token":  "...",   // 5 分钟（前端放 storage）
+//	  "refresh_token": "...",   // 30 天
+//	  "expires_in":     300,     // access 剩余秒数
+//	  "token_type":    "Bearer"
+//	}
+//
+// 同时通过 Set-Cookie 下发 refresh token：
+//
+//	HttpOnly + Secure + SameSite=Strict + Path=/api/v1/user/refresh + Max-Age=30d
+//
+// 浏览器（admin web）应当**只读 access_token**，让 refresh_token 完全留在 cookie 里——
+// JS 读不到，XSS 也读不到，最大化保护长期登录态。
+//
+// React Native 客户端没有原生 cookie，需要继续从 JSON 里取 refresh_token；推荐写到
+// iOS Keychain / Android EncryptedSharedPreferences，而不是 AsyncStorage 明文。
 func UserLogin(ctx *gin.Context) {
 	type Login struct {
 		Username string `json:"username"`
@@ -94,13 +114,101 @@ func UserLogin(ctx *gin.Context) {
 		reply.ReplyInvalidParams(ctx, err)
 		return
 	}
-	token, err := service.User().Login(ctx, user.Username, user.Password)
+	pair, err := service.User().Login(ctx, user.Username, user.Password)
 	if err != nil {
 		reply.ReplyInternalError(ctx, err)
 		return
 	}
-	reply.ReplyOKWithMessageAndData(ctx, "登录成功", token)
-	return
+	setRefreshCookie(ctx, pair.RefreshToken)
+	reply.ReplyOKWithMessageAndData(ctx, "登录成功", pair)
+}
+
+// UserRefreshToken POST /user/refresh
+//
+// 优先从 HttpOnly cookie 读 refresh token；没有 cookie 时再 fallback 到 JSON body
+// `{refresh_token}`——保证 React Native（无 cookie）也能用同一接口。
+//
+// 错误码：
+//
+//	200    刷新成功，返回 TokenPair；同时 Set-Cookie 写一对新的 refresh
+//	401    refresh 过期 / 无效 / 类型错（拿 access 来调本接口）
+//	500    其它内部错（DB 不可用等）
+func UserRefreshToken(ctx *gin.Context) {
+	refresh := readRefreshToken(ctx)
+	if refresh == "" {
+		ctx.AbortWithStatusJSON(401, gin.H{"code": 401, "message": "未提供 refresh token"})
+		return
+	}
+	pair, err := service.User().RefreshToken(refresh)
+	if err != nil {
+		// refresh 失败：同时清掉旧 cookie 防止后续仍带回来
+		clearRefreshCookie(ctx)
+		ctx.AbortWithStatusJSON(401, gin.H{"code": 401, "message": "refresh token 无效或已过期：" + err.Error()})
+		return
+	}
+	setRefreshCookie(ctx, pair.RefreshToken)
+	reply.ReplyOKWithMessageAndData(ctx, "刷新成功", pair)
+}
+
+// UserLogoutCookie POST /user/logout
+//
+// 公开接口（不需要 access token）。仅做一件事：让浏览器丢弃 HttpOnly refresh cookie。
+// admin web 的"退出登录"按钮调用本接口，避免本机仍残留有效 refresh，下次别人复用此机器
+// 仍能 refresh 出 access。
+//
+// 不引入 refresh 黑名单——若想强制让某个用户 30 天前所有 refresh 立即失效，应通过
+// rotate JWT_SECRET 或下线该用户（status=invalid）实现，本接口仅清浏览器侧凭证。
+func UserLogoutCookie(ctx *gin.Context) {
+	clearRefreshCookie(ctx)
+	reply.ReplyOK(ctx)
+}
+
+// readRefreshToken 从 cookie / JSON body 里取 refresh token；都没有返回 ""。
+//
+// 顺序很重要：cookie 优先——浏览器一旦把 refresh 放进 HttpOnly cookie，body 就拿不到，
+// 客户端代码也就**没必要**再传 refresh 到任何 JS 可见的地方。RN 客户端走 body 兜底。
+func readRefreshToken(ctx *gin.Context) string {
+	if v, err := ctx.Cookie(refreshCookieName); err == nil && v != "" {
+		return v
+	}
+	type Req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	var body Req
+	_ = ctx.ShouldBindJSON(&body)
+	return body.RefreshToken
+}
+
+// refreshCookieName / refreshCookiePath / refreshCookieMaxAge 集中常量。
+//
+// Path 限定到 /api/v1/user/refresh：浏览器仅在请求 refresh 接口时携带，
+// 业务接口不带，最小化 cookie 在网络上的曝光面。
+const (
+	refreshCookieName   = "refresh_token"
+	refreshCookiePath   = "/api/v1/user/refresh"
+	refreshCookieMaxAge = 30 * 24 * 60 * 60 // 30d，与 util.RefreshTokenTTL 对齐
+)
+
+// setRefreshCookie 把 refresh token 写进 HttpOnly + Secure + SameSite=Strict 的 cookie。
+//
+// 安全配置说明：
+//
+//   - HttpOnly：JS 读不到，XSS 偷不走
+//   - Secure：仅 HTTPS 下发送；线上 api.xiaoen.xyz 是 HTTPS
+//   - SameSite=Strict：第三方站点不会带这条 cookie，CSRF 缓解
+//   - Path=/api/v1/user/refresh：只在调 refresh 接口时被自动带
+//
+// 本地开发若没 HTTPS：浏览器收到 Secure cookie 会**直接丢弃**，这种情况下 refresh
+// 走不到，前端可以临时降级为传 body（旧路径仍然支持）。
+func setRefreshCookie(ctx *gin.Context, refresh string) {
+	ctx.SetSameSite(http.SameSiteStrictMode)
+	ctx.SetCookie(refreshCookieName, refresh, refreshCookieMaxAge, refreshCookiePath, "", true /*Secure*/, true /*HttpOnly*/)
+}
+
+// clearRefreshCookie 让浏览器立刻丢弃 refresh cookie（设 maxAge=-1）。
+func clearRefreshCookie(ctx *gin.Context) {
+	ctx.SetSameSite(http.SameSiteStrictMode)
+	ctx.SetCookie(refreshCookieName, "", -1, refreshCookiePath, "", true, true)
 }
 
 func UserInfo(ctx *gin.Context) {

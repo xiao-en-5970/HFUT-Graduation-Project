@@ -43,6 +43,11 @@ func PublicRouter(api *gin.RouterGroup) {
 	// 管理员登录（公开，无需 JWT）
 	api.POST("/admin/login", controller.AdminLogin)
 
+	// 用户登录态刷新——双 token 模型用，本接口必须放在 JWTAuth 之前（不需要 access token）。
+	// /user/logout 同样不需要 access token：它只负责让浏览器丢弃 HttpOnly refresh cookie。
+	api.POST("/user/refresh", controller.UserRefreshToken)
+	api.POST("/user/logout", controller.UserLogoutCookie)
+
 	userGroup := api.Group("/user")
 	{
 		userGroup.POST("/login", controller.UserLogin)
