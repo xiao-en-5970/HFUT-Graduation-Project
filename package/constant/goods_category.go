@@ -8,13 +8,18 @@ const (
 	GoodsCategoryHelp   int16 = 2 // 有偿求助：发布者是买家，付款方；接单者完成任务获取报酬
 )
 
-// GoodsCategoryLabel 供 API 展示
+// GoodsCategoryLabel 供 API 展示。
+//
+// 产品形态：
+//
+//	cat=1 → "二手"（下架价格 / 库存等卖家流程）
+//	cat=2 → "求物品"（带价 → 前端额外挂"有偿"tag；无价不展示价格）
 func GoodsCategoryLabel(c int16) string {
 	switch c {
 	case GoodsCategoryNormal:
-		return "二手买卖"
+		return "二手"
 	case GoodsCategoryHelp:
-		return "有偿求助"
+		return "求物品"
 	default:
 		return "未知"
 	}

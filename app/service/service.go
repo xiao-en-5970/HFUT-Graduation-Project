@@ -1,7 +1,9 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,6 +14,52 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/logger"
 	"go.uber.org/zap"
 )
+
+// metricsMiddleware 是 app/middleware/metrics.go 的 inline 等价物，
+// 直接放在 service 包以避免 service ↔ middleware 形成循环 import：
+// middleware 已经 import service.Metrics()。
+func metricsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		bw := &mwBodyCapture{ResponseWriter: c.Writer, buf: bytes.NewBuffer(nil), max: 1024}
+		c.Writer = bw
+		c.Next()
+		latency := time.Since(start).Milliseconds()
+		status := c.Writer.Status()
+		biz := 0
+		if status == 200 && bw.buf.Len() > 0 {
+			var head struct {
+				Code int `json:"code"`
+			}
+			if err := json.Unmarshal(bw.buf.Bytes(), &head); err == nil {
+				biz = head.Code
+			}
+		}
+		Metrics().IncRequest(c.Request.Method, c.FullPath(), status, biz, latency)
+	}
+}
+
+type mwBodyCapture struct {
+	gin.ResponseWriter
+	buf *bytes.Buffer
+	max int
+}
+
+func (b *mwBodyCapture) Write(p []byte) (int, error) {
+	if b.buf.Len() < b.max {
+		room := b.max - b.buf.Len()
+		if room >= len(p) {
+			b.buf.Write(p)
+		} else {
+			b.buf.Write(p[:room])
+		}
+	}
+	return b.ResponseWriter.Write(p)
+}
+
+func (b *mwBodyCapture) WriteString(s string) (int, error) {
+	return b.Write([]byte(s))
+}
 
 var Engine *gin.Engine
 
@@ -26,6 +74,8 @@ func Init() error {
 	// Add default middleware
 	Engine.Use(gin.Logger())
 	Engine.Use(gin.Recovery())
+	// 运维指标采集中间件——计入 service.Metrics() 单例，供 admin 面板查询
+	Engine.Use(metricsMiddleware())
 
 	// Health check endpoint
 	Engine.GET("/health", func(c *gin.Context) {

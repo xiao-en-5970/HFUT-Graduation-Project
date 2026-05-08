@@ -315,7 +315,7 @@
   const moduleContent = document.getElementById('module-content');
   logoutBtn.addEventListener('click', redirectToLogin);
 
-    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'user-locations', 'map-picker', 'trade-demo', 'schools', 'bind-school'];
+    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'user-locations', 'map-picker', 'trade-demo', 'schools', 'bind-school', 'metrics'];
   function getRoute() {
     const hash = (location.hash || '#/users').slice(2) || 'users';
     return routes.includes(hash) ? hash : 'users';
@@ -336,7 +336,94 @@
     else if (r === 'trade-demo') renderTradeDemo();
     else if (r === 'schools') renderSchools();
     else if (r === 'bind-school') renderBindSchool();
+    else if (r === 'metrics') renderMetrics();
   }
+
+    // ---------- 运维面板（接口指标 + QQ-bot 指标） ----------
+    let metricsTimer = null;
+
+    function destroyMetricsTimer() {
+        if (metricsTimer) {
+            clearInterval(metricsTimer);
+            metricsTimer = null;
+        }
+    }
+
+    function fmtUptime(sec) {
+        sec = Number(sec) || 0;
+        const d = Math.floor(sec / 86400);
+        const h = Math.floor((sec % 86400) / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = sec % 60;
+        return (d ? d + 'd ' : '') + (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    async function renderMetrics() {
+        destroyMetricsTimer();
+        const tick = async () => {
+            try {
+                const data = (await api('/admin/metrics')).data || {};
+                const routesRows = data.routes || [];
+                const bot = (data.bot || {}).data || {};
+                const botErr = (data.bot || {}).error || '';
+                const botUpdated = (data.bot || {}).updated_at || '';
+                const dispatch = bot.dispatch || {};
+                const dispatchRows = Object.keys(dispatch).sort().map(k => {
+                    const v = dispatch[k];
+                    const [type, outcome] = k.split(':');
+                    return `<tr><td>${type || k}</td><td>${outcome || '-'}</td><td>${v}</td></tr>`;
+                }).join('');
+                const overview = `
+          <div class="module-header"><h3>运维面板</h3>
+            <span class="text-muted" style="margin-left:12px">每 5 秒自动刷新</span>
+          </div>
+          <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+            <div class="card"><div class="text-muted">后端启动</div><div style="font-size:18px">${(data.started_at || '').slice(0, 19)}</div></div>
+            <div class="card"><div class="text-muted">后端运行时长</div><div style="font-size:20px;font-weight:600">${fmtUptime(data.uptime_seconds)}</div></div>
+            <div class="card"><div class="text-muted">总请求数</div><div style="font-size:22px;font-weight:700">${data.total_requests || 0}</div></div>
+            <div class="card"><div class="text-muted">4xx 错误</div><div style="font-size:22px;font-weight:700;color:#d97706">${data.total_errors_4xx || 0}</div></div>
+            <div class="card"><div class="text-muted">5xx 错误</div><div style="font-size:22px;font-weight:700;color:#dc2626">${data.total_errors_5xx || 0}</div></div>
+            <div class="card"><div class="text-muted">业务异常码</div><div style="font-size:22px;font-weight:700;color:#dc2626">${data.total_biz_errors || 0}</div></div>
+            <div class="card"><div class="text-muted">平均响应耗时</div><div style="font-size:20px;font-weight:600">${(Number(data.avg_latency_ms) || 0).toFixed(1)} ms</div></div>
+          </div>`;
+                const routesHtml = `
+          <h4>HTTP 路由计数（按访问量排序）</h4>
+          <div class="table-wrap"><table>
+            <thead><tr><th>方法</th><th>路由</th><th>请求数</th><th>4xx</th><th>5xx</th><th>业务异常</th><th>平均耗时(ms)</th></tr></thead>
+            <tbody>${routesRows.map(r => `<tr><td>${r.method}</td><td>${r.route}</td><td>${r.count}</td><td>${r.errors_4xx}</td><td>${r.errors_5xx}</td><td>${r.biz_errors}</td><td>${(r.avg_latency_ms || 0).toFixed(1)}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>'}</tbody>
+          </table></div>`;
+                const botHtml = botErr ? `<h4>QQ-bot 指标</h4><div class="card" style="color:#dc2626">${botErr}</div>` : `
+          <h4>QQ-bot 指标 <span class="text-muted" style="font-weight:normal">（${(botUpdated || '').slice(0, 19)}）</span></h4>
+          <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+            <div class="card"><div class="text-muted">Bot 运行时长</div><div style="font-size:18px;font-weight:600">${fmtUptime(bot.uptime_seconds)}</div></div>
+            <div class="card"><div class="text-muted">群消息</div><div style="font-size:22px;font-weight:700">${bot.ws_group_msgs || 0}</div></div>
+            <div class="card"><div class="text-muted">私聊消息</div><div style="font-size:22px;font-weight:700">${bot.ws_private_msgs || 0}</div></div>
+            <div class="card"><div class="text-muted">识别调用</div><div style="font-size:22px;font-weight:700">${bot.recognize_called || 0}</div></div>
+            <div class="card"><div class="text-muted">识别成功</div><div style="font-size:22px;font-weight:700;color:#16a34a">${bot.recognize_success || 0}</div></div>
+            <div class="card"><div class="text-muted">识别失败</div><div style="font-size:22px;font-weight:700;color:#dc2626">${bot.recognize_fail || 0}</div></div>
+            <div class="card"><div class="text-muted">配额冷却</div><div style="font-size:22px;font-weight:700;color:#d97706">${bot.quota_cooling || 0}</div></div>
+            <div class="card"><div class="text-muted">限流命中</div><div style="font-size:22px;font-weight:700;color:#d97706">${bot.rate_limit_hits || 0}</div></div>
+            <div class="card"><div class="text-muted">群接入申请</div><div style="font-size:22px;font-weight:700">${bot.private_access_requests || 0}</div></div>
+            <div class="card"><div class="text-muted">运维通知</div><div style="font-size:22px;font-weight:700">${bot.ops_notifications || 0}</div></div>
+          </div>
+          <h5>分发结果（按 action × outcome）</h5>
+          <div class="table-wrap"><table>
+            <thead><tr><th>动作</th><th>结果</th><th>计数</th></tr></thead>
+            <tbody>${dispatchRows || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>'}</tbody>
+          </table></div>`;
+                moduleContent.innerHTML = overview + routesHtml + '<div style="height:16px"></div>' + botHtml;
+            } catch (e) {
+                moduleContent.innerHTML = '<div class="module-header"><h3>运维面板</h3></div><p style="color:#dc2626">加载失败：' + (e.message || e) + '</p>';
+            }
+        };
+        await tick();
+        metricsTimer = setInterval(tick, 5000);
+    }
+
+    // 切到其它路由时清掉定时器
+    window.addEventListener('hashchange', () => {
+        if (getRoute() !== 'metrics') destroyMetricsTimer();
+    });
   window.addEventListener('hashchange', route);
 
   function renderTable(caption, columns, rows, page, total, pageSize, onPageChange, extraHeader) {

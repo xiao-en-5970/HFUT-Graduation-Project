@@ -258,6 +258,9 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.GET("/user-locations", controller.AdminUserLocationList)
 		adminGroup.POST("/user-locations", controller.AdminUserLocationCreate)
 		adminGroup.DELETE("/user-locations/:id", controller.AdminUserLocationDelete)
+
+		// 运维指标面板：HTTP 路由计数 + QQ-bot 内部指标合并
+		adminGroup.GET("/metrics", controller.AdminMetrics)
 	}
 }
 

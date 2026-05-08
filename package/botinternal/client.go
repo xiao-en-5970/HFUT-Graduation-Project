@@ -195,6 +195,17 @@ func (c *Client) SendGroup(ctx context.Context, groupID, qq int64, text string) 
 	return c.doJSON(ctx, "/internal/qq/send-group", body, nil)
 }
 
+// FetchMetrics 拉取 bot 进程级运行指标快照（消息接收数 / 识别 / 上架 / 限流命中等）。
+//
+// 上层 admin 面板用：失败时返回错误，调用方按"bot 暂时不可达"展示，不影响后端自身指标。
+func (c *Client) FetchMetrics(ctx context.Context) (map[string]interface{}, error) {
+	out := make(map[string]interface{})
+	if err := c.doJSON(ctx, "/internal/metrics", map[string]interface{}{}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // doJSON 发 POST + JSON 请求，按信封解响应；out=nil 时只校验信封 code。
 func (c *Client) doJSON(ctx context.Context, path string, reqBody interface{}, out interface{}) error {
 	raw, err := json.Marshal(reqBody)
