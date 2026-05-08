@@ -139,19 +139,76 @@ var (
 
 const defaultEnvPath = "/.env"
 
-// LoadConfig 从宿主机固定路径 /.env 或环境变量加载配置
-// 服务器：/.env（宿主机路径）；容器：由 docker --env-file 注入；本地：run.sh 手动 export
+// 配置加载语义说明
+// ──────────────────────────────────────────────────────────────────────────
+//
+// 启动路径（LoadConfig / LoadConfigFrom）：
+//
+//   走 godotenv.Load(path)。语义是"对每个 .env 中的 key，仅当进程 env 里**还没有**
+//   该 key 时才 setenv"。即 docker `--env-file` / shell `export` 注入的值优先级
+//   高于 .env 文件内容；docker 配置出错时 .env 提供合理 default，不会被静默覆盖。
+//
+// 重载路径（ReloadConfig / ReloadConfigFrom）：
+//
+//   走 godotenv.Overload(path)。语义是"无条件用 .env 文件里的值覆盖进程 env"。
+//   这是为了让运维"改 .env + kill -HUP <pid>"真正生效——否则 .env 里的 key
+//   在启动那一次 Load 时已经全部进入进程 env，再次 Load 永远跳过，重载彻底无效。
+//
+// 哪些 key 改了 reload 后会生效（hot-swappable）：
+//
+//   - JWT_SECRET / BOT_SERVICE_JWT_SECRET                 每次签/验直接读全局
+//   - DEFAULT_SCHOOL_ID                                    每次注册直接读全局
+//   - SEARCH_* / RECO_*                                    每次推荐计算读全局
+//   - OSS_DRIVER / QINIU_* / OSS_HOST                      每次上传 / URL 解析读全局
+//   - MAP_TILES_URL                                        每次瓦片代理读全局
+//   - APP_RELEASE_INFO_URL                                 每次 GET /app/release-info-url 读全局
+//   - LOG_LEVEL / LOG_ENCODING / LOG_STACKTRACE_LEVEL      仅启动期影响 logger，重启才生效
+//
+// 哪些 key 改了即便 reload 也**不生效**（必须重启进程）：
+//
+//   - DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME / DB_SSLMODE / DB_TIMEZONE
+//     连接池启动时已建立；不会断开重连
+//   - REDIS_HOST / REDIS_PORT / REDIS_PASSWORD / REDIS_DB                 同上
+//   - SERVER_HOST / SERVER_PORT / SERVER_MODE                              TCP listener 已绑定
+//   - BOT_INTERNAL_API_URL / BOT_INTERNAL_API_SECRET                       botinternal.Init 仅启动调用一次
+//
+// 简单原则：跟"已建立的连接 / 已开始的监听 / 仅启动期初始化的依赖"相关的 key 都需重启；
+// 其它每次业务读取的 key 都能 hot-swap。
+
+// LoadConfig 从宿主机固定路径 /.env 或环境变量加载配置（启动用，不覆盖进程 env）。
+// 服务器：/.env（宿主机路径）；容器：由 docker --env-file 注入；本地：run.sh 手动 export。
 func LoadConfig() error {
 	return LoadConfigFrom(defaultEnvPath)
 }
 
-// LoadConfigFrom 从指定路径加载配置
+// ReloadConfig 重载配置（运维用，**覆盖**进程 env）。让"改 .env + SIGHUP"真正生效。
+//
+// 注意：成功只意味着内存里的全局 config var 被更新了；对应的连接池 / 监听器是否
+// 也跟着变化取决于具体 key——见上方 hot-swappable 列表。
+func ReloadConfig() error {
+	return ReloadConfigFrom(defaultEnvPath)
+}
+
+// LoadConfigFrom 从指定路径加载配置——启动路径，**不覆盖**进程 env。
 func LoadConfigFrom(path string) error {
+	return loadConfigInternal(path, false)
+}
+
+// ReloadConfigFrom 从指定路径重载配置——**覆盖**进程 env，让 .env 改动立即生效。
+func ReloadConfigFrom(path string) error {
+	return loadConfigInternal(path, true)
+}
+
+func loadConfigInternal(path string, overload bool) error {
 	if path == "" {
 		path = defaultEnvPath
 	}
-	if err := godotenv.Load(path); err == nil {
-		log.Printf("Loaded config from %s", path)
+	if overload {
+		if err := godotenv.Overload(path); err == nil {
+			log.Printf("Reloaded config from %s (overload, .env wins over existing env)", path)
+		}
+	} else if err := godotenv.Load(path); err == nil {
+		log.Printf("Loaded config from %s (existing env wins over .env)", path)
 	}
 
 	ServerHost = getEnv("SERVER_HOST", "0.0.0.0")
@@ -315,10 +372,17 @@ func WatchAndReload(envPath string) {
 				return
 			}
 			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
-				if err := LoadConfigFrom(absPath); err != nil {
+				if err := ReloadConfigFrom(absPath); err != nil {
 					log.Printf("config watch: reload failed: %v", err)
 				} else {
-					log.Printf("config watch: reloaded from %s", absPath)
+					log.Printf("config watch: reloaded from %s (overload mode)", absPath)
+				}
+			}
+			// vim 等编辑器 swap+rename 后老 inode 被解除监听，需重 Add 跟上新文件
+			if event.Op&(fsnotify.Remove|fsnotify.Rename) != 0 {
+				_ = watcher.Remove(absPath)
+				if err := watcher.Add(absPath); err != nil {
+					log.Printf("config watch: re-add 失败 (vim swap?): %v", err)
 				}
 			}
 		case err, ok := <-watcher.Errors:
@@ -343,12 +407,12 @@ func SetupReloadOnSIGHUP(envPath string) {
 	signal.Notify(sigChan, syscall.SIGHUP)
 	go func() {
 		for range sigChan {
-			if err := LoadConfigFrom(path); err != nil {
+			if err := ReloadConfigFrom(path); err != nil {
 				log.Printf("config reload (SIGHUP): %v", err)
 			} else {
-				log.Printf("config reloaded on SIGHUP")
+				log.Printf("config reloaded on SIGHUP from %s (overload mode; hot-swappable keys live, DB/Redis/listener need restart)", path)
 			}
 		}
 	}()
-	log.Printf("config: SIGHUP handler registered (kill -HUP <pid> to reload)")
+	log.Printf("config: SIGHUP handler registered (kill -HUP %d to reload .env; hot-swap只对部分 key 生效，DB/Redis/Server 端口必须重启)", os.Getpid())
 }
