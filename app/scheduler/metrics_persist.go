@@ -174,13 +174,27 @@ func pullBotMetricsLocked(parent context.Context) ([]dao.MetricRow, []dao.BotEve
 	return rows, events
 }
 
+// botMetricNames 是 bot snapshot["series"] 项里**全部**会落库的字段名。
+//
+// 必须跟 QQ-bot/utils/metrics/metrics.go 中 seriesPoint 的 json tag 严格对齐——
+// 改名 = 历史数据查不出。新增字段：在 bot 那边 minuteBucket / seriesPoint 加完
+// 之后，把对应 json tag 加到本切片就能立刻进 DB。
+//
+// metric 落库后即可在面板按时间窗 SUM 出"持久化累计值"——bot 进程重启不归零。
+var botMetricNames = []string{
+	// 流入侧
+	"ws_msgs", "ws_group_msgs", "ws_private_msgs",
+	// Kimi 识别
+	"recognize_called", "recognize_success", "recognize_fail", "quota_cooling",
+	// 分发结果
+	"dispatch_success", "dispatch_fail", "dispatch_other",
+	// 运营辅助
+	"rate_limit", "private_access", "ops_notify",
+}
+
 // botSeriesToRows 把 bot snapshot["series"] 转成 metric_minute 行。
 //
-// bot 那边 series item 字段（参 utils/metrics/metrics.go.seriesPoint）：
-//
-//	minute, ws_msgs, recognize_called, recognize_success, dispatch_success, dispatch_fail
-//
-// 我们映射到 metric_minute（source='bot'），metric 名跟字段同名以保持一致。
+// metric 名直接复用 bot 那边的 json tag（见 botMetricNames），source 全部为 'bot'。
 func botSeriesToRows(snap map[string]any) []dao.MetricRow {
 	if snap == nil {
 		return nil
@@ -189,7 +203,7 @@ func botSeriesToRows(snap map[string]any) []dao.MetricRow {
 	if !ok {
 		return nil
 	}
-	out := make([]dao.MetricRow, 0, len(raw)*5)
+	out := make([]dao.MetricRow, 0, len(raw)*len(botMetricNames))
 	for _, it := range raw {
 		m, ok := it.(map[string]any)
 		if !ok {
@@ -199,10 +213,7 @@ func botSeriesToRows(snap map[string]any) []dao.MetricRow {
 		if ts <= 0 {
 			continue
 		}
-		for _, metric := range []string{
-			"ws_msgs", "recognize_called", "recognize_success",
-			"dispatch_success", "dispatch_fail",
-		} {
+		for _, metric := range botMetricNames {
 			v := toInt64(m[metric])
 			out = append(out, dao.MetricRow{
 				MinuteTS: ts,

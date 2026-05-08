@@ -576,6 +576,14 @@
         return (series || []).map(p => ({x: p.t, y: p.v}));
     }
 
+    /** 一条 timeseries 在选定时间窗内的 SUM——给"累计 cards"用，跟时间窗联动 */
+    function sumOf(series) {
+        if (!series) return 0;
+        let s = 0;
+        for (const p of series) s += (p.v || 0);
+        return s;
+    }
+
     async function renderMetrics() {
         destroyMetricsTimer();
         let currentRangeId = getMetricsRangeId();
@@ -628,6 +636,12 @@
                         {name: '识别成功', color: '#a16207', points: pointsOf(sIdx['bot:recognize_success'])},
                         {name: '派发成功', color: '#7c3aed', points: pointsOf(sIdx['bot:dispatch_success'])}],
                     chartOpts);
+                const botExceptionLine = lineChart(`Bot 异常 / 限流（${range.label}）`,
+                    [{name: '识别失败', color: '#dc2626', points: pointsOf(sIdx['bot:recognize_fail'])},
+                        {name: '配额冷却', color: '#d97706', points: pointsOf(sIdx['bot:quota_cooling'])},
+                        {name: '限流命中', color: '#f59e0b', points: pointsOf(sIdx['bot:rate_limit'])},
+                        {name: '派发失败', color: '#7f1d1d', points: pointsOf(sIdx['bot:dispatch_fail'])}],
+                    chartOpts);
 
                 // 工具栏：时间范围 chip + 自动刷新 + 手动刷新
                 const rangeChips = METRICS_RANGES.map(r => {
@@ -663,6 +677,7 @@
             ${reqLine}
             ${latLine}
             ${botLine}
+            ${botExceptionLine}
           </div>`;
                 const routesHtml = `
           <h4>HTTP 路由累计计数（按访问量排序）<span class="text-muted" style="font-weight:normal;margin-left:8px">来自实时进程内存，不随时间窗口变化</span></h4>
@@ -695,21 +710,34 @@
             <thead><tr><th>时间</th><th>群</th><th>用户</th><th>动作</th><th>结果</th><th>标题</th><th>价格</th><th>置信度</th><th>模型 reason</th><th>错误</th></tr></thead>
             <tbody>${eventRows || '<tr><td colspan="10" style="text-align:center;color:var(--text-muted)">该时间窗口内暂无事件</td></tr>'}</tbody>
           </table></div>`;
+                // bot 卡片数值改为"时间窗内 SUM"——从 timeseries 数据聚合，跟时间 chip 联动。
+                // 这是真正的"持久化累计"：bot 进程重启不归零，因为数据在 metric_minute。
+                // 进程内累计 (bot.* 字段) 作为副标题对照展示——若 bot 当前在跑，能看到"自启动累计"。
+                const botCard = (label, color, metric, processVal) => {
+                    const sum = sumOf(sIdx['bot:' + metric]);
+                    const procLine = (processVal != null && processVal !== '')
+                        ? `<div class="text-muted" style="font-size:11px;margin-top:2px">本进程累计 ${processVal}</div>` : '';
+                    return `<div class="card">
+            <div class="text-muted">${escapeHtml(label)}</div>
+            <div style="font-size:22px;font-weight:700${color ? ';color:' + color : ''}">${sum}</div>
+            ${procLine}
+          </div>`;
+                };
                 const botHtml = botErr ? `<h4>QQ-bot 指标</h4><div class="card" style="color:#dc2626">${escapeHtml(botErr)}</div>` : `
-          <h4>QQ-bot 累计指标 <span class="text-muted" style="font-weight:normal">（${(botUpdated || '').slice(0, 19)}）</span></h4>
+          <h4>QQ-bot 累计指标 <span class="text-muted" style="font-weight:normal">（${range.label}内 SUM；进程当前快照 ${(botUpdated || '').slice(0, 19)}）</span></h4>
           <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
             <div class="card"><div class="text-muted">Bot 运行时长</div><div style="font-size:18px;font-weight:600">${fmtUptime(bot.uptime_seconds)}</div></div>
-            <div class="card"><div class="text-muted">群消息</div><div style="font-size:22px;font-weight:700">${bot.ws_group_msgs || 0}</div></div>
-            <div class="card"><div class="text-muted">私聊消息</div><div style="font-size:22px;font-weight:700">${bot.ws_private_msgs || 0}</div></div>
-            <div class="card"><div class="text-muted">识别调用</div><div style="font-size:22px;font-weight:700">${bot.recognize_called || 0}</div></div>
-            <div class="card"><div class="text-muted">识别成功</div><div style="font-size:22px;font-weight:700;color:#16a34a">${bot.recognize_success || 0}</div></div>
-            <div class="card"><div class="text-muted">识别失败</div><div style="font-size:22px;font-weight:700;color:#dc2626">${bot.recognize_fail || 0}</div></div>
-            <div class="card"><div class="text-muted">配额冷却</div><div style="font-size:22px;font-weight:700;color:#d97706">${bot.quota_cooling || 0}</div></div>
-            <div class="card"><div class="text-muted">限流命中</div><div style="font-size:22px;font-weight:700;color:#d97706">${bot.rate_limit_hits || 0}</div></div>
-            <div class="card"><div class="text-muted">群接入申请</div><div style="font-size:22px;font-weight:700">${bot.private_access_requests || 0}</div></div>
-            <div class="card"><div class="text-muted">运维通知</div><div style="font-size:22px;font-weight:700">${bot.ops_notifications || 0}</div></div>
+            ${botCard('群消息', '', 'ws_group_msgs', bot.ws_group_msgs)}
+            ${botCard('私聊消息', '', 'ws_private_msgs', bot.ws_private_msgs)}
+            ${botCard('识别调用', '', 'recognize_called', bot.recognize_called)}
+            ${botCard('识别成功', '#16a34a', 'recognize_success', bot.recognize_success)}
+            ${botCard('识别失败', '#dc2626', 'recognize_fail', bot.recognize_fail)}
+            ${botCard('配额冷却', '#d97706', 'quota_cooling', bot.quota_cooling)}
+            ${botCard('限流命中', '#d97706', 'rate_limit', bot.rate_limit_hits)}
+            ${botCard('群接入申请', '', 'private_access', bot.private_access_requests)}
+            ${botCard('运维通知', '', 'ops_notify', bot.ops_notifications)}
           </div>
-          <h5>分发结果（按 action × outcome，累计）</h5>
+          <h5>分发结果（按 action × outcome，本进程累计；持久化按 dispatch_success/fail/other 走时序）</h5>
           <div class="table-wrap"><table>
             <thead><tr><th>动作</th><th>结果</th><th>计数</th></tr></thead>
             <tbody>${dispatchRows || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">暂无数据</td></tr>'}</tbody>
