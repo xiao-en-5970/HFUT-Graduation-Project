@@ -90,7 +90,7 @@ var (
 	// hfut-front/HFUTUnion/src/api/appUpdate.ts）。
 	//
 	// 本字段独立于 QiniuDomain / OSSHost——允许把 latest.json 放到任何公开匿名可访问
-	// 的位置（七牛、Github Release、CDN、自建静态站等都行），换地方时改环境变量重启即可，
+	// 的位置（七牛、GitHub Release、CDN、自建静态站等都行），换地方时改环境变量重启即可，
 	// 不需要重新发版前端。
 	//
 	// 默认 https://oss.xiaoen.xyz/app-release/android/latest.json；OSS 域名跟图片同源。

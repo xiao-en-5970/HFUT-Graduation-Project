@@ -112,7 +112,18 @@ jobs:
 
           docker stop apiserver 2>/dev/null || true
           docker rm apiserver 2>/dev/null || true
-          docker run -d --name apiserver --restart unless-stopped -p 8081:8081 -v /var/oss:/oss --env-file /tmp/.env.docker "apiserver:${TAG}"
+          # 双重 env 注入：
+          #   --env-file /tmp/.env.docker：容器启动时 docker daemon 把 KEY=VAL 写入进程 environ
+          #     （docker daemon 这是一次性快照，之后改宿主 /.env 不会影响已跑容器进程）
+          #   -v /.env:/.env:ro：把宿主 .env 挂进容器同名路径
+          #     → 容器内 hfut 进程的 godotenv 能 Overload 这个文件，配合 SIGHUP 实现热更新
+          # 两条机制并存：env-file 提供启动默认值；volume 让 SIGHUP/fsnotify 真能读到新内容
+          docker run -d --name apiserver --restart unless-stopped \
+            -p 8081:8081 \
+            -v /var/oss:/oss \
+            -v /.env:/.env:ro \
+            --env-file /tmp/.env.docker \
+            "apiserver:${TAG}"
           sleep 3
           if ! docker ps --filter name=apiserver --filter status=running -q | grep -q .; then
             echo '::error::容器启动失败'
