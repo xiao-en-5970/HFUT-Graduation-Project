@@ -90,6 +90,12 @@ func ToFullURL(path string) string {
 		if config.QiniuDomain != "" && strings.HasPrefix(path, config.QiniuDomain) {
 			return appendQiniuImageView2(path)
 		}
+		// 外部第三方头像 CDN（如 QQ 头像 q.qlogo.cn / qlogo.cn）→ 原样返回。
+		// 这些 URL 自带 query 参数（spec=640 等），加 .small 后缀会破坏；
+		// CDN 侧也不需要我们替它做缩图。
+		if isExternalAvatarCDN(path) {
+			return path
+		}
 		// 老的本地完整 URL（如带 OSSHost 前缀的）→ 沿用 .small 后缀
 		return urlAppendSmall(path)
 	}
@@ -98,6 +104,21 @@ func ToFullURL(path string) string {
 		return strings.TrimSuffix(config.OSSHost, "/") + "/api/v1/oss/" + strings.TrimPrefix(p, "/")
 	}
 	return "/api/v1/oss/" + strings.TrimPrefix(p, "/")
+}
+
+// isExternalAvatarCDN 判断给定的完整 URL 是否来自我们信任的外部头像 CDN——
+// 用作 ToFullURL 的 short-circuit：这些域名我们不应该再加缩略图后缀（自带 query / CDN 自己处理）。
+//
+// 目前只白名单了 QQ 头像 CDN（q.qlogo.cn / q1.qlogo.cn / q2.qlogo.cn / thirdqq.qlogo.cn）。
+// 后续如果接入微信 / 微博 / google 头像，可以追加到这里。
+func isExternalAvatarCDN(rawURL string) bool {
+	low := strings.ToLower(rawURL)
+	for _, host := range []string{"q.qlogo.cn", "q1.qlogo.cn", "q2.qlogo.cn", "q3.qlogo.cn", "q4.qlogo.cn", "thirdqq.qlogo.cn", "qlogo.cn"} {
+		if strings.HasPrefix(low, "http://"+host+"/") || strings.HasPrefix(low, "https://"+host+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // appendQiniuImageView2 给七牛 URL 加缩略图处理参数，等价于 .small 在七牛侧的实现。

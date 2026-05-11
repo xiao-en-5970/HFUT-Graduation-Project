@@ -33,13 +33,25 @@ type User struct {
 	// "孤儿旗下账号的特殊行为"段。普通账号永远 NULL。
 	CreatedInGroupID *int64 `gorm:"column:created_in_group_id" json:"created_in_group_id,omitempty"`
 
-	BindQQ      string    `gorm:"column:bind_qq;type:varchar(128)" json:"bind_qq"`
-	BindWX      string    `gorm:"column:bind_wx;type:varchar(128)" json:"bind_wx"`
-	BindPhone   string    `gorm:"column:bind_phone;type:varchar(20)" json:"bind_phone"`
-	Status      int16     `gorm:"type:smallint;default:1" json:"status"` // 1:正常 2:禁用
-	Role        int16     `gorm:"type:smallint;default:1" json:"role"`   // 1:普通用户 2:管理员 3:超级管理员 4:匿名用户
-	Avatar      string    `gorm:"type:varchar(255)" json:"avatar"`       // 用户头像
-	Background  string    `gorm:"type:varchar(255)" json:"background"`   // 用户背景
+	BindQQ     string `gorm:"column:bind_qq;type:varchar(128)" json:"bind_qq"`
+	BindWX     string `gorm:"column:bind_wx;type:varchar(128)" json:"bind_wx"`
+	BindPhone  string `gorm:"column:bind_phone;type:varchar(20)" json:"bind_phone"`
+	Status     int16  `gorm:"type:smallint;default:1" json:"status"` // 1:正常 2:禁用
+	Role       int16  `gorm:"type:smallint;default:1" json:"role"`   // 1:普通用户 2:管理员 3:超级管理员 4:匿名用户
+	Avatar     string `gorm:"type:varchar(255)" json:"avatar"`       // 用户上传的头像（覆盖 QQAvatarURL）
+	Background string `gorm:"type:varchar(255)" json:"background"`   // 用户背景
+
+	// 展示用 nickname/bio + QQ 头像同步。
+	//
+	// Nickname 是 NULL-able：NULL 表示"还没设置过"，前端 fallback 到 username。
+	// 旗下号由 bot 周期上报 QQ 昵称/群名片；普通用户后续可自行修改。
+	//
+	// QQAvatarURL 仅旗下号会写——直接是腾讯 CDN（q.qlogo.cn）；如果用户后续上传了自己的
+	// avatar（即 Avatar 字段非空）则以 Avatar 为准，相关取值逻辑见 oss.AvatarForDisplay。
+	Nickname    *string `gorm:"column:nickname;type:varchar(64)" json:"nickname,omitempty"`
+	Bio         string  `gorm:"column:bio;type:varchar(255);not null;default:''" json:"bio"`
+	QQAvatarURL string  `gorm:"column:qq_avatar_url;type:varchar(255);not null;default:''" json:"qq_avatar_url,omitempty"`
+
 	FollowCount int       `gorm:"column:follow_count;not null;default:0" json:"follow_count"`
 	FansCount   int       `gorm:"column:fans_count;not null;default:0" json:"fans_count"`
 	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
@@ -58,6 +70,42 @@ func (u *User) IsQQChild() bool {
 //   - 提问的回复转发回创建群、不进 app 通知
 func (u *User) IsOrphanQQChild() bool {
 	return u.IsQQChild() && u.ParentUserID == nil
+}
+
+// DisplayName 返回用户对外展示用的名字——优先 nickname，没设置则 fallback 到 username。
+//
+// 普通用户：用户没设置 nickname 时显示 username；
+// 旗下号：bot 周期同步 QQ 昵称/群名片到 nickname，没同步成功 fallback 到 username（qqXXXXX）。
+//
+// 调用方拿到的是非空字符串——不需要再做 nil 判断。
+func (u *User) DisplayName() string {
+	if u == nil {
+		return ""
+	}
+	if u.Nickname != nil {
+		if name := *u.Nickname; name != "" {
+			return name
+		}
+	}
+	return u.Username
+}
+
+// DisplayAvatarPath 返回用户对外展示用的头像存储路径/URL——
+//
+//	非空 Avatar       → 用 Avatar（用户自己上传过的）
+//	否则 QQAvatarURL  → 用 QQ 同步过的（仅旗下号会有）
+//	都为空            → 返回空字符串，前端 fallback 到默认头像
+//
+// 返回值仍是"原始路径"（可能是相对路径、可能是 https:// 完整 URL）；调用方应当再走
+// oss.ToFullURL 把相对路径转成完整 URL。https:// 开头的 URL ToFullURL 会原样返回。
+func (u *User) DisplayAvatarPath() string {
+	if u == nil {
+		return ""
+	}
+	if u.Avatar != "" {
+		return u.Avatar
+	}
+	return u.QQAvatarURL
 }
 
 func (User) TableName() string {

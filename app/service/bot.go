@@ -52,10 +52,19 @@ func (e *BotDuplicateGoodError) Error() string {
 // =============================================================================
 
 // BotUpsertQQChildReq 由 QQ-bot 调用：按 (qq_number, group_id) 创建/复用旗下账号。
+//
+// Nickname / AvatarURL 是"渠道渲染"——bot 从 QQ 群里能拿到的展示信息，
+// 后端按"最新者覆盖" 写入 users.nickname / users.qq_avatar_url：
+//
+//	Nickname  群名片优先，名片为空时用 QQ 全局昵称；前后空白由 service 层 trim
+//	AvatarURL bot 直接拼 https://q.qlogo.cn/headimg_dl?dst_uin={qq}&spec=640
+//
+// 不传 (空字符串) = 不动；传非空 = upsert 写入新值。
 type BotUpsertQQChildReq struct {
-	QQNumber string `json:"qq_number"` // 必填
-	GroupID  int64  `json:"group_id"`  // 必填，用于推断 school_id
-	Nickname string `json:"nickname"`  // 可选，群名片，会写到 username 之外的展示字段
+	QQNumber  string `json:"qq_number"`  // 必填
+	GroupID   int64  `json:"group_id"`   // 必填，用于推断 school_id
+	Nickname  string `json:"nickname"`   // 可选——QQ 群名片/昵称
+	AvatarURL string `json:"avatar_url"` // 可选——QQ 头像 CDN URL
 }
 
 // BotUpsertQQChildResp upsert 结果。Created=true 表示这次新建了一个旗下账号。
@@ -87,17 +96,18 @@ func BotUpsertQQChild(ctx context.Context, req BotUpsertQQChildReq) (*BotUpsertQ
 	if existing != nil {
 		// 旗下账号已存在：可能 group_id 跟当时创建的不同（用户跨群发消息），
 		// 不报错——一个 QQ 用户的旗下账号是全局的，群只决定第一次创建时归属哪所学校。
-		// 群名片有变化时顺手更新（"实时跟群名片同步"）。
-		if req.Nickname != "" && req.Nickname != existing.Username {
-			_ = pgsql.DB.WithContext(ctx).Model(existing).
-				UpdateColumn("avatar", existing.Avatar) // no-op 占位，保留扩展点
-			// TODO: 若以后加 nickname 列，在这里 update
+		// 群名片 / 头像有变化时顺手更新（"实时跟 QQ 同步"）。
+		applyQQChildDisplayUpdate(ctx, existing, req.Nickname, req.AvatarURL)
+		respNick := ""
+		if existing.Nickname != nil {
+			respNick = *existing.Nickname
 		}
 		return &BotUpsertQQChildResp{
 			UserID:   existing.ID,
 			Created:  false,
 			SchoolID: existing.SchoolID,
 			Username: existing.Username,
+			Nickname: respNick,
 		}, nil
 	}
 
@@ -128,6 +138,13 @@ func BotUpsertQQChild(ctx context.Context, req BotUpsertQQChildReq) (*BotUpsertQ
 		Status:           constant.StatusValid,
 		Role:             constant.RoleUser,
 	}
+	// 创建时把 bot 上报的展示信息（昵称 / QQ 头像 URL）一并写入，避免新建后立刻 update
+	if nick := strings.TrimSpace(req.Nickname); nick != "" {
+		newU.Nickname = &nick
+	}
+	if av := strings.TrimSpace(req.AvatarURL); av != "" {
+		newU.QQAvatarURL = av
+	}
 	if _, err := dao.User().Create(ctx, newU); err != nil {
 		// 并发冲突：另一个请求已经抢先创建过同一 qq_number 的旗下账号——重新查一次返回它
 		again, err2 := findActiveQQChild(ctx, req.QQNumber)
@@ -148,6 +165,30 @@ func BotUpsertQQChild(ctx context.Context, req BotUpsertQQChildReq) (*BotUpsertQ
 		Username: newU.Username,
 		Nickname: req.Nickname,
 	}, nil
+}
+
+// applyQQChildDisplayUpdate 把 bot 上报的最新群名片 / QQ 头像写入旗下号——
+// 仅当新值非空且与库里不同才发 UPDATE，避免每次消息都触发写。
+//
+// 错误吞掉只 log——展示信息同步失败不应阻塞主流程。
+func applyQQChildDisplayUpdate(ctx context.Context, u *model.User, nickname, avatarURL string) {
+	updates := make(map[string]interface{})
+	if nn := strings.TrimSpace(nickname); nn != "" {
+		curr := ""
+		if u.Nickname != nil {
+			curr = *u.Nickname
+		}
+		if nn != curr {
+			updates["nickname"] = nn
+		}
+	}
+	if av := strings.TrimSpace(avatarURL); av != "" && av != u.QQAvatarURL {
+		updates["qq_avatar_url"] = av
+	}
+	if len(updates) == 0 {
+		return
+	}
+	_ = pgsql.DB.WithContext(ctx).Model(u).Updates(updates).Error
 }
 
 // findActiveQQChild 按 qq_number 找一条 status=valid 的旗下账号；没找到返回 (nil, nil)。

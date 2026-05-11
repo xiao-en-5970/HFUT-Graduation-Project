@@ -178,7 +178,14 @@ func fetchAuthorParents(ctx context.Context, users map[uint]*model.User) map[uin
 	return parentMap
 }
 
-// buildAuthorVO 把一个 user model 转成 AuthorProfile——附带"来自主账号"信息（如果适用）。
+// buildAuthorVO 把一个 user model 转成 AuthorProfile——附带"关联主账号"信息（如果适用）。
+//
+// 展示策略（详见 vo/response.AuthorProfile）：
+//   - Nickname 优先用 user.nickname，没设置 fallback username（DisplayName 已处理）
+//   - Avatar 优先用 user.avatar，没上传 fallback 到 user.qq_avatar_url（DisplayAvatarPath 已处理）
+//   - 旗下号会带 AccountType=2 + ParentUserID/ParentNickname，让前端展示 "QQ智能体" tag
+//     和 "关联自「主账号」" 子卡片（可点击跳转）
+//   - 老字段 FromUserID/FromUsername 仍写入——兼容已发布的老 RN 客户端
 //
 // parentMap 是 fetchAuthorParents 的产物；为 nil 时只填基础字段不做主账号回填（适合
 // 单篇 enrich 不批量查询的场景，会在 IsQQChild 时单独查一次）。
@@ -187,9 +194,11 @@ func buildAuthorVO(ctx context.Context, u *model.User, parentMap map[uint]*model
 		return nil
 	}
 	out := &response.AuthorProfile{
-		ID:       u.ID,
-		Username: u.Username,
-		Avatar:   oss.ToFullURL(u.Avatar),
+		ID:          u.ID,
+		Username:    u.Username,
+		Nickname:    u.DisplayName(),
+		Avatar:      oss.ToFullURL(u.DisplayAvatarPath()),
+		AccountType: u.AccountType,
 	}
 	if u.IsQQChild() && u.ParentUserID != nil && *u.ParentUserID > 0 {
 		var parent *model.User
@@ -200,6 +209,9 @@ func buildAuthorVO(ctx context.Context, u *model.User, parentMap map[uint]*model
 			parent, _ = dao.User().GetByIDIfValid(ctx, uint(*u.ParentUserID))
 		}
 		if parent != nil {
+			out.ParentUserID = parent.ID
+			out.ParentNickname = parent.DisplayName()
+			// 兼容老前端：把主账号信息塞 from_* 字段一份
 			out.FromUserID = parent.ID
 			out.FromUsername = parent.Username
 		}

@@ -83,6 +83,12 @@ func PrivateRouter(api *gin.RouterGroup) {
 		userGroup.GET("/:id/questions", controller.UserListQuestions)
 		userGroup.GET("/:id/answers", controller.UserListAnswers)
 		userGroup.GET("/:id/goods", controller.GoodListByUser)
+		// 关注关系——B 站风格个人展示页：粉丝/关注/互关
+		// 详见 controller/follow.go + service/follow.go + dao/follow.go
+		userGroup.POST("/:id/follow", controller.UserFollow)
+		userGroup.DELETE("/:id/follow", controller.UserUnfollow)
+		userGroup.GET("/:id/following", controller.UserListFollowing)
+		userGroup.GET("/:id/followers", controller.UserListFollowers)
 		userGroup.GET("/:id", controller.UserProfile)
 		userGroup.POST("/update", controller.UserUpdate)
 		userGroup.POST("/bind/school", controller.UserBindSchool)

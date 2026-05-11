@@ -441,3 +441,26 @@ CREATE INDEX IF NOT EXISTS idx_user_behaviors_user_created
     ON user_behaviors (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_behaviors_user_ext
     ON user_behaviors (user_id, ext_type, ext_id);
+
+-- ============================================================================
+-- P5 个人展示页 / 社交关注（B 站风格）
+-- 同步随迁移脚本 package/sql/migrate_profile_social.sql
+-- ============================================================================
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS nickname      VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS bio           VARCHAR(255) NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS qq_avatar_url VARCHAR(255) NOT NULL DEFAULT '';
+
+COMMENT ON COLUMN users.nickname IS
+    '展示名；旗下号由 bot 定期同步 QQ 群名片/昵称，普通用户可自行设置。NULL 时前端 fallback 到 username。';
+COMMENT ON COLUMN users.bio IS
+    '个性签名/一句话介绍。空字符串表示未填写。';
+COMMENT ON COLUMN users.qq_avatar_url IS
+    '旗下号的 QQ 头像 CDN URL；avatar 为空时 author 展示用这个。';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_follow_user_target
+    ON follow (user_id, follow_id)
+    WHERE user_id IS NOT NULL AND follow_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_follow_target ON follow (follow_id);
+CREATE INDEX IF NOT EXISTS idx_follow_status ON follow (status);

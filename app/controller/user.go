@@ -244,7 +244,8 @@ func UserChatUnreadSummary(ctx *gin.Context) {
 	reply.ReplyOKWithData(ctx, gin.H{"total": total, "by_order": byOrderJSON})
 }
 
-// UserProfile 获取任意非删用户的公开身份信息（需 JWT）
+// UserProfile 获取任意非删用户的公开身份信息（需 JWT）。viewerID 来自 JWT 解出来，
+// 用来计算 is_following / is_followed_by / is_self（详见 service.GetProfile）。
 func UserProfile(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -252,7 +253,8 @@ func UserProfile(ctx *gin.Context) {
 		reply.ReplyErrWithMessage(ctx, "用户ID无效")
 		return
 	}
-	profile, err := service.User().GetProfile(ctx, uint(id))
+	viewerID := middleware.GetUserID(ctx)
+	profile, err := service.User().GetProfile(ctx, uint(id), viewerID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			reply.ReplyNotFound(ctx, errcode.ErrUserNotFound)

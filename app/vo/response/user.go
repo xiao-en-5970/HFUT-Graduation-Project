@@ -1,41 +1,75 @@
 package response
 
-// AuthorProfile 作者简要信息（用于文章、评论等关联展示）
+// AuthorProfile 作者简要信息（用于文章、评论、商品列表等聚合接口的"作者卡片"）。
 //
-// QQ 旗下号语义：旗下账号是"发布渠道标签"——主账号通过 QQ 渠道发布的内容仍然可识别地
-// 标到主账号身上。所以非孤儿旗下号作为作者时，会额外带 FromUserID + FromUsername，
-// 前端拼成形如"username（来自用户 xxx）"展示——既保留了"通过 QQ 发布"这个语义，
-// 又让主账号身份可见。详见 QQ-bot/skill/bot/SKILL.md "数据聚合 / 操作权限"段。
+// 展示规则（前端通用 AuthorChip）：
+//   - 优先用 Nickname，没设置 fallback 到 Username
+//   - Avatar 走 oss.ToFullURL 已是完整 URL；前端拿到直接渲染，不需要再判断 QQ vs 上传
 //
-// 取值情况：
+// AccountType + ParentUserID 描述账号关联关系（点击作者后跳个人展示页时用）：
 //
-//	作者是普通账号                  ID=作者id      Username=作者用户名     FromUserID/Username=空
-//	作者是非孤儿 QQ 旗下号           ID=旗下号id   Username=旗下号用户名   FromUserID=主账号id  FromUsername=主账号用户名
-//	作者是孤儿 QQ 旗下号             ID=旗下号id   Username=旗下号用户名   FromUserID/Username=空（无主账号）
+//	普通账号                  AccountType=1, ParentUserID=0
+//	非孤儿 QQ 旗下号           AccountType=2, ParentUserID=主账号id  ParentNickname=主账号展示名
+//	孤儿 QQ 旗下号             AccountType=2, ParentUserID=0          ParentNickname=""
+//
+// 在个人展示页上，旗下号会渲染为 "QQ智能体" tag，且若有 ParentUserID 则展示"关联自「xxx」"
+// 且 xxx 可点击跳到主账号的个人展示页。详见 QQ-bot/skill/bot/SKILL.md "个人展示页"。
+//
+// 兼容：保留 FromUserID/FromUsername 字段——老版前端仍按这两个字段渲染"来自 xxx"后缀，
+// 但新版前端应当用 ParentUserID/ParentNickname + AccountType 综合判断（前缀展示
+// "QQ智能体" tag、关联自主账号链接）。
 type AuthorProfile struct {
-	ID           uint   `json:"id"`
-	Username     string `json:"username"`
-	Avatar       string `json:"avatar"`
+	ID       uint   `json:"id"`
+	Username string `json:"username"`           // 登录名（旗下号是 qqXXXXX）；保留兼容
+	Nickname string `json:"nickname,omitempty"` // 展示名（QQ 旗下号是 QQ 昵称/群名片，普通用户是自定义昵称）
+	Avatar   string `json:"avatar"`             // 完整 URL（旗下号是 q.qlogo.cn，普通用户是 OSS）
+
+	AccountType    int16  `json:"account_type"`              // 1=普通 2=QQ 旗下号
+	ParentUserID   uint   `json:"parent_user_id,omitempty"`  // 旗下号挂靠的主账号 id
+	ParentNickname string `json:"parent_nickname,omitempty"` // 主账号展示名
+
+	// 历史字段——给老前端兼容。新前端用 ParentUserID/ParentNickname + AccountType。
 	FromUserID   uint   `json:"from_user_id,omitempty"`
 	FromUsername string `json:"from_username,omitempty"`
 }
 
-// UserProfile 用户公开身份信息（供他人查看，仅非删用户）
+// UserProfile 用户个人展示页信息（供他人查看，仅非删用户）——B 站个人页风格。
+//
+// IsFollowing / IsFollowedBy 仅当 viewer 已登录且不是 self 时填充：
+//
+//	IsFollowing   viewer 是否关注了这个 user
+//	IsFollowedBy  这个 user 是否关注了 viewer（拼成"互相关注"标签用）
+//	IsSelf        viewer 就是这个 user 本人
+//
+// AccountType / ParentUserID / ParentNickname 取值规则同 AuthorProfile——旗下号在
+// 个人展示页上额外渲染"QQ智能体"tag，且如挂主账号给出"关联自「xxx」"可点击的子卡片。
 type UserProfile struct {
 	ID          uint   `json:"id"`
 	Username    string `json:"username"`
+	Nickname    string `json:"nickname,omitempty"`
 	Avatar      string `json:"avatar"`
+	Bio         string `json:"bio"`
 	Background  string `json:"background"`
 	FollowCount int    `json:"follow_count"`
 	FansCount   int    `json:"fans_count"`
-	CreatedAt   string `json:"created_at"` // 注册时间
+	CreatedAt   string `json:"created_at"` // 注册时间（YYYY-MM-DD HH:MM:SS）
+
+	AccountType    int16  `json:"account_type"`
+	ParentUserID   uint   `json:"parent_user_id,omitempty"`
+	ParentNickname string `json:"parent_nickname,omitempty"`
+
+	IsFollowing  bool `json:"is_following"`
+	IsFollowedBy bool `json:"is_followed_by"`
+	IsSelf       bool `json:"is_self"`
 }
 
 // UserInfo 当前用户完整信息（info 接口返回，含绑定信息等）
 type UserInfo struct {
 	ID          uint   `json:"id"`
 	Username    string `json:"username"`
+	Nickname    string `json:"nickname,omitempty"`
 	Avatar      string `json:"avatar"`
+	Bio         string `json:"bio"`
 	Background  string `json:"background"`
 	FollowCount int    `json:"follow_count"`
 	FansCount   int    `json:"fans_count"`

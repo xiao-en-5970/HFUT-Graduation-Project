@@ -141,21 +141,49 @@ func (s *userService) RefreshToken(refresh string) (TokenPair, error) {
 	return newTokenPair(claims.UserID, claims.Username)
 }
 
-// GetProfile 获取指定用户的公开身份信息，仅限 status=1 的正常用户
-func (s *userService) GetProfile(ctx *gin.Context, id uint) (*response.UserProfile, error) {
-	user, err := dao.User().GetByIDIfValid(ctx.Request.Context(), id)
+// GetProfile 获取指定用户的公开身份信息——个人展示页主接口。
+//
+// viewerID（来自 JWT；0 = 未登录或匿名访问）用来计算 IsFollowing / IsFollowedBy / IsSelf
+// 这几个"viewer-相对"字段。AccountType + ParentUser 提供给前端展示 "QQ智能体" tag 与
+// "关联自「主账号」" 子卡片。
+//
+// 仅限 status=1 的正常用户；被禁用 / 不存在 → gorm.ErrRecordNotFound。
+func (s *userService) GetProfile(ctx *gin.Context, id uint, viewerID uint) (*response.UserProfile, error) {
+	rctx := ctx.Request.Context()
+	user, err := dao.User().GetByIDIfValid(rctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return &response.UserProfile{
+	out := &response.UserProfile{
 		ID:          user.ID,
 		Username:    user.Username,
-		Avatar:      oss.ToFullURL(user.Avatar),
+		Nickname:    user.DisplayName(),
+		Avatar:      oss.ToFullURL(user.DisplayAvatarPath()),
+		Bio:         user.Bio,
 		Background:  oss.ToFullURL(user.Background),
 		FollowCount: user.FollowCount,
 		FansCount:   user.FansCount,
 		CreatedAt:   user.CreatedAt.Format("2006-01-02 15:04:05"),
-	}, nil
+		AccountType: user.AccountType,
+	}
+	if user.IsQQChild() && user.ParentUserID != nil && *user.ParentUserID > 0 {
+		out.ParentUserID = uint(*user.ParentUserID)
+		if parent, perr := dao.User().GetByIDIfValid(rctx, out.ParentUserID); perr == nil && parent != nil {
+			out.ParentNickname = parent.DisplayName()
+		}
+	}
+	if viewerID != 0 {
+		out.IsSelf = viewerID == user.ID
+		if !out.IsSelf {
+			if ok, ferr := dao.Follow().IsFollowing(rctx, viewerID, user.ID); ferr == nil {
+				out.IsFollowing = ok
+			}
+			if ok, ferr := dao.Follow().IsFollowing(rctx, user.ID, viewerID); ferr == nil {
+				out.IsFollowedBy = ok
+			}
+		}
+	}
+	return out, nil
 }
 
 func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, error) {
@@ -166,10 +194,12 @@ func (s *userService) Info(ctx *gin.Context, userID uint) (*response.UserInfo, e
 	userInfo := &response.UserInfo{
 		ID:          userDao.ID,
 		Username:    userDao.Username,
+		Nickname:    userDao.DisplayName(),
 		SchoolID:    userDao.SchoolID,
 		Role:        userDao.Role,
 		Status:      userDao.Status,
-		Avatar:      oss.ToFullURL(userDao.Avatar),
+		Avatar:      oss.ToFullURL(userDao.DisplayAvatarPath()),
+		Bio:         userDao.Bio,
 		Background:  oss.ToFullURL(userDao.Background),
 		FollowCount: userDao.FollowCount,
 		FansCount:   userDao.FansCount,
@@ -280,8 +310,13 @@ func (s *userService) BindSchool(ctx *gin.Context, userID uint, req BindSchoolRe
 	return dao.User().UpdateSchoolByID(ctx.Request.Context(), userID, req.SchoolID)
 }
 
-// UpdateProfileReq 用户更新资料请求（仅允许更新这些字段，不含 username/role/status/password）
+// UpdateProfileReq 用户更新资料请求（仅允许更新这些字段，不含 username/role/status/password）。
+//
+// Nickname / Bio 加入到此结构，让用户在 app 端能改自己的展示名 / 个性签名。
+// 字段不传（nil）= 不动；传空字符串 = 真的清空。
 type UpdateProfileReq struct {
+	Nickname   *string `json:"nickname"`
+	Bio        *string `json:"bio"`
 	Avatar     *string `json:"avatar"`
 	Background *string `json:"background"`
 	BindQQ     *string `json:"bind_qq"`
@@ -292,6 +327,25 @@ type UpdateProfileReq struct {
 // UpdateProfile 根据当前登录用户 ID 部分更新资料
 func (s *userService) UpdateProfile(ctx *gin.Context, userID uint, req UpdateProfileReq) error {
 	updates := make(map[string]interface{})
+	if req.Nickname != nil {
+		v := strings.TrimSpace(*req.Nickname)
+		if len([]rune(v)) > 32 {
+			return errors.New("昵称最多 32 个字符")
+		}
+		if v == "" {
+			// 清空 → 落 NULL，让 DisplayName 回退到 username
+			updates["nickname"] = nil
+		} else {
+			updates["nickname"] = v
+		}
+	}
+	if req.Bio != nil {
+		v := strings.TrimSpace(*req.Bio)
+		if len([]rune(v)) > 100 {
+			return errors.New("个性签名最多 100 个字符")
+		}
+		updates["bio"] = v
+	}
 	if req.Avatar != nil {
 		storagePath, err := oss.ExtractUserAssetPath(*req.Avatar, userID)
 		if err != nil {
