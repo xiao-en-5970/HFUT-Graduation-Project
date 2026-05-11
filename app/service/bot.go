@@ -263,8 +263,12 @@ type BotPublishGoodReq struct {
 	Negotiable bool     `json:"negotiable"` // true 时 price 字段被忽略
 	Bargain    bool     `json:"bargain"`    // 可刀
 	Price      int      `json:"price"`      // 单位：分
+	Stock      int      `json:"stock"`      // 库存数量；<= 0 时按 1 兜底
 	Location   string   `json:"location"`   // 地点（goods_addr）
 	Images     []string `json:"images"`     // OSS URL 列表
+	// Force=true 时跳过 title 重复检查直接上架。给 bot 反问"重复上架"路径用——
+	// 用户已经看到提示并选择"我要再发一份"时，bot 带 Force=true 重试。
+	Force bool `json:"force,omitempty"`
 }
 
 // BotPublishGoodResp 上架成功返回 good_id。
@@ -294,13 +298,21 @@ func BotPublishGood(ctx context.Context, req BotPublishGoodReq) (*BotPublishGood
 	uid := int(user.ID)
 	sid := int(user.SchoolID)
 
-	// 去重检查：bot 反复识别到同款商品（用户顶帖）→ 不重复创建，回 409
-	dups, err := dao.Good().FindLikelyDuplicates(ctx, uid, req.Category, req.Title)
-	if err != nil {
-		return nil, fmt.Errorf("查重失败: %w", err)
+	// 去重检查：title 严格相等（trim + case-insensitive）+ 同用户 + 同 category + 7 天内 + 在售。
+	// Force=true 时跳过——用户在群里看到提示并显式选择"重复上架"时 bot 带 Force=true 重试。
+	if !req.Force {
+		dups, err := dao.Good().FindExactTitleDuplicates(ctx, uid, req.Category, req.Title)
+		if err != nil {
+			return nil, fmt.Errorf("查重失败: %w", err)
+		}
+		if len(dups) > 0 {
+			return nil, &BotDuplicateGoodError{ExistingID: dups[0].ID, ExistingTitle: dups[0].Title}
+		}
 	}
-	if len(dups) > 0 {
-		return nil, &BotDuplicateGoodError{ExistingID: dups[0].ID, ExistingTitle: dups[0].Title}
+	// 库存：用户明说数量时取 req.Stock，没明说或异常值（<=0 / > 999）按 1 兜底
+	stock := req.Stock
+	if stock <= 0 || stock > 999 {
+		stock = 1
 	}
 	g := &model.Good{
 		UserID:        &uid,
@@ -317,7 +329,7 @@ func BotPublishGood(ctx context.Context, req BotPublishGoodReq) (*BotPublishGood
 		Bargain:       req.Bargain,
 		Price:         req.Price,
 		MarkedPrice:   req.Price,
-		Stock:         1, // 默认 1 件
+		Stock:         stock,
 		Images:        req.Images,
 		ImageCount:    len(req.Images),
 	}

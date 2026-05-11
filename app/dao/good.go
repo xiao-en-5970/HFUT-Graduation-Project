@@ -158,17 +158,19 @@ func (s *GoodStore) DecrementStockAfterSale(ctx context.Context, tx *gorm.DB, id
 	return nil
 }
 
-// FindLikelyDuplicates 找该用户最近 7 天内、同 category、title 互相包含的、还在售的商品。
+// FindExactTitleDuplicates 找该用户最近 7 天内、同 category、**title 严格相等**（trim 后
+// case-insensitive）、还在售的商品。
 //
-// 用途：bot 调 BotPublishGood 上架前先查一次——同一 QQ 用户反复发"出鞋架 6元"
-// 这种顶帖行为不该一直重复创建商品记录。命中（即返回非空列表）时上层应该返回 409 +
-// 已存在的 good_id 让 bot 提示用户"你之前发过类似的"。
+// 用途：bot 调 BotPublishGood 上架前先查一次。命中（即返回非空列表）时上层应该返回
+// 409 + 已存在的 good_id，让 bot 在群里反问用户"重复上架还是下架旧的"。
 //
-// 双向 ILIKE 包含：让"出鞋架 6元" / "三层鞋架" / "宿舍鞋架不锈钢" 都能互相命中——
-// 实际复刻"用户反复重发"的 case 比严格 fuzzy similarity 更重要。
+// **严格判重**而非双向 ILIKE：早期实现是"title 互相包含"，但实战中误判太多——
+// "三层鞋架" vs "三层不锈钢鞋架" 不应判定为重复，因为它们可能是不同的具体商品。
+// 现在只在 title trim + 大小写不敏感等同时才判重，把"是否重复"的判断权交给用户的
+// 物品命名习惯——名字写一模一样就是同款，名字稍有差异就视为不同商品。
 //
-// 不参与去重判定的字段：价格、地点、图片——重发可能改价改图，但用户语义还是同一个商品。
-func (s *GoodStore) FindLikelyDuplicates(ctx context.Context, userID int, category int16, title string) ([]*model.Good, error) {
+// 不参与去重判定的字段：价格、地点、图片、库存——重发可能改价改图，但用户语义同款。
+func (s *GoodStore) FindExactTitleDuplicates(ctx context.Context, userID int, category int16, title string) ([]*model.Good, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return nil, nil
@@ -178,8 +180,8 @@ func (s *GoodStore) FindLikelyDuplicates(ctx context.Context, userID int, catego
 		Where("user_id = ? AND goods_category = ?", userID, category).
 		Where("status = ? AND good_status = ?", constant.StatusValid, GoodStatusOnSale).
 		Where("created_at > NOW() - INTERVAL '7 days'").
-		// 双向 substring：title 是新的、t.title 是老的；任一方包含另一方都视为重复
-		Where("title ILIKE ? OR ? ILIKE '%' || title || '%'", "%"+title+"%", title).
+		// 严格相等（trim + 大小写不敏感）。Postgres 的 LOWER 索引友好；这里数据量小不计较。
+		Where("LOWER(TRIM(title)) = LOWER(?)", title).
 		Order("id DESC").
 		Limit(5).
 		Find(&out).Error
