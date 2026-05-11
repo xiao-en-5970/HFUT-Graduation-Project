@@ -53,12 +53,23 @@ func (s *GoodStore) GetByIDWithSchoolAllowOffShelf(ctx context.Context, id uint,
 	return g, err
 }
 
-// GoodListSort 与 GET /goods 的 sort 参数：空/newest=上架时间；updated_at=最近更新
-const GoodListSortUpdatedAt = "updated_at"
+// GoodListSort 与 GET /goods 的 sort 参数：
+//   - 空 / newest      = 上架时间（created_at DESC，默认）
+//   - updated_at       = 最近更新
+//   - popularity / hot = 热度（收藏×10 + 点赞×5 + 浏览×1，配合 created_at DESC tiebreak）
+const (
+	GoodListSortUpdatedAt  = "updated_at"
+	GoodListSortPopularity = "popularity"
+)
 
 func goodListOrderClause(sort string) string {
-	if strings.TrimSpace(sort) == GoodListSortUpdatedAt {
+	switch strings.TrimSpace(sort) {
+	case GoodListSortUpdatedAt:
 		return "updated_at DESC"
+	case GoodListSortPopularity, "hot":
+		// 热度公式跟 articles 那侧一致——收藏权重最高、点赞次之、浏览最低；
+		// 同分按 created_at 倒序保证稳定排序。
+		return "(collect_count*10 + like_count*5 + view_count) DESC, created_at DESC"
 	}
 	return "created_at DESC"
 }
