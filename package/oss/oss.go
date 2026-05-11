@@ -422,8 +422,36 @@ func BotUserImagePath(userID uint, snowflakeID int64, ext string) string {
 }
 
 // PathForStorage 统一存 .small（缩略图），供数据库存储；若已是 .small 或非图片则原样返回
+// PathForStorage 把任意输入（前端展示 URL / oss.Save 返回的裸 URL / 相对路径）
+// 转换为 "适合存到 DB 的最小形式"——确保不带:
+//
+//   - 任意 URL query（如七牛 imageView2 缩略参数 ?imageView2/2/w/720/q/75）
+//   - 任意 URL fragment（#anchor）
+//   - `.small` 缩略图后缀（含 `path.jpg.small` 这种"扩展名+.small"形式）
+//
+// 完整 URL 保留 host，相对路径保留为相对路径。这样读取时 ToFullURL 可以根据
+// 当前 driver 自动重新拼出 query（七牛）或 .small 后缀（local），不会因为 DB 里
+// 错误地预先带了 .small/query 而把原图 URL 变成不存在的 key。
+//
+// 历史：早期实现直接 return pathForDisplay(path)——后者是"给图片加 .small"。
+// 这导致 qiniu 模式下用户上传头像 / 背景后，oss.Save 返回的裸 URL 被 PathForStorage
+// 加了 .small 写入 DB，前端访问时 404（七牛上只有 avatar.jpg，没有 avatar.jpg.small）。
+// 商品 / 文章图片之前不踩这个坑是因为前端回传的 URL 末尾带 query（q/75），
+// pathForDisplay 通过 filepath.Ext 拿不到 .jpg 扩展名，于是不动——属于"歪打正着"。
 func PathForStorage(path string) string {
-	return pathForDisplay(path)
+	if path == "" {
+		return ""
+	}
+	p := strings.TrimSpace(path)
+	// 去掉 query / fragment
+	if i := strings.IndexAny(p, "?#"); i >= 0 {
+		p = p[:i]
+	}
+	// 去掉 `.small` 后缀；同时处理 `path.jpg.small` 这种"扩展名+.small"复合形式
+	if strings.HasSuffix(p, image.SmallSuffix) {
+		p = strings.TrimSuffix(p, image.SmallSuffix)
+	}
+	return p
 }
 
 // ExtFromFilename 从文件名获取扩展名，如 "x.jpg" -> "jpg"
