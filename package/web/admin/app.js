@@ -854,10 +854,13 @@
           ` <button class="btn btn-sm" data-edit-user="${u.id}">编辑</button>` +
           ` <select class="role-select btn-sm" data-id="${u.id}" style="padding:2px 4px;background:var(--bg-dark);color:var(--text);border:1px solid #3d424d;border-radius:4px;">${[1,2,3,4].map(v => `<option value="${v}" ${u.role === v ? 'selected' : ''}>${ROLE_MAP[v]}</option>`).join('')}</select>`;
       });
-      const extra = '<button class="btn btn-primary" id="add-user-btn">新建用户</button>';
+        const extra =
+            '<button class="btn btn-primary" id="add-user-btn">新建用户</button>' +
+            ' <button class="btn btn-secondary" id="sync-qq-display-btn" title="通知 bot 立即同步所有 QQ 旗下号的最新昵称和头像；普通定时任务每 6 小时自动跑一次">立即同步 QQ 头像/昵称</button>';
       renderTable('用户管理', columns, list, userPage, total, 15, (p) => { userPage = p; renderUsers(); }, extra);
 
       document.getElementById('add-user-btn')?.addEventListener('click', showCreateUserModal);
+        document.getElementById('sync-qq-display-btn')?.addEventListener('click', triggerQQDisplaySync);
       moduleContent.querySelectorAll('[data-disable]').forEach(btn => btn.addEventListener('click', () => disableUser(parseInt(btn.dataset.disable, 10))));
       moduleContent.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', () => restoreUser(parseInt(btn.dataset.restore, 10))));
       moduleContent.querySelectorAll('[data-edit-user]').forEach(btn => btn.addEventListener('click', () => {
@@ -871,6 +874,27 @@
       moduleContent.querySelectorAll('.role-select').forEach(sel => sel.addEventListener('change', () => updateUserRole(parseInt(sel.dataset.id, 10), parseInt(sel.value, 10))));
     } catch (e) { moduleContent.innerHTML = '<p class="error">' + e.message + '</p>'; }
   }
+
+    // 立即同步 QQ 旗下号昵称 / 头像——只是给 hfut Redis 写一个 force_at 时间戳，
+    // bot 端的 scheduler 会在 30s 内 poll 到并触发一轮全量同步。所以前端只需要"通知到位"
+    // 即可成功返回，不等 bot 跑完。
+    async function triggerQQDisplaySync() {
+        const btn = document.getElementById('sync-qq-display-btn');
+        if (!btn) return;
+        const oldText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '请求中…';
+        try {
+            const res = await api('/admin/qq-children/sync', {method: 'POST'});
+            const msg = res?.data?.message || '已通知 bot 同步';
+            alert(`${msg}。bot 通常在 30 秒内开始执行，全量同步完成后旗下号的头像 / 昵称会自动刷新。`);
+        } catch (e) {
+            alert('触发失败：' + (e?.message || '未知错误'));
+        } finally {
+            btn.disabled = false;
+            btn.textContent = oldText;
+        }
+    }
 
   async function disableUser(id) { try { await api(`/admin/users/${id}`, { method: 'DELETE' }); renderUsers(); } catch (e) { alert(e.message); } }
   async function restoreUser(id) { try { await api(`/admin/users/${id}/restore`, { method: 'POST' }); renderUsers(); } catch (e) { alert(e.message); } }

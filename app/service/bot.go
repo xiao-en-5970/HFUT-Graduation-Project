@@ -84,11 +84,11 @@ func BotUpsertQQChild(ctx context.Context, req BotUpsertQQChildReq) (*BotUpsertQ
 	if req.QQNumber == "" {
 		return nil, errors.New("qq_number 不能为空")
 	}
-	if req.GroupID == 0 {
-		return nil, errors.New("group_id 不能为空")
-	}
 
 	// 1) 命中现有旗下账号？
+	//
+	// 注意：旗下号已存在时只是更新展示信息，无需 group_id（旗下号自己持有 created_in_group_id /
+	// school_id），所以这里**不**校验 req.GroupID。仅在走到"创建新旗下号"分支时才校验。
 	existing, err := findActiveQQChild(ctx, req.QQNumber)
 	if err != nil {
 		return nil, fmt.Errorf("查找现有旗下账号失败: %w", err)
@@ -111,7 +111,10 @@ func BotUpsertQQChild(ctx context.Context, req BotUpsertQQChildReq) (*BotUpsertQ
 		}, nil
 	}
 
-	// 2) 没找到——按 group_id 反查归属学校
+	// 2) 没找到——需要按 group_id 反查归属学校才能创建。此时 group_id 必填。
+	if req.GroupID == 0 {
+		return nil, errors.New("group_id 不能为空（仅在创建新旗下号时必填）")
+	}
 	schoolID, err := findSchoolIDByQQGroup(ctx, req.GroupID)
 	if err != nil {
 		return nil, fmt.Errorf("查 group_id→school 失败: %w", err)
@@ -138,12 +141,18 @@ func BotUpsertQQChild(ctx context.Context, req BotUpsertQQChildReq) (*BotUpsertQ
 		Status:           constant.StatusValid,
 		Role:             constant.RoleUser,
 	}
-	// 创建时把 bot 上报的展示信息（昵称 / QQ 头像 URL）一并写入，避免新建后立刻 update
+	// 创建时把 bot 上报的展示信息（昵称 / QQ 头像 URL）一并写入，避免新建后立刻 update。
+	//
+	// AvatarURL 兜底：即便 bot 这次没传，也用 qq_number 拼一个 q.qlogo.cn URL——
+	// 这个域是腾讯永久 CDN，spec=640 是常用大小；保证旗下号刚被创建就有头像可显示，
+	// 不用等用户下次触发 dispatch 才补。
 	if nick := strings.TrimSpace(req.Nickname); nick != "" {
 		newU.Nickname = &nick
 	}
 	if av := strings.TrimSpace(req.AvatarURL); av != "" {
 		newU.QQAvatarURL = av
+	} else {
+		newU.QQAvatarURL = defaultQQAvatarURL(req.QQNumber)
 	}
 	if _, err := dao.User().Create(ctx, newU); err != nil {
 		// 并发冲突：另一个请求已经抢先创建过同一 qq_number 的旗下账号——重新查一次返回它
@@ -170,6 +179,9 @@ func BotUpsertQQChild(ctx context.Context, req BotUpsertQQChildReq) (*BotUpsertQ
 // applyQQChildDisplayUpdate 把 bot 上报的最新群名片 / QQ 头像写入旗下号——
 // 仅当新值非空且与库里不同才发 UPDATE，避免每次消息都触发写。
 //
+// 兜底：如果库里 qq_avatar_url 还是空（老数据 / 创建时没拼），即便 bot 这次也没传，
+// 也用 qq_number 拼一个永久 q.qlogo.cn URL 写进去——保证旗下号至少有头像可显示。
+//
 // 错误吞掉只 log——展示信息同步失败不应阻塞主流程。
 func applyQQChildDisplayUpdate(ctx context.Context, u *model.User, nickname, avatarURL string) {
 	updates := make(map[string]interface{})
@@ -182,13 +194,29 @@ func applyQQChildDisplayUpdate(ctx context.Context, u *model.User, nickname, ava
 			updates["nickname"] = nn
 		}
 	}
-	if av := strings.TrimSpace(avatarURL); av != "" && av != u.QQAvatarURL {
+	av := strings.TrimSpace(avatarURL)
+	if av == "" && u.QQAvatarURL == "" && u.QQNumber != nil && *u.QQNumber != "" {
+		av = defaultQQAvatarURL(*u.QQNumber)
+	}
+	if av != "" && av != u.QQAvatarURL {
 		updates["qq_avatar_url"] = av
 	}
 	if len(updates) == 0 {
 		return
 	}
 	_ = pgsql.DB.WithContext(ctx).Model(u).Updates(updates).Error
+}
+
+// defaultQQAvatarURL 用 QQ 号拼出腾讯永久头像 CDN URL。
+//
+// q.qlogo.cn/headimg_dl 是 QQ 官方公开头像服务——URL 本身永久有效，QQ 用户改头像后
+// CDN 下次拉自动是新图，无需 token / API key。spec=640 兼顾 retina + 列表小头像。
+func defaultQQAvatarURL(qqNumber string) string {
+	qq := strings.TrimSpace(qqNumber)
+	if qq == "" {
+		return ""
+	}
+	return "https://q.qlogo.cn/headimg_dl?dst_uin=" + qq + "&spec=640"
 }
 
 // findActiveQQChild 按 qq_number 找一条 status=valid 的旗下账号；没找到返回 (nil, nil)。

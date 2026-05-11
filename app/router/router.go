@@ -277,6 +277,10 @@ func PrivateRouter(api *gin.RouterGroup) {
 		adminGroup.GET("/metrics", controller.AdminMetrics)
 		adminGroup.GET("/metrics/timeseries", controller.AdminMetricsTimeSeries)
 		adminGroup.GET("/metrics/events", controller.AdminMetricsEvents)
+
+		// "立即同步 QQ 头像 / 昵称"按钮——置一个 Redis force_at 标志位，
+		// bot 端的 scheduler 在下次 poll（≤30s）时识别并触发全量同步。
+		adminGroup.POST("/qq-children/sync", controller.AdminTriggerQQDisplaySync)
 	}
 }
 
@@ -309,5 +313,11 @@ func BotRouter(api *gin.RouterGroup) {
 		// 运维群只读 SQL 查询入口——只接受 select/with/explain/show/values 开头的语句，
 		// PG 事务级 READ ONLY 双保险，行数 LIMIT 200（最大 1000）。详见 controller/bot_admin_sql.go。
 		bot.POST("/admin/sql", controller.BotAdminExecSQL)
+
+		// 旗下号 nickname / 头像同步任务用——
+		// bot 周期性拉所有旗下号 + poll admin 触发的"立即同步"信号位。
+		// 详见 controller/qq_sync.go 头注释。
+		bot.GET("/users/qq-children", controller.BotListQQChildren)
+		bot.GET("/qq-sync/pending", controller.BotQQSyncPending)
 	}
 }

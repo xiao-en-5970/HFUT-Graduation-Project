@@ -44,6 +44,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_follow_user_target
 CREATE INDEX IF NOT EXISTS idx_follow_target ON follow (follow_id);
 CREATE INDEX IF NOT EXISTS idx_follow_status ON follow (status);
 
+-- 给老的 QQ 旗下号回填默认头像 URL——所有旗下号都有 qq_number，
+-- 拼出 q.qlogo.cn/headimg_dl?dst_uin=...&spec=640 这种永久 CDN 即可，
+-- 用户在 QQ 那边改头像后 CDN 自动跟新，无需 bot 主动同步。
+--
+-- 只更新 qq_avatar_url 为空的行；已经被 bot 上报过的不动。
+UPDATE users
+SET qq_avatar_url = 'https://q.qlogo.cn/headimg_dl?dst_uin=' || qq_number || '&spec=640'
+WHERE account_type = 2
+  AND qq_avatar_url = ''
+  AND qq_number IS NOT NULL
+  AND TRIM(qq_number) <> '';
+
 -- 一次性把 users.follow_count / users.fans_count 跟 follow 表对齐——
 -- status=1 只算有效关注。
 --
