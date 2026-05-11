@@ -18,18 +18,33 @@ import (
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/reply"
 )
 
-// getUserBrief 拿"作者简要"——非孤儿 QQ 旗下号会带上 from_user_id + from_username 让前端
-// 拼成"username（来自用户 xxx）"展示（详见 vo/response.AuthorProfile 注释）。
+// getUserBrief 拿"作者简要"——返回字段集跟 vo/response.AuthorProfile 严格对齐：
+//
+//	id / username / nickname / avatar / account_type / parent_user_id / parent_nickname
+//	+ 兼容字段 from_user_id / from_username（老 RN 客户端仍按这两个字段渲染）
+//
+// 展示规则（详见 enrich.go::buildAuthorVO 注释 + model.User::DisplayName/DisplayAvatarPath）：
+//
+//   - nickname 优先用 users.nickname，没设置 fallback 到 username
+//   - avatar 优先用 users.avatar（用户上传过的），否则用 users.qq_avatar_url（旗下号同步过来的 QQ 头像）
+//   - 旗下号挂主账号时填 parent_user_id / parent_nickname，让个人展示页显示 "关联自「xxx」"
 func getUserBrief(ctx *gin.Context, userID uint) (map[string]interface{}, error) {
 	u, err := dao.User().GetByIDIfValid(ctx.Request.Context(), userID)
 	if err != nil || u == nil {
 		return nil, err
 	}
 	out := map[string]interface{}{
-		"id": u.ID, "username": u.Username, "avatar": oss.ToFullURL(u.Avatar),
+		"id":           u.ID,
+		"username":     u.Username,
+		"nickname":     u.DisplayName(),
+		"avatar":       oss.ToFullURL(u.DisplayAvatarPath()),
+		"account_type": u.AccountType,
 	}
 	if u.IsQQChild() && u.ParentUserID != nil && *u.ParentUserID > 0 {
 		if parent, perr := dao.User().GetByIDIfValid(ctx.Request.Context(), uint(*u.ParentUserID)); perr == nil && parent != nil {
+			out["parent_user_id"] = parent.ID
+			out["parent_nickname"] = parent.DisplayName()
+			// 兼容老 RN 客户端：仍写 from_* 字段一份
 			out["from_user_id"] = parent.ID
 			out["from_username"] = parent.Username
 		}

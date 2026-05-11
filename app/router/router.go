@@ -64,6 +64,15 @@ func PublicRouter(api *gin.RouterGroup) {
 
 func PrivateRouter(api *gin.RouterGroup) {
 	api.Use(middleware.JWTAuth())
+	// LoadUserSchool 紧跟在 JWTAuth 之后挂——让所有 private 路由都能通过 GetSchoolID(ctx)
+	// 拿到 viewer 的学校 ID，便于做学校隔离过滤。
+	//
+	// 之前 LoadUserSchool 是挂在 /user group 之后（仅给 /post/、/question/ 等用），
+	// 导致 /user/:id/posts / /user/:id/questions / /user/:id/answers / /user/:id/goods
+	// 这几条 user-scoped 列表接口里 GetSchoolID 永远返回 0——被 applySchoolVisibility
+	// 当成"viewer 未绑学校"过滤为"只看 school_id=0 的全站公开内容"，于是看不到 QQ 旗下号
+	// 发布的内容（旗下号内容必然有 school_id > 0，会被全部过滤）。详见 SKILL.md。
+	api.Use(middleware.LoadUserSchool())
 	// 学校列表、详情与验证码（绑定学校时用）
 	api.GET("/schools", controller.SchoolListForBind)
 	api.GET("/schools/:id/captcha", controller.SchoolCaptcha)
@@ -102,8 +111,8 @@ func PrivateRouter(api *gin.RouterGroup) {
 		userGroup.POST("/qq-unbind/request-code", controller.UserQQUnbindRequestCode)
 		userGroup.POST("/qq-unbind/confirm", controller.UserQQUnbindConfirm)
 	}
-	// 帖子（type=1）、提问（type=2）、回答（type=3），三类接口数据隔离+学校隔离
-	api.Use(middleware.LoadUserSchool())
+	// 帖子（type=1）、提问（type=2）、回答（type=3），三类接口数据隔离+学校隔离。
+	// 注：LoadUserSchool 已经在 PrivateRouter 顶部统一挂载，这里不再重复 Use。
 	// 地图：配置与瓦片转发（Martin 仅服务端可达；需 JWT）
 	api.GET("/config/map", controller.MapConfig)
 	api.GET("/map/tiles/:z/:x/:y", controller.MapTileProxy)
