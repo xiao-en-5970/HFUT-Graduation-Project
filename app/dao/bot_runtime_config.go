@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"gorm.io/gorm"
@@ -27,10 +28,13 @@ const (
 )
 
 // BotRuntimeConfigRow 单行表示。Value 持 JSON 原始 bytes，由调用方按 key 解读。
+//
+// UpdatedAt 是 PostgreSQL TIMESTAMP，GORM 反序列化成 time.Time；
+// 前端拿到时是 ISO 8601 字符串（"2026-05-21T06:47:00Z"），用 `new Date(s)` 就能解析。
 type BotRuntimeConfigRow struct {
 	Key       string          `gorm:"column:key;primaryKey"   json:"key"`
 	Value     json.RawMessage `gorm:"column:value;type:jsonb" json:"value"`
-	UpdatedAt int64           `gorm:"column:updated_at;autoUpdateTime:false" json:"updated_at"`
+	UpdatedAt time.Time       `gorm:"column:updated_at;autoUpdateTime:false" json:"updated_at"`
 	UpdatedBy *int64          `gorm:"column:updated_by"       json:"updated_by,omitempty"`
 	Comment   *string         `gorm:"column:comment"          json:"comment,omitempty"`
 }

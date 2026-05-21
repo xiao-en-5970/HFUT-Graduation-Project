@@ -2614,9 +2614,12 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
             const opsGroups = Array.isArray(cfg.ops_group_ids?.value) ? cfg.ops_group_ids.value : [];
             const silentMode = cfg.silent_mode?.value === true;
 
-            const lastUpd = (it) => it && it.updated_at
-                ? new Date(it.updated_at * 1000).toLocaleString()
-                : '—';
+            // updated_at 来自 PG TIMESTAMP，序列化为 ISO 字符串（如 "2026-05-21T06:47:00.6Z"）
+            const lastUpd = (it) => {
+                if (!it || !it.updated_at) return '—';
+                const d = new Date(it.updated_at);
+                return Number.isFinite(d.getTime()) ? d.toLocaleString() : String(it.updated_at);
+            };
 
             moduleContent.innerHTML = `
         <div class="module-header"><h3>Bot 运行时配置</h3></div>
