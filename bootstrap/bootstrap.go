@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/config"
+	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/router"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/scheduler"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/service"
@@ -91,6 +93,14 @@ func Boot() error {
 	// 启动指标持久化：每分钟把 hfut + bot 的分钟桶 + bot 事件流 UPSERT 到 PG，
 	// 给运维面板的"过去 1h / 24h / 7d 折线图"提供历史数据。详见 metrics_persist.go。
 	scheduler.StartMetricsPersister(ctx)
+
+	// 确保 bot_runtime_config 表存在 + 种子默认值；bot 端拉取 GET /api/v1/bot/runtime-config 用。
+	// 失败仅 warn，不影响 hfut 主体功能（bot 拉不到会保留 env 兜底）。
+	ensureCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := dao.EnsureBotRuntimeConfigSchema(ensureCtx); err != nil {
+		logger.Warn(ctx, "ensure bot_runtime_config schema failed", zap.Error(err))
+	}
+	cancel()
 
 	// gin.Engine.Run → http.ListenAndServe：成功后会一直阻塞，直到进程退出。
 	// Gin 在 release 模式下不会在控制台打印监听地址，容易造成「启动后没日志」的误判，故在此显式打出。

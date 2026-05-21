@@ -379,7 +379,7 @@
   const moduleContent = document.getElementById('module-content');
   logoutBtn.addEventListener('click', redirectToLogin);
 
-    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'user-locations', 'map-picker', 'trade-demo', 'schools', 'bind-school', 'metrics'];
+    const routes = ['users', 'posts', 'questions', 'answers', 'goods', 'orders', 'user-locations', 'map-picker', 'trade-demo', 'schools', 'bind-school', 'metrics', 'bot-config'];
   function getRoute() {
     const hash = (location.hash || '#/users').slice(2) || 'users';
     return routes.includes(hash) ? hash : 'users';
@@ -401,6 +401,7 @@
     else if (r === 'schools') renderSchools();
     else if (r === 'bind-school') renderBindSchool();
     else if (r === 'metrics') renderMetrics();
+    else if (r === 'bot-config') renderBotConfig();
   }
 
     // ---------- 运维面板（接口指标 + QQ-bot 指标） ----------
@@ -2386,18 +2387,24 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
       <label>学校代码 <input type="text" id="s-code" placeholder="hfut"></label>
       <label>表单字段(JSON) <textarea id="s-form_fields" rows="4" placeholder='[{"key":"username","label_zh":"学号","label_en":"Student ID"},{"key":"password","label_zh":"密码","label_en":"Password"}]'></textarea></label>
       <label>验证码URL <input type="text" id="s-captcha_url" placeholder="空则用后端"></label>
+      <label>QQ 群号(逗号分隔) <input type="text" id="s-qq_groups" placeholder="1234567,7654321 — 学校认证 QQ 群"></label>
     `, async (ov) => {
       let formFields = [];
       try {
         const raw = ov.querySelector('#s-form_fields').value.trim();
         formFields = raw ? JSON.parse(raw) : [];
       } catch (_) {}
+        const qqGroupsRaw = ov.querySelector('#s-qq_groups').value.trim();
+        const qqGroups = qqGroupsRaw
+            ? qqGroupsRaw.split(/[,，\s]+/).filter(Boolean).map(s => parseInt(s, 10)).filter(n => Number.isFinite(n))
+            : [];
       await api('/admin/schools', { method: 'POST', body: JSON.stringify({
         name: ov.querySelector('#s-name').value.trim(),
         login_url: ov.querySelector('#s-login_url').value.trim(),
         code: ov.querySelector('#s-code').value.trim(),
         form_fields: formFields.length ? formFields : undefined,
-        captcha_url: ov.querySelector('#s-captcha_url').value.trim() || undefined
+              captcha_url: ov.querySelector('#s-captcha_url').value.trim() || undefined,
+              qq_groups: qqGroups,
       })});
       renderSchools();
     });
@@ -2406,23 +2413,31 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
   function showEditSchoolModal(school) {
     if (!school) return;
     const formFieldsJson = school.form_fields && Array.isArray(school.form_fields) ? JSON.stringify(school.form_fields) : '[]';
+      const qqGroupsStr = Array.isArray(school.qq_groups) ? school.qq_groups.join(',') : '';
     showModal('编辑学校 #' + school.id, `
       <label>学校名称 <input type="text" id="se-name" value="${school.name || ''}" placeholder="学校名称"></label>
       <label>登录地址 <input type="text" id="se-login_url" value="${school.login_url || ''}" placeholder="https://"></label>
       <label>学校代码 <input type="text" id="se-code" value="${school.code || ''}" placeholder="hfut"></label>
       <label>表单字段(JSON) <textarea id="se-form_fields" rows="4" placeholder='[{"key":"username","label_zh":"学号","label_en":"Student ID"},...]'>${formFieldsJson}</textarea></label>
       <label>验证码URL <input type="text" id="se-captcha_url" value="${school.captcha_url || ''}" placeholder="空则用后端"></label>
+      <label>QQ 群号(逗号分隔) <input type="text" id="se-qq_groups" value="${qqGroupsStr}" placeholder="1234567,7654321 — 学校认证 QQ 群；留空 = 清空"></label>
     `, async (ov) => {
       let formFields = [];
       try {
         formFields = JSON.parse(ov.querySelector('#se-form_fields').value.trim() || '[]');
       } catch (_) {}
+        const qqGroupsRaw = ov.querySelector('#se-qq_groups').value.trim();
+        // 后端用指针字段表达"不改 vs 清空"：留空时仍发空数组（表达"清空"语义），不传不动
+        const qqGroups = qqGroupsRaw === ''
+            ? []
+            : qqGroupsRaw.split(/[,，\s]+/).filter(Boolean).map(s => parseInt(s, 10)).filter(n => Number.isFinite(n));
       await api('/admin/schools/' + school.id, { method: 'PUT', body: JSON.stringify({
         name: ov.querySelector('#se-name').value.trim(),
         login_url: ov.querySelector('#se-login_url').value.trim(),
         code: ov.querySelector('#se-code').value.trim() || undefined,
         form_fields: formFields.length ? formFields : undefined,
-        captcha_url: ov.querySelector('#se-captcha_url').value.trim() || undefined
+              captcha_url: ov.querySelector('#se-captcha_url').value.trim() || undefined,
+              qq_groups: qqGroups,
       })});
       renderSchools();
     });
@@ -2578,6 +2593,92 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
     } catch (e) {
       moduleContent.innerHTML = '<p class="error">' + e.message + '</p>';
     }
+  }
+
+    // -----------------------------------------------------------------
+    // Bot 配置（群白名单 / 运维群 / 灰度静默）—— hfut 端 bot_runtime_config 表，
+    // bot 每 60s 拉一次。详见 dao/bot_runtime_config.go + controller/bot_runtime_config.go。
+    // -----------------------------------------------------------------
+    async function renderBotConfig() {
+        moduleContent.innerHTML = '<p>加载中...</p>';
+        try {
+            const data = await api('/admin/bot-config');
+            const items = data.data?.items || [];
+            // 把扁平数组转成按 key 索引的 map，便于按字段渲染
+            const cfg = {};
+            items.forEach(it => {
+                cfg[it.key] = it;
+            });
+
+            const whitelist = Array.isArray(cfg.auto_reply_whitelist?.value) ? cfg.auto_reply_whitelist.value : [];
+            const opsGroups = Array.isArray(cfg.ops_group_ids?.value) ? cfg.ops_group_ids.value : [];
+            const silentMode = cfg.silent_mode?.value === true;
+
+            const lastUpd = (it) => it && it.updated_at
+                ? new Date(it.updated_at * 1000).toLocaleString()
+                : '—';
+
+            moduleContent.innerHTML = `
+        <div class="module-header"><h3>Bot 运行时配置</h3></div>
+        <p class="text-muted" style="margin:8px 0 18px">
+          配置存于 hfut <code>bot_runtime_config</code> 表，bot 启动 + 每 60s 拉一次热生效；
+          保存后最长 1 分钟内生效（运维群通知 / 群白名单 / 静默开关）。
+        </p>
+        <div class="bot-config-form" style="max-width:760px">
+          <label style="display:block;margin-bottom:14px">
+            <strong>自动监听白名单群</strong>
+            <div class="text-muted" style="margin:2px 0 6px">QQ 群号（逗号或空格分隔）；空 = bot 不在任何群里自动识别</div>
+            <input type="text" id="bc-whitelist" value="${whitelist.join(',')}" placeholder="123456,789012" style="width:100%">
+            <div class="text-muted" style="font-size:12px">上次修改：${lastUpd(cfg.auto_reply_whitelist)}</div>
+          </label>
+
+          <label style="display:block;margin-bottom:14px">
+            <strong>运维通知 / 运维查询群</strong>
+            <div class="text-muted" style="margin:2px 0 6px">bot 上架成功 / 群接入申请等通知会广播；群内 @bot 会进运维 SQL 查询路径</div>
+            <input type="text" id="bc-ops" value="${opsGroups.join(',')}" placeholder="1084352497" style="width:100%">
+            <div class="text-muted" style="font-size:12px">上次修改：${lastUpd(cfg.ops_group_ids)}</div>
+          </label>
+
+          <label style="display:block;margin-bottom:14px">
+            <input type="checkbox" id="bc-silent" ${silentMode ? 'checked' : ''}>
+            <strong>灰度静默模式</strong>
+            <div class="text-muted" style="margin:2px 0 0 24px">
+              开启后<strong>非运维群</strong>的群消息 / 群文件、<strong>所有私聊</strong>都被静默不发；
+              运维群通知、hfut 数据库写入、Kimi 识别照常。上次修改：${lastUpd(cfg.silent_mode)}
+            </div>
+          </label>
+
+          <div style="margin-top:18px">
+            <button class="btn btn-primary" id="bc-save">保存</button>
+            <button class="btn" id="bc-reload">重新加载</button>
+            <span id="bc-status" class="text-muted" style="margin-left:12px"></span>
+          </div>
+        </div>
+      `;
+
+            document.getElementById('bc-reload').addEventListener('click', renderBotConfig);
+            document.getElementById('bc-save').addEventListener('click', async () => {
+                const parseGroupIDs = (s) => s.trim() === ''
+                    ? []
+                    : s.split(/[,，\s]+/).filter(Boolean).map(x => parseInt(x, 10)).filter(n => Number.isFinite(n));
+                const items = [
+                    {key: 'auto_reply_whitelist', value: parseGroupIDs(document.getElementById('bc-whitelist').value)},
+                    {key: 'ops_group_ids', value: parseGroupIDs(document.getElementById('bc-ops').value)},
+                    {key: 'silent_mode', value: document.getElementById('bc-silent').checked},
+                ];
+                const statusEl = document.getElementById('bc-status');
+                statusEl.textContent = '保存中...';
+                try {
+                    await api('/admin/bot-config', {method: 'PUT', body: JSON.stringify({items})});
+                    statusEl.textContent = '已保存（bot 1 分钟内生效）';
+                    renderBotConfig();
+                } catch (e) {
+                    statusEl.textContent = '保存失败：' + e.message;
+                }
+            });
+        } catch (e) {
+            moduleContent.innerHTML = '<p class="error">' + e.message + '</p>';
+        }
   }
 
   if (!getToken()) { redirectToLogin(); return; }

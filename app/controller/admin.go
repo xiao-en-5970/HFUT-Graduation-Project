@@ -521,6 +521,11 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 		Code       *string               `json:"code"`
 		FormFields []model.FormFieldItem `json:"form_fields"`
 		CaptchaURL *string               `json:"captcha_url"`
+		// QQGroups 学校认证 QQ 群号列表。指针类型支持"不改 → 不传"与"清空 → []"两种语义：
+		//   nil   → 不动 qq_groups 字段
+		//   &[]   → 把 qq_groups 清空
+		//   &[g1] → 把 qq_groups 设为 [g1]
+		QQGroups *[]int64 `json:"qq_groups"`
 		// eam_service_url、info_url 仅后端 info 流程用，不通过 API 暴露或接收，需在 DB 中配置
 	}
 	if err := ctx.BindJSON(&body); err != nil {
@@ -543,6 +548,10 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 	if body.CaptchaURL != nil {
 		updates["captcha_url"] = *body.CaptchaURL
 	}
+	if body.QQGroups != nil {
+		// pq.Int64Array 的 Value() 会把 []int64 转 PostgreSQL 数组字面量
+		updates["qq_groups"] = pq.Int64Array(*body.QQGroups)
+	}
 	if len(updates) > 0 {
 		if err := dao.School().UpdateColumns(ctx.Request.Context(), id, updates); err != nil {
 			reply.ReplyInternalError(ctx, err)
@@ -560,6 +569,7 @@ func AdminSchoolCreate(ctx *gin.Context) {
 		Code       string                `json:"code"`
 		FormFields []model.FormFieldItem `json:"form_fields"`
 		CaptchaURL string                `json:"captcha_url"`
+		QQGroups   []int64               `json:"qq_groups"`
 		// eam_service_url、info_url 仅后端用，需在 DB 中配置
 	}
 	if err := ctx.BindJSON(&body); err != nil {
@@ -578,6 +588,7 @@ func AdminSchoolCreate(ctx *gin.Context) {
 		LoginURL:   strPtr(body.LoginURL),
 		Code:       strPtr(body.Code),
 		FormFields: model.FormFieldsJSON(formFields),
+		QQGroups:   pq.Int64Array(body.QQGroups),
 		Status:     constant.StatusValid,
 	}
 	if body.CaptchaURL != "" {

@@ -290,6 +290,11 @@ func PrivateRouter(api *gin.RouterGroup) {
 		// "立即同步 QQ 头像 / 昵称"按钮——置一个 Redis force_at 标志位，
 		// bot 端的 scheduler 在下次 poll（≤30s）时识别并触发全量同步。
 		adminGroup.POST("/qq-children/sync", controller.AdminTriggerQQDisplaySync)
+
+		// Bot 运行时配置（群白名单 / 运维群 / 灰度静默）——存 bot_runtime_config 表，
+		// bot 每分钟拉取一次热替换；详见 controller/bot_runtime_config.go。
+		adminGroup.GET("/bot-config", controller.AdminBotConfigList)
+		adminGroup.PUT("/bot-config", controller.AdminBotConfigUpdate)
 	}
 }
 
@@ -328,5 +333,9 @@ func BotRouter(api *gin.RouterGroup) {
 		// 详见 controller/qq_sync.go 头注释。
 		bot.GET("/users/qq-children", controller.BotListQQChildren)
 		bot.GET("/qq-sync/pending", controller.BotQQSyncPending)
+
+		// Bot 运行时配置拉取——bot 启动 + 周期 poll 调用，返回 key->JSON 全集。
+		// 详见 controller/bot_runtime_config.go。
+		bot.GET("/runtime-config", controller.BotRuntimeConfigGet)
 	}
 }

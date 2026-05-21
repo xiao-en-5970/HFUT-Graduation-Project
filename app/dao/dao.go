@@ -19,3 +19,5 @@ func Follow() *FollowStore                     { return &FollowStore{} }
 func ServiceTokenAudit() *ServiceTokenAuditStore {
 	return &ServiceTokenAuditStore{}
 }
+
+// BotRuntimeConfig() 已经在 bot_runtime_config.go 里定义。

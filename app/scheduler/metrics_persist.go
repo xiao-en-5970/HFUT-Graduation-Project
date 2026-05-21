@@ -189,7 +189,7 @@ var botMetricNames = []string{
 	// 分发结果
 	"dispatch_success", "dispatch_fail", "dispatch_other",
 	// 运营辅助
-	"rate_limit", "private_access", "ops_notify",
+	"rate_limit", "private_access", "ops_notify", "silent_suppressed",
 }
 
 // botSeriesToRows 把 bot snapshot["series"] 转成 metric_minute 行。
