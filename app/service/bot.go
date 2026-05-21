@@ -35,6 +35,18 @@ var ErrBotGoodNotFound = errors.New("bot: 商品不存在或已禁用")
 // ErrBotGoodNotOwner 调用方不是商品所有者，无权操作。
 var ErrBotGoodNotOwner = errors.New("bot: 仅商品所有者或其主账号可操作")
 
+// QQ-bot 上架自动有效期：
+//   - 二手商品 (goods_category=1) 30 天后自动下架
+//   - 求物品 / 求购 (goods_category=2) 7 天后自动撤回
+//
+// 仅当 BotPublishGood 收到 GroupID>0（来源 QQ 群）时生效；admin 控制台手动上架
+// (GroupID=0) 维持原行为（无 deadline）。scheduler.runGoodsAutoOffShelfOnce 每 5 分钟
+// 扫一次，下架所有 has_deadline=true && deadline<=NOW() 的在售商品（含二手 + 求购）。
+const (
+	goodBotTTLOnSale = 30 * 24 * time.Hour
+	goodBotTTLSeek   = 7 * 24 * time.Hour
+)
+
 // BotDuplicateGoodError 触发去重保护——上层应返回 409，不算"失败"也不算"成功"。
 //
 // bot 那边收到 409 后应该静默/友好回执用户"你之前发过类似的"，不要尝试重试。
@@ -242,8 +254,20 @@ func findActiveQQChild(ctx context.Context, qqNumber string) (*model.User, error
 //
 // 找不到返回 (0, nil)，调用方按 ErrBotGroupNoSchool 处理。
 // BotSeekGoodMatch 群内「收××」检索结果一条（仅 bot / QQ 展示用）。
+//
+// 字段语义：
+//   - SellerQQ 仅在 OrphanSeller=true（卖家是孤儿 QQ 旗下账号）时填充，bot 拿到后
+//     可以在合并转发卡片末尾提示"通过 QQ xxx 联系"
+//   - OrphanSeller=false 时即 app 主账号上架，bot 提示"通过 app 内搜索联系"
+//   - Images 是 OSS 永久 URL（已经 mirror 过），用于在合并转发卡片里直接发图
+//   - ID 给 bot 用作 bot_dispatch 事件 reference / 也可用于将来做 click-through
+//   - Content / Location 给合并转发的"商品文字"节点用
 type BotSeekGoodMatch struct {
+	ID           uint      `json:"id"`
 	Title        string    `json:"title"`
+	Content      string    `json:"content"`
+	Images       []string  `json:"images,omitempty"`
+	Location     string    `json:"location,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	Price        int       `json:"price"`
 	Negotiable   bool      `json:"negotiable"`
@@ -280,7 +304,11 @@ func BotSearchGoodsForSeek(ctx context.Context, groupID int64, keyword string, l
 	out := make([]BotSeekGoodMatch, 0, len(list))
 	for _, g := range list {
 		row := BotSeekGoodMatch{
+			ID:         g.ID,
 			Title:      g.Title,
+			Content:    g.Content,
+			Images:     []string(g.Images),
+			Location:   g.GoodsAddr,
 			CreatedAt:  g.CreatedAt,
 			Price:      g.Price,
 			Negotiable: g.Negotiable,
@@ -409,6 +437,19 @@ func BotPublishGood(ctx context.Context, req BotPublishGoodReq) (*BotPublishGood
 	if req.GroupID > 0 {
 		gid := req.GroupID
 		g.CreatedInGroupID = &gid
+		// bot 上架自动设有效期，到期由 scheduler.runGoodsAutoOffShelfOnce 批量下架：
+		//   - category=1（二手）→ 30 天后过期下架
+		//   - category=2（求物品 / 求购）→ 7 天后过期自动撤回
+		// 这是和 admin 在控制台手动上架的关键区别（admin 上架 GroupID=0 → 不强制有效期）。
+		//
+		// 30 / 7 天是产品默认；如果未来要变成可配置，加 conf 字段或 admin 后台开关。
+		ttl := goodBotTTLOnSale
+		if req.Category == 2 {
+			ttl = goodBotTTLSeek
+		}
+		deadline := time.Now().Add(ttl)
+		g.HasDeadline = true
+		g.Deadline = &deadline
 	}
 	if len(req.BotMessageIDs) > 0 {
 		// dedup（同一 message_id 不应该重复存）；保留原顺序方便排查
