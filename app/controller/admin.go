@@ -543,7 +543,10 @@ func AdminSchoolUpdate(ctx *gin.Context) {
 		updates["code"] = *body.Code
 	}
 	if body.FormFields != nil {
-		updates["form_fields"] = body.FormFields
+		// 必须包一层 FormFieldsJSON，否则 GORM 把 []FormFieldItem 按 PG record 数组发送，
+		// 跟 jsonb 列类型不匹配（"is of type jsonb but expression is of type record"）。
+		// FormFieldsJSON 实现了 driver.Valuer，会先 json.Marshal 再交给驱动。
+		updates["form_fields"] = model.FormFieldsJSON(body.FormFields)
 	}
 	if body.CaptchaURL != nil {
 		updates["captcha_url"] = *body.CaptchaURL
