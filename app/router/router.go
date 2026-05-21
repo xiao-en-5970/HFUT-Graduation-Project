@@ -315,6 +315,11 @@ func BotRouter(api *gin.RouterGroup) {
 		bot.GET("/groups/:group_id/goods/seek", controller.BotSearchGoodsSeek)
 		bot.GET("/users/:user_id/goods/active", controller.BotListActiveGoods)
 
+		// 用 QQ message_id 反查商品——用户在群里 reply 自己之前的上架消息说"已出"
+		// 时 bot 走这条路，命中直接下架，跳过模糊匹配 / 消歧反问。
+		// 详见 controller.BotFindGoodByMessageID 注释。
+		bot.GET("/users/:user_id/goods/by-msg/:msg_id", controller.BotFindGoodByMessageID)
+
 		// 提问 / 回答 / 关闭提问 / 群内开放提问列表
 		bot.POST("/articles", controller.BotPublishArticle)
 		bot.POST("/articles/:id/close", controller.BotCloseArticle)

@@ -335,6 +335,10 @@ type BotPublishGoodReq struct {
 	Stock      int      `json:"stock"`      // 库存数量；<= 0 时按 1 兜底
 	Location   string   `json:"location"`   // 地点（goods_addr）
 	Images     []string `json:"images"`     // OSS URL 列表
+	// BotMessageIDs bot 识别本次上架时涉及到的全部 QQ message_id（外层消息 ID +
+	// Kimi 返回的 image_message_ids / source_message_ids 合集去重）。
+	// 后续 reply 段反查用，详见 goods.bot_message_ids 注释与 BotGoodByMessageID。
+	BotMessageIDs []int64 `json:"bot_message_ids,omitempty"`
 	// Force=true 时跳过 title 重复检查直接上架。给 bot 反问"重复上架"路径用——
 	// 用户已经看到提示并选择"我要再发一份"时，bot 带 Force=true 重试。
 	Force bool `json:"force,omitempty"`
@@ -406,6 +410,22 @@ func BotPublishGood(ctx context.Context, req BotPublishGoodReq) (*BotPublishGood
 		gid := req.GroupID
 		g.CreatedInGroupID = &gid
 	}
+	if len(req.BotMessageIDs) > 0 {
+		// dedup（同一 message_id 不应该重复存）；保留原顺序方便排查
+		seen := make(map[int64]struct{}, len(req.BotMessageIDs))
+		ids := make([]int64, 0, len(req.BotMessageIDs))
+		for _, id := range req.BotMessageIDs {
+			if id == 0 {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+		g.BotMessageIDs = ids
+	}
 	if _, err := dao.Good().Create(ctx, g); err != nil {
 		return nil, fmt.Errorf("创建商品失败: %w", err)
 	}
@@ -474,6 +494,78 @@ func BotListActiveGoodsOfUser(ctx context.Context, userID uint, limit int) ([]*B
 			Category:   g.GoodsCategory,
 			CreatedAt:  g.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
+	}
+	return out, nil
+}
+
+// BotFindActiveGoodByMessageID 用 QQ message_id 反查"该用户名下、bot_message_ids
+// 数组含此 ID 且仍在售"的商品。
+//
+// 用途：用户在群里 reply 自己之前的上架消息说"已出"时，bot 把 reply.id 传过来反查；
+// 命中即直接下架那个 good，跳过模糊匹配 + 多结果消歧。
+//
+// 鉴权层把 callerUserID 解析为它"能代表"的全部用户 ID（旗下号 + 主账号 + 主账号下
+// 全部旗下号），传进来；这里把全集都查一次。
+func BotFindActiveGoodByMessageID(ctx context.Context, callerUserID uint, msgID int64) (*BotActiveGoodOfUser, error) {
+	if msgID == 0 {
+		return nil, nil
+	}
+	scope, err := resolveCallerOwnedUserIDs(ctx, callerUserID)
+	if err != nil {
+		return nil, err
+	}
+	if len(scope) == 0 {
+		return nil, nil
+	}
+	goods, err := dao.Good().FindActiveByBotMessageID(ctx, scope, msgID)
+	if err != nil {
+		return nil, err
+	}
+	if len(goods) == 0 {
+		return nil, nil
+	}
+	g := goods[0]
+	return &BotActiveGoodOfUser{
+		ID:         g.ID,
+		Title:      g.Title,
+		Negotiable: g.Negotiable,
+		Price:      g.Price,
+		Category:   g.GoodsCategory,
+		CreatedAt:  g.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}, nil
+}
+
+// resolveCallerOwnedUserIDs 把 bot 传过来的 caller_user_id 展成"它代表的所有
+// owner 集合"——主账号 + 旗下号 + 主账号下其它旗下号。canOperateAsOwner 已有这套
+// 语义但只返回 bool，本函数复用相同规则但返回 user_id 切片，供 DAO 层 IN 查询。
+func resolveCallerOwnedUserIDs(ctx context.Context, callerUserID uint) ([]uint, error) {
+	caller, err := getActiveUser(ctx, callerUserID)
+	if err != nil {
+		return nil, err
+	}
+	scope := []uint{caller.ID}
+	if caller.ParentUserID != nil && *caller.ParentUserID > 0 {
+		scope = append(scope, uint(*caller.ParentUserID))
+	}
+	// 主账号下的全部旗下号
+	var children []model.User
+	if err := pgsql.DB.WithContext(ctx).
+		Where("parent_user_id = ?", caller.ID).
+		Find(&children).Error; err != nil {
+		return nil, err
+	}
+	for _, c := range children {
+		scope = append(scope, c.ID)
+	}
+	// dedup
+	seen := make(map[uint]struct{}, len(scope))
+	out := make([]uint, 0, len(scope))
+	for _, id := range scope {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
 	}
 	return out, nil
 }

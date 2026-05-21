@@ -124,6 +124,32 @@ func BotSearchGoodsSeek(ctx *gin.Context) {
 	reply.ReplyOKWithData(ctx, gin.H{"list": list, "total": len(list)})
 }
 
+// BotFindGoodByMessageID: GET /api/v1/bot/users/:user_id/goods/by-msg/:msg_id
+//
+// 用 QQ message_id 反查"该用户名下、bot_message_ids 数组含此 ID 且仍在售"的商品。
+// 命中返回 {good: {...}}；未命中返回 {good: null}（HTTP 200，不报错，让上游
+// 平滑降级到原模糊匹配 / 消歧链路）。
+//
+// 用途：用户在群里回复（reply）自己之前的上架消息说"已出"——bot 把 reply 段的
+// id 传过来，命中即直接下架那个 good，跳过反问消歧。
+func BotFindGoodByMessageID(ctx *gin.Context) {
+	userID, ok := parseID(ctx, "user_id")
+	if !ok {
+		return
+	}
+	msgID, err := strconv.ParseInt(ctx.Param("msg_id"), 10, 64)
+	if err != nil || msgID == 0 {
+		reply.ReplyInvalidParams(ctx, errors.New("msg_id 必须为非零整数"))
+		return
+	}
+	good, err := service.BotFindActiveGoodByMessageID(ctx.Request.Context(), userID, msgID)
+	if err != nil {
+		reply.ReplyErrWithMessage(ctx, err.Error())
+		return
+	}
+	reply.ReplyOKWithData(ctx, gin.H{"good": good})
+}
+
 // BotListActiveGoods: GET /api/v1/bot/users/:user_id/goods/active?limit=20
 func BotListActiveGoods(ctx *gin.Context) {
 	userID, err := strconv.ParseUint(ctx.Param("user_id"), 10, 64)

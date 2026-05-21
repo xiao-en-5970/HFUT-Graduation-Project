@@ -2646,7 +2646,7 @@ ${tilesUrl && adminTok ? '<div id="admin-map-picker" class="admin-map-picker" ti
             <input type="checkbox" id="bc-silent" ${silentMode ? 'checked' : ''}>
             <strong>灰度静默模式</strong>
             <div class="text-muted" style="margin:2px 0 0 24px">
-              开启后<strong>非运维群</strong>的群消息 / 群文件、<strong>所有私聊</strong>都被静默不发；
+              开启后<strong>非运维群</strong>的群消息 / 群文件被静默不发；<strong>私聊照常</strong>（QQ 绑定 / 解绑验证码不受影响）；
               运维群通知、hfut 数据库写入、Kimi 识别照常。上次修改：${lastUpd(cfg.silent_mode)}
             </div>
           </label>

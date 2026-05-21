@@ -2,8 +2,10 @@ package dao
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
+	"github.com/lib/pq"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/app/dao/model"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/common/pgsql"
 	"github.com/xiao-en-5970/HFUT-Graduation-Project/package/constant"
@@ -18,6 +20,25 @@ const (
 )
 
 type GoodStore struct{}
+
+// EnsureGoodsBotMessageIDsColumn 启动时调一次：给 goods 表加 bot_message_ids 列 + GIN 索引。
+//
+// 跟 EnsureMetricsSchema 同模式——幂等 DDL，schema 已有时无副作用。失败仅 warn 不
+// 致命；列不存在时业务依然能跑（reply 反查接口会找不到任何 good）。
+//
+// 见 package/sql/migrate_goods_bot_message_ids.sql。
+func EnsureGoodsBotMessageIDsColumn(ctx context.Context) error {
+	stmts := []string{
+		`ALTER TABLE goods ADD COLUMN IF NOT EXISTS bot_message_ids BIGINT[] NOT NULL DEFAULT '{}'`,
+		`CREATE INDEX IF NOT EXISTS idx_goods_bot_msg_ids ON goods USING gin (bot_message_ids)`,
+	}
+	for _, s := range stmts {
+		if err := pgsql.DB.WithContext(ctx).Exec(s).Error; err != nil {
+			return fmt.Errorf("ensure goods.bot_message_ids: %w", err)
+		}
+	}
+	return nil
+}
 
 func applyGoodSchoolVisibility(q *gorm.DB, viewerSchoolID uint) *gorm.DB {
 	if viewerSchoolID == 0 {
@@ -193,6 +214,32 @@ func (s *GoodStore) FindExactTitleDuplicates(ctx context.Context, userID int, ca
 		Where("created_at > NOW() - INTERVAL '7 days'").
 		// 严格相等（trim + 大小写不敏感）。Postgres 的 LOWER 索引友好；这里数据量小不计较。
 		Where("LOWER(TRIM(title)) = LOWER(?)", title).
+		Order("id DESC").
+		Limit(5).
+		Find(&out).Error
+	return out, err
+}
+
+// FindActiveByBotMessageID 用 QQ message_id 反查"该用户名下、本商品的 bot_message_ids
+// 数组含此 ID 且仍在售"的商品；典型用于用户在群里 reply 自己之前的上架消息说"已出"
+// 时直接定位 good 不走模糊匹配。
+//
+// 找到 0 / >1 条都返回切片让上层决定（理论上 1 个 message_id 只属于一次上架，但
+// reply 是用户行为，理论上不会指向多个 good——多结果也按"取最近上架"为准）。
+//
+// 性能：必须用 `bot_message_ids @> ARRAY[?]::bigint[]`（"包含"操作符）而非
+// `? = ANY(bot_message_ids)`——后者 planner 在某些版本下不会改写成 GIN 索引扫描，
+// 会退化成顺序扫描；前者 GIN 索引 idx_goods_bot_msg_ids 明确支持，O(log n)。
+func (s *GoodStore) FindActiveByBotMessageID(ctx context.Context, userIDs []uint, msgID int64) ([]*model.Good, error) {
+	if len(userIDs) == 0 || msgID == 0 {
+		return nil, nil
+	}
+	var out []*model.Good
+	err := pgsql.DB.WithContext(ctx).
+		Where("user_id IN ?", userIDs).
+		Where("status = ? AND good_status = ?", constant.StatusValid, GoodStatusOnSale).
+		// pq.Int64Array 让 GORM 把 []int64 翻译成 PG 数组字面量 '{?}'::bigint[]
+		Where("bot_message_ids @> ?", pq.Int64Array{msgID}).
 		Order("id DESC").
 		Limit(5).
 		Find(&out).Error

@@ -45,9 +45,17 @@ type Good struct {
 	// 上架的商品 NULL。用于 RequestOffShelfFromOrphan 定位 "在哪个群 @ 卖家"——比
 	// users.created_in_group_id 更精准（用户跨群活动时不同群发不同商品）。
 	// 详见 QQ-bot/skill/bot/orphan.md "请求下架" 段 + migrate_goods_created_in_group.sql。
-	CreatedInGroupID *int64    `gorm:"column:created_in_group_id" json:"created_in_group_id,omitempty"`
-	CreatedAt        time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt        time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	CreatedInGroupID *int64 `gorm:"column:created_in_group_id" json:"created_in_group_id,omitempty"`
+
+	// BotMessageIDs bot 上架本商品时关联的全部 QQ message_id 集合（外层消息 ID + Kimi
+	// 返回的 image_message_ids / source_message_ids 合集去重）。
+	// 用途：用户在群里 reply 自己之前的上架消息说"已出"时，bot 解析 reply.id 在所有
+	// 在售 good 的 BotMessageIDs 数组里反查，命中即直接下架那个 good，跳过模糊匹配
+	// 与消歧反问。详见 migrate_goods_bot_message_ids.sql。
+	BotMessageIDs pq.Int64Array `gorm:"column:bot_message_ids;type:bigint[];not null;default:'{}'" json:"bot_message_ids,omitempty"`
+
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (Good) TableName() string {

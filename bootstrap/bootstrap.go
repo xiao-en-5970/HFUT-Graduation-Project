@@ -100,6 +100,10 @@ func Boot() error {
 	if err := dao.EnsureBotRuntimeConfigSchema(ensureCtx); err != nil {
 		logger.Warn(ctx, "ensure bot_runtime_config schema failed", zap.Error(err))
 	}
+	// 确保 goods.bot_message_ids 列 + GIN 索引存在；bot reply 反查依赖。
+	if err := dao.EnsureGoodsBotMessageIDsColumn(ensureCtx); err != nil {
+		logger.Warn(ctx, "ensure goods.bot_message_ids failed", zap.Error(err))
+	}
 	cancel()
 
 	// gin.Engine.Run → http.ListenAndServe：成功后会一直阻塞，直到进程退出。
